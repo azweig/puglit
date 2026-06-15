@@ -1,0 +1,13 @@
+{
+  "name": "puglit",
+  "version": "0.0.1",
+  "private": false,
+  "license": "MIT",
+  "description": "The opinionated SaaS factory — describe your idea, get a complete deployable SaaS in a GitHub repo.",
+  "homepage": "https://puglit.com",
+  "keywords": ["saas", "boilerplate", "generator", "nextjs", "ai", "open-core"],
+  "workspaces": ["spine"],
+  "scripts": {
+    "note": "Phase 1 = extract the Spine into ./spine. CLI (create-puglit) is Phase 2."
+  }
+}
