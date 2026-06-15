@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Puglit">
+  <!-- Puglit mark — Block-P (foundry): modular blocks assembling into a P;
+       angled ear-blocks hide a pug; diamond = the "idea" gem. -->
+  <g fill="#7C3AED">
+    <!-- stem (full-height left column) -->
+    <rect x="22" y="18" width="20" height="20" rx="5"/>
+    <rect x="22" y="41" width="20" height="20" rx="5"/>
+    <rect x="22" y="64" width="20" height="20" rx="5"/>
+    <rect x="22" y="87" width="20" height="20" rx="5"/>
+    <!-- bowl (top bar + right block → open counter) -->
+    <rect x="45" y="18" width="20" height="20" rx="5"/>
+    <rect x="68" y="18" width="20" height="20" rx="5"/>
+    <rect x="68" y="41" width="20" height="20" rx="5"/>
+    <!-- ear blocks (rotated) — the hidden pug -->
+    <rect x="16" y="13" width="16" height="16" rx="4" transform="rotate(-20 24 21)"/>
+    <rect x="78" y="13" width="16" height="16" rx="4" transform="rotate(20 86 21)"/>
+  </g>
+  <!-- idea gem / nose -->
+  <path d="M55 41 L64 50 L55 59 L46 50 Z" fill="#9F67FF"/>
+</svg>
