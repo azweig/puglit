@@ -1,0 +1,28 @@
+{
+  "name": "@puglit/spine",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Puglit Spine — the deterministic core assembled into every generated SaaS.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "pg": "^8.13.1",
+    "jose": "^5.9.6",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/pg": "^8.11.10",
+    "@types/bcryptjs": "^2.4.6"
+  }
+}

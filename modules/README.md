@@ -9,8 +9,8 @@ Each module is being extracted from the production TodoAstros codebase, cleaned 
 | Module | Status | Source in TodoAstros | Notes |
 |---|---|---|---|
 | **app-shell** | ⬜ | `app/`, `components/ui/*`, `lib/get-language.ts` | Next15 skeleton, Radix kit, i18n es/en, landing |
-| **db** | 🏗️ | `lib/database.ts` (4.2k LOC → generic core), `lib/db-indexes.ts` | pool+ensureSchema(core)+tracking done; query helpers pending |
-| **auth** | ⬜ | `lib/auth.ts`, `auth-guards.ts`, `app/api/auth/*` | JWT+Bearer, magic-link, Google, reset, verify |
+| **db** | ✅ | `lib/database.ts` (4.2k LOC → generic core), `lib/db-indexes.ts` | pool (pooler-tuned) + ensureSchema(core) + tracking. SQL in `scripts/sql/001_core.sql` |
+| **auth** | ✅ | `lib/auth.ts`, `auth-guards.ts`, `app/api/auth/*` | JWT+Bearer, register/login/logout/me, magic-link, verify-email, forgot/reset. Plans/gating config-driven. SQL `002_auth.sql`. Google OAuth deferred to growth-ish. |
 | **middleware** | ✅ | `middleware.ts`, `lib/rate-limit*.ts` | rate-limit map (tuned) + headers + session cookie |
 | **analytics** | ✅ | `lib/analytics.ts`, `app/api/track`, `page_visits`+`analytics_events` | the FIXED funnel tracking |
 | **admin** | ⬜ | `lib/admin-auth.ts`, `app/api/admin/*` | admin gate + minimal dashboard |
@@ -33,8 +33,8 @@ Each module is being extracted from the production TodoAstros codebase, cleaned 
 | **geo** | `geo` | `app/api/cities`/`geo`/`weather`, `geoip-country`, `tz-lookup` | |
 
 ## Extraction order (slices)
-1. ✅ Frame — repo, BLUEPRINT, INTAKE, SECURITY, `domain.config.ts`, examples, infra. **(this slice)**
-2. ⬜ Core — app-shell, db, auth, middleware, analytics, admin, observability.
+1. ✅ Frame — repo, BLUEPRINT, INTAKE, SECURITY, `domain.config.ts`, examples, infra.
+2. 🏗️ Core — db ✅, middleware ✅, analytics ✅, auth ✅; **pending: app-shell, admin, observability.** **(this slice)**
 3. ⬜ payments · 4. email-lifecycle · 5. ai-layer · 6. content-blog · 7. engine · 8. profiling · 9. gamification+growth · 10. mobile.
 
 Each slice leaves the Spine compiling & deployable.
