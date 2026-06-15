@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Puglit — Identidad visual (exploración)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&family=Space+Mono&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --violet:#7C3AED; --violet-deep:#5B21B6; --violet-bright:#9F67FF;
+    --ink:#0E0B1A; --ink-2:#171327; --paper:#FFFFFF; --paper-2:#F4F1FA;
+    --line:rgba(255,255,255,.10); --muted:rgba(255,255,255,.55); --inkmuted:rgba(14,11,26,.55);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--ink);color:#EDEAF6;font-family:'Plus Jakarta Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.5}
+  .mono{font-family:'Space Mono',monospace}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 26px}
+  h1,h2,h3{letter-spacing:-.02em}
+  .eyebrow{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--violet-bright)}
+  header{padding:64px 0 30px;text-align:center}
+  header h1{font-size:clamp(28px,5vw,46px);font-weight:800;margin-top:14px}
+  header p{color:var(--muted);max-width:62ch;margin:16px auto 0;font-size:16px}
+  section{padding:54px 0;border-top:1px solid var(--line)}
+  section>.wrap>.eyebrow{display:block;margin-bottom:6px}
+  section h2{font-size:clamp(22px,3vw,32px);font-weight:800}
+  section .sub{color:var(--muted);margin-top:10px;max-width:64ch}
+
+  /* wordmark */
+  .wordmark{font-weight:800;letter-spacing:-.03em;display:inline-flex;align-items:baseline}
+  .wordmark .pug{}
+  .wordmark .lit{color:var(--violet)}
+  .wordmark .dot{color:var(--violet)}
+
+  .concepts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px}
+  @media(max-width:880px){.concepts{grid-template-columns:1fr}}
+  .card{background:var(--ink-2);border:1px solid var(--line);border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:14px}
+  .card .pick{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--violet-bright)}
+  .card h3{font-size:18px;font-weight:800}
+  .card p{color:var(--muted);font-size:13.5px;line-height:1.6}
+  .stage{background:radial-gradient(120% 120% at 50% 0%, #221a3a, #0c0a16);border-radius:16px;display:grid;place-items:center;height:200px}
+  .stagelight{background:var(--paper);border-radius:16px;display:grid;place-items:center;height:120px}
+  .fav{color:var(--violet)}
+
+  .lockups{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}
+  @media(max-width:760px){.lockups{grid-template-columns:1fr}}
+  .lock{border-radius:20px;padding:42px;display:flex;align-items:center;gap:22px;border:1px solid var(--line)}
+  .lock.dark{background:var(--ink-2)}
+  .lock.light{background:var(--paper);border-color:rgba(0,0,0,.08)}
+  .lock.light .wordmark .pug{color:var(--ink)}
+
+  .swatches{display:flex;gap:14px;flex-wrap:wrap;margin-top:28px}
+  .sw{border-radius:14px;padding:16px;min-width:150px;border:1px solid var(--line)}
+  .sw .chip{height:46px;border-radius:9px;margin-bottom:10px}
+  .sw .n{font-weight:700;font-size:13px}
+  .sw .h{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+
+  .assets{display:flex;gap:22px;flex-wrap:wrap;align-items:center;margin-top:28px}
+  .appicon{width:96px;height:96px;border-radius:22px;background:linear-gradient(150deg,var(--violet-bright),var(--violet-deep));display:grid;place-items:center;box-shadow:0 14px 40px rgba(124,58,237,.4)}
+  .favbox{width:48px;height:48px;border-radius:11px;background:var(--ink-2);border:1px solid var(--line);display:grid;place-items:center}
+  .alabel{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-align:center;margin-top:8px;letter-spacing:1px}
+  footer{padding:40px 0;border-top:1px solid var(--line);color:var(--muted);font-size:12px;text-align:center}
+  .note{font-size:12.5px;color:var(--muted);background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:12px;padding:14px 16px;margin-top:24px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<!-- ====== reusable SVG marks ====== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+
+  <!-- A · CIRCUIT-P (node graph forming a P; pug ears/nose hidden) -->
+  <g id="markA">
+    <g fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+      <!-- ears (hidden pug) sprouting from top corners -->
+      <path d="M40 26 L26 10"/><path d="M74 26 L88 10"/>
+      <!-- P stem -->
+      <path d="M40 26 V 100"/>
+      <!-- P bowl -->
+      <path d="M40 26 H 72 Q 92 26 92 48 Q 92 70 72 70 H 40"/>
+    </g>
+    <!-- nodes (circuit junctions) -->
+    <g fill="currentColor">
+      <circle cx="40" cy="26" r="7"/><circle cx="72" cy="26" r="6"/>
+      <circle cx="92" cy="48" r="6"/><circle cx="72" cy="70" r="6"/>
+      <circle cx="40" cy="70" r="6"/><circle cx="40" cy="100" r="7"/>
+    </g>
+    <!-- nose = gem/spark in the bowl (idea) -->
+    <path d="M62 40 L70 48 L62 56 L54 48 Z" fill="#9F67FF"/>
+  </g>
+
+  <!-- B · BLOCK-P (modular blocks assembling into a P; angled ear blocks) -->
+  <g id="markB">
+    <g fill="currentColor">
+      <!-- stem blocks -->
+      <rect x="24" y="48" width="20" height="20" rx="5"/>
+      <rect x="24" y="72" width="20" height="20" rx="5"/>
+      <rect x="24" y="96" width="20" height="20" rx="5"/>
+      <!-- bowl blocks -->
+      <rect x="48" y="48" width="20" height="20" rx="5"/>
+      <rect x="72" y="48" width="20" height="20" rx="5"/>
+      <rect x="72" y="24" width="20" height="20" rx="5"/>
+      <rect x="48" y="24" width="20" height="20" rx="5"/>
+      <!-- ear blocks (rotated) -->
+      <rect x="18" y="22" width="17" height="17" rx="4" transform="rotate(-18 26 30)"/>
+      <rect x="86" y="22" width="17" height="17" rx="4" transform="rotate(18 94 30)"/>
+    </g>
+    <!-- nose gem -->
+    <path d="M60 30 L67 37 L60 44 L53 37 Z" fill="#9F67FF"/>
+  </g>
+
+  <!-- C · ABSTRACT idea→stack (no dog; OpenAI/Linear vibe) -->
+  <g id="markC">
+    <!-- spark / idea -->
+    <path d="M60 12 L67 30 L85 37 L67 44 L60 62 L53 44 L35 37 L53 30 Z" fill="#9F67FF"/>
+    <!-- assembling stack (the SaaS being built) -->
+    <g fill="currentColor">
+      <rect x="34" y="74" width="52" height="13" rx="6"/>
+      <rect x="40" y="92" width="40" height="13" rx="6"/>
+      <rect x="47" y="110" width="26" height="11" rx="5.5"/>
+    </g>
+  </g>
+</defs></svg>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Puglit · Identidad visual — exploración v0</div>
+    <h1>El pug se esconde. El protagonista es la <span style="color:var(--violet)">construcción de software</span>.</h1>
+    <p>Tomé tu feedback: el logo actual lee "mascota premium". Estas 3 direcciones invierten eso — primero ves <strong>arquitectura / circuito / bloques que se ensamblan</strong>, y recién después descubrís el pug (estilo flecha de FedEx). Mismo nombre, misma paleta violeta. Son explorables en SVG, iterables al 100%.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Tres direcciones</span>
+    <h2>Elegí una para que la desarrolle</h2>
+    <div class="concepts">
+
+      <div class="card">
+        <div class="pick">Dirección A · tu favorita</div>
+        <div class="stage" style="color:#EDEAF6"><svg width="120" height="120" viewBox="0 0 120 120"><use href="#markA"/></svg></div>
+        <div class="stagelight" style="color:var(--violet)"><svg width="74" height="74" viewBox="0 0 120 120"><use href="#markA"/></svg></div>
+        <h3>Circuit-P (pug oculto)</h3>
+        <p>Una <strong>P hecha de nodos conectados</strong> (un grafo / circuito = arquitectura de software). Las "orejas" salen de las esquinas y el rombo es la "nariz": el pug aparece recién al segundo vistazo. Lee como infraestructura primero.</p>
+      </div>
+
+      <div class="card">
+        <div class="pick">Dirección B</div>
+        <div class="stage" style="color:#EDEAF6"><svg width="120" height="120" viewBox="0 0 120 120"><use href="#markB"/></svg></div>
+        <div class="stagelight" style="color:var(--violet)"><svg width="74" height="74" viewBox="0 0 120 120"><use href="#markB"/></svg></div>
+        <h3>Block-P (foundry)</h3>
+        <p>La P se <strong>ensambla con bloques modulares</strong> (los módulos del SaaS encajando). Dos bloques inclinados arriba insinúan las orejas. Transmite "fábrica que arma desde piezas".</p>
+      </div>
+
+      <div class="card">
+        <div class="pick">Dirección C · la más "VC"</div>
+        <div class="stage" style="color:#EDEAF6"><svg width="120" height="120" viewBox="0 0 120 120"><use href="#markC"/></svg></div>
+        <div class="stagelight" style="color:var(--violet)"><svg width="74" height="74" viewBox="0 0 120 120"><use href="#markC"/></svg></div>
+        <h3>Abstracto: idea → stack</h3>
+        <p>Sin perro. Un <strong>spark (la idea/IA) que se materializa en un stack</strong> que se construye solo. Estilo OpenAI/Linear/Vercel — abstrae el concepto. El "pug" vive solo en el nombre.</p>
+      </div>
+
+    </div>
+    <div class="note">💡 Nota honesta: son <strong>exploraciones de dirección hechas en código (SVG)</strong>, no arte final pulido. Cuando elijas una, la refino, la dejo como archivos <code>.svg</code> (primary / icon / favicon / app-icon) y la cableo al <code>app-shell</code> del spine.</div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Lockup (ejemplo con Dirección A)</span>
+    <h2>Logo principal</h2>
+    <div class="lockups">
+      <div class="lock dark" style="color:#EDEAF6">
+        <svg width="72" height="72" viewBox="0 0 120 120"><use href="#markA"/></svg>
+        <div class="wordmark" style="font-size:46px"><span class="pug">pug</span><span class="lit">lit</span></div>
+      </div>
+      <div class="lock light">
+        <svg width="72" height="72" viewBox="0 0 120 120" style="color:var(--ink)"><use href="#markA"/></svg>
+        <div class="wordmark" style="font-size:46px"><span class="pug">pug</span><span class="lit">lit</span></div>
+      </div>
+    </div>
+    <div class="assets">
+      <div><div class="appicon"><svg width="56" height="56" viewBox="0 0 120 120" style="color:#fff"><use href="#markA"/></svg></div><div class="alabel">APP ICON</div></div>
+      <div><div class="favbox"><svg width="30" height="30" viewBox="0 0 120 120" style="color:var(--violet-bright)"><use href="#markA"/></svg></div><div class="alabel">FAVICON</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Sistema</span>
+    <h2>Color & tipografía</h2>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#7C3AED"></div><div class="n">Violet</div><div class="h">#7C3AED</div></div>
+      <div class="sw"><div class="chip" style="background:#5B21B6"></div><div class="n">Violet deep</div><div class="h">#5B21B6</div></div>
+      <div class="sw"><div class="chip" style="background:#9F67FF"></div><div class="n">Bright</div><div class="h">#9F67FF</div></div>
+      <div class="sw"><div class="chip" style="background:#0E0B1A"></div><div class="n">Ink</div><div class="h">#0E0B1A</div></div>
+      <div class="sw"><div class="chip" style="background:#F4F1FA;border:1px solid #ddd"></div><div class="n">Paper</div><div class="h">#F4F1FA</div></div>
+    </div>
+    <p class="sub" style="margin-top:22px">Tipografía: <strong>Plus Jakarta Sans</strong> (geométrica, limpia, igual al espíritu del wordmark actual) — wordmark en minúscula, <span style="color:var(--violet)">"lit" en violeta</span>. Mono para código/labels: Space Mono.</p>
+  </div>
+</section>
+
+<footer><div class="wrap">Puglit · identidad v0 — exploración para feedback. Elegí A / B / C y la desarrollo. 🐶 (escondido)</div></footer>
+</body>
+</html>
