@@ -9,10 +9,10 @@ Each module is being extracted from the production TodoAstros codebase, cleaned 
 | Module | Status | Source in TodoAstros | Notes |
 |---|---|---|---|
 | **app-shell** | ⬜ | `app/`, `components/ui/*`, `lib/get-language.ts` | Next15 skeleton, Radix kit, i18n es/en, landing |
-| **db** | ⬜ | `lib/database.ts` (4.2k LOC → generic core), `lib/db-indexes.ts` | pg pool tuned for pooler, `ensureSchema`, query helpers |
+| **db** | 🏗️ | `lib/database.ts` (4.2k LOC → generic core), `lib/db-indexes.ts` | pool+ensureSchema(core)+tracking done; query helpers pending |
 | **auth** | ⬜ | `lib/auth.ts`, `auth-guards.ts`, `app/api/auth/*` | JWT+Bearer, magic-link, Google, reset, verify |
-| **middleware** | ⬜ | `middleware.ts`, `lib/rate-limit*.ts` | rate-limit map (tuned), headers/CSP |
-| **analytics** | ⬜ | `lib/analytics.ts`, `app/api/track`, `page_visits`+`analytics_events` | the FIXED funnel tracking |
+| **middleware** | ✅ | `middleware.ts`, `lib/rate-limit*.ts` | rate-limit map (tuned) + headers + session cookie |
+| **analytics** | ✅ | `lib/analytics.ts`, `app/api/track`, `page_visits`+`analytics_events` | the FIXED funnel tracking |
 | **admin** | ⬜ | `lib/admin-auth.ts`, `app/api/admin/*` | admin gate + minimal dashboard |
 | **deploy** | ✅ (template) | `Dockerfile`, `fly.toml` | in `infra/` — done as template |
 | **observability** | ⬜ | `lib/sentry.ts` | Sentry |
