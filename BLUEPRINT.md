@@ -19,7 +19,7 @@ A SaaS is ~80% the same plumbing every time and ~20% unique business logic. Pugl
 
 | Concern | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 15** (App Router) | RSC, route handlers, one deploy unit |
+| Framework | **Next.js 16** (App Router, Turbopack) | RSC, route handlers, one deploy unit. NB: Turbopack only resolves modules **inside** the app root — keep the `domain.config.ts` seam alongside `app/` (it is, in `spine/`), not in a parent dir. |
 | Language | **TypeScript** (strict) | typed seam = fewer LLM hallucinations |
 | UI | **Tailwind + Radix/shadcn** | composable, themeable, accessible |
 | DB | **PostgreSQL** via raw `pg` (`lib/database.ts` + `ensureSchema`) | no ORM lock-in, full SQL control |
@@ -40,7 +40,7 @@ The generator does **not** re-decide the stack. The opinion is the value.
 Two tiers. **Core** is always present. **Optional** modules are turned on/off in `domain.config.ts`. Full status in [`modules/README.md`](modules/README.md).
 
 ### CORE (always)
-- **app-shell** — Next 15 skeleton, Tailwind/Radix UI kit, theming, i18n (es/en), landing + marketing pages.
+- **app-shell** — Next 16 skeleton, Tailwind v4, theming (`--brand` from config), i18n (es/en), landing + auth pages.
 - **db** — `lib/database.ts` (pg pool tuned for the pooler, `ensureSchema`), migrations dir, typed query helpers.
 - **auth** — JWT cookie + Bearer, magic-link/OTP, Google OAuth, forgot/reset, email verification (soft gate).
 - **middleware** — per-route rate-limit map, security headers/CSP.

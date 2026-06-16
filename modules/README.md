@@ -8,7 +8,7 @@ Each module is being extracted from the production TodoAstros codebase, cleaned 
 
 | Module | Status | Source in TodoAstros | Notes |
 |---|---|---|---|
-| **app-shell** | ⬜ | `app/`, `components/ui/*`, `lib/get-language.ts` | Next15 skeleton, Radix kit, i18n es/en, landing |
+| **app-shell** | ✅ | `app/`, `components/ui/*`, `lib/get-language.ts` | Next16 skeleton (layout, globals, Tailwind v4), i18n es/en, **landing + login/register** driven by domain.config, Mark/favicon. Live: puglit-spine.vercel.app |
 | **db** | ✅ | `lib/database.ts` (4.2k LOC → generic core), `lib/db-indexes.ts` | pool (pooler-tuned) + ensureSchema(core) + tracking. SQL in `scripts/sql/001_core.sql` |
 | **auth** | ✅ | `lib/auth.ts`, `auth-guards.ts`, `app/api/auth/*` | JWT+Bearer, register/login/logout/me, magic-link, verify-email, forgot/reset. Plans/gating config-driven. SQL `002_auth.sql`. Google OAuth deferred to growth-ish. |
 | **middleware** | ✅ | `middleware.ts`, `lib/rate-limit*.ts` | rate-limit map (tuned) + headers + session cookie |
@@ -34,7 +34,7 @@ Each module is being extracted from the production TodoAstros codebase, cleaned 
 
 ## Extraction order (slices)
 1. ✅ Frame — repo, BLUEPRINT, INTAKE, SECURITY, `domain.config.ts`, examples, infra.
-2. 🏗️ Core — db ✅, middleware ✅, analytics ✅, auth ✅; **pending: app-shell, admin, observability.** **(this slice)**
+2. 🏗️ Core — app-shell ✅, db ✅, middleware ✅, analytics ✅, auth ✅; **pending: admin, observability.** **(this slice)**
 3. ⬜ payments · 4. email-lifecycle · 5. ai-layer · 6. content-blog · 7. engine · 8. profiling · 9. gamification+growth · 10. mobile.
 
 Each slice leaves the Spine compiling & deployable.
