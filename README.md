@@ -5,7 +5,7 @@
 ### The opinionated SaaS factory.
 **Describe your idea → answer a few questions → get a complete, monetizable, deployable SaaS in a GitHub repo.**
 
-`MIT licensed core` · `Next.js 15` · `PostgreSQL` · `Fly.io` · `Stripe` · `Resend`
+`MIT licensed core` · `Next.js 16` · `PostgreSQL` · `Fly.io` · `Stripe` · `Resend`
 
 </div>
 
@@ -39,7 +39,7 @@ Because the part that must never break (Stripe webhooks, auth, DB migrations, de
 
 ## Stack (fixed & opinionated)
 
-Next.js 15 (App Router) · TypeScript · Tailwind + Radix/shadcn · PostgreSQL (raw `pg`) · Fly.io (Docker, rolling deploy) · Stripe (+ MercadoPago) · Resend (+ nodemailer) · OpenAI/Anthropic · Sentry.
+Next.js 16 (App Router) · TypeScript · Tailwind + Radix/shadcn · PostgreSQL (raw `pg`) · Fly.io (Docker, rolling deploy) · Stripe (+ MercadoPago) · Resend (+ nodemailer) · OpenAI/Anthropic · Sentry.
 
 ## Repo map
 
