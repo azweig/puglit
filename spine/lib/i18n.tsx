@@ -11,7 +11,10 @@ import config, { type Localized } from "@/domain.config"
 
 type Lang = string
 const SUPPORTED = config.identity.languages
-const DEFAULT_LANG: Lang = SUPPORTED[0] || "en"
+// Default to English when the product supports it (these are global showcase
+// demos shown on an English site); otherwise the product's first language.
+// A real product can flip this by ordering languages[] as it likes.
+const DEFAULT_LANG: Lang = SUPPORTED.includes("en") ? "en" : (SUPPORTED[0] || "en")
 
 const DICT: Record<string, Record<string, string>> = {
   en: {
