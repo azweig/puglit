@@ -49,6 +49,7 @@ async function ensureSchema(): Promise<void> {
 export interface ProjectRow {
   slug: string
   name: string
+  email: string | null
   config: DomainConfig
   created_at: string
 }
@@ -69,7 +70,7 @@ export async function getProject(slug: string): Promise<ProjectRow | null> {
   if (!isConfigured()) return null
   await ensureSchema()
   const { rows } = await pool().query(
-    `SELECT slug, name, config, created_at FROM puglit_projects WHERE slug = $1 LIMIT 1`,
+    `SELECT slug, name, email, config, created_at FROM puglit_projects WHERE slug = $1 LIMIT 1`,
     [slug]
   )
   return rows[0] || null

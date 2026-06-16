@@ -64,6 +64,8 @@ export default function Generate() {
   const [logo, setLogo] = useState<string | null>(null)
   const [website, setWebsite] = useState<string | null>(null)
   const [color, setColor] = useState<string | null>(null)
+  const [result, setResult] = useState<{ url: string; slug: string; emailed: boolean; name: string } | null>(null)
+  const [buildMsg, setBuildMsg] = useState("")
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [log, step, busy])
@@ -99,16 +101,29 @@ export default function Generate() {
   }
 
   async function finalize(answers: Record<string, unknown>) {
-    setPhase("saving")
+    setPhase("saving"); setBuildMsg("Assembling your config…")
     try {
       const r = await fetch("/api/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, logo, websiteImage: website }),
       })
       const d = await r.json()
-      if (d.ok && d.saved) { router.push(`/x/${d.slug}`); return }
-      setErr("Generated, but couldn’t save to the gallery."); setPhase("chat")
-    } catch { setErr("Network error while saving."); setPhase("chat") }
+      if (!d.ok || !d.saved) { setErr("Generated, but couldn’t save."); setPhase("chat"); return }
+
+      // Build the complete project and push it to GitHub.
+      setBuildMsg("Writing your code and pushing it to GitHub… (this takes a few seconds)")
+      const b = await fetch("/api/build", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: d.slug }),
+      })
+      const bd = await b.json()
+      if (b.ok && bd.ok) {
+        setResult({ url: bd.url, slug: d.slug, emailed: !!bd.emailed, name: name.trim() })
+      } else {
+        // Saved + preview available even if the GitHub push isn't configured.
+        setResult({ url: "", slug: d.slug, emailed: false, name: name.trim() })
+      }
+    } catch { setErr("Network error while building."); setPhase("chat") }
   }
 
   async function onLogo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -137,6 +152,24 @@ export default function Generate() {
     )
   }
 
+  if (result) {
+    return (
+      <main className="max-w-xl mx-auto px-5 py-20 text-center">
+        <Link href="/" className="flex items-center gap-2 justify-center text-violet-bright mb-8"><Mark size={28} /><span className="font-extrabold text-white">Puglit</span></Link>
+        <div className="text-5xl mb-4">🎉</div>
+        <h1 className="text-3xl font-extrabold">{result.name} is ready</h1>
+        <p className="text-white/60 mt-3">We generated the complete code — a Next.js 16 app with auth, Postgres, analytics and your branded landing — and {result.url ? "pushed it to the Puglit repo." : "saved your config."}</p>
+        <div className="mt-8 flex flex-col gap-3 items-center">
+          {result.url && <a href={result.url} target="_blank" rel="noopener" className="px-7 py-3.5 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>View your code on GitHub →</a>}
+          <a href={`/x/${result.slug}`} target="_blank" rel="noopener" className="px-7 py-3.5 rounded-xl font-semibold text-white border border-white/15">Preview the landing →</a>
+        </div>
+        {result.emailed && <p className="text-emerald-400 text-sm mt-5">📬 We also emailed you the link.</p>}
+        {!result.url && <p className="text-amber-400 text-sm mt-5">Code delivery to GitHub isn’t connected yet — your config is saved and the preview is live.</p>}
+        <Link href="/generate" onClick={() => location.reload()} className="inline-block mt-8 text-violet-bright font-semibold">← Build another</Link>
+      </main>
+    )
+  }
+
   const s = step
   return (
     <main className="max-w-xl mx-auto px-5 py-10">
@@ -154,7 +187,7 @@ export default function Generate() {
       </div>
 
       {/* current question + input */}
-      {phase === "saving" && <div className={card}>Building your SaaS… ✦</div>}
+      {phase === "saving" && <div className={card}><span className="inline-block animate-pulse">✦</span> {buildMsg || "Building your SaaS…"}</div>}
 
       {phase === "chat" && !busy && s && !s.done && (
         <div className={card}>

@@ -30,6 +30,8 @@ export function Landing({ config }: { config: DomainConfig }) {
 
   const price = (p: Plan) => (p.priceUsd === 0 ? (es ? "Gratis" : "Free") : `$${p.priceUsd}`)
   const unit = (p: Plan) => (p.priceUsd === 0 ? "" : p.interval === "year" ? (es ? "/año" : "/yr") : p.interval === "one-time" ? "" : (es ? "/mes" : "/mo"))
+  // A free product shouldn't show a pricing table or a "Pricing" link.
+  const isFree = monetization.model === "free" || monetization.plans.every((p) => p.priceUsd === 0)
 
   return (
     <div style={{ ["--brand" as string]: brand }} className="bg-paper text-ink min-h-screen">
@@ -37,7 +39,7 @@ export function Landing({ config }: { config: DomainConfig }) {
         <nav className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 text-brand">{identity.logoUrl ? <img src={identity.logoUrl} alt={identity.name} className="h-7 w-auto" /> : <Mark size={28} />}<span className="font-extrabold text-ink text-lg tracking-tight">{identity.name}</span></div>
           <div className="flex items-center gap-4 text-sm font-medium text-ink/70">
-            <a href="#pricing" className="hidden sm:inline hover:text-ink">{es ? "Precios" : "Pricing"}</a>
+            {!isFree && <a href="#pricing" className="hidden sm:inline hover:text-ink">{es ? "Precios" : "Pricing"}</a>}
             <span className="px-4 py-2 rounded-lg text-white font-semibold" style={{ background: brand }}>{ctaPrimary}</span>
           </div>
         </nav>
@@ -52,7 +54,7 @@ export function Landing({ config }: { config: DomainConfig }) {
             <p className="mt-5 text-lg text-ink/70 max-w-xl">{sub}</p>
             <div className="mt-8 flex gap-3">
               <span className="px-6 py-3.5 rounded-xl text-white font-semibold shadow-lg" style={{ background: brand }}>{ctaPrimary}</span>
-              <a href="#pricing" className="px-6 py-3.5 rounded-xl font-semibold text-ink border border-black/10">{tr(landing?.hero.ctaSecondary) || (es ? "Ver precios" : "See pricing")}</a>
+              {!isFree && <a href="#pricing" className="px-6 py-3.5 rounded-xl font-semibold text-ink border border-black/10">{tr(landing?.hero.ctaSecondary) || (es ? "Ver precios" : "See pricing")}</a>}
             </div>
             {landing?.socialProof && <p className="mt-6 text-sm text-ink/55">{tr(landing.socialProof)}</p>}
           </div>
@@ -84,6 +86,7 @@ export function Landing({ config }: { config: DomainConfig }) {
         </section>
       )}
 
+      {!isFree && (
       <section id="pricing" className="bg-white border-y border-black/5">
         <div className="max-w-5xl mx-auto px-5 py-20">
           <h2 className="text-3xl font-extrabold text-ink text-center">{es ? "Precios simples y honestos" : "Simple, honest pricing"}</h2>
@@ -102,6 +105,7 @@ export function Landing({ config }: { config: DomainConfig }) {
           </div>
         </div>
       </section>
+      )}
 
       {landing?.faq && landing.faq.length > 0 && (
         <section className="max-w-3xl mx-auto px-5 py-20">
