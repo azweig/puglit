@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { randomBytes } from "node:crypto"
 import { generateConfig, slugify, type IntakeAnswers } from "@/lib/generate"
 import { saveProject, slugExists, isConfigured } from "@/lib/db"
+import { designEntities } from "@/lib/entitygen"
 
 // The AI may return human labels ("English", "Both", "Subscription") — normalize.
 function normLang(v: string): IntakeAnswers["languages"] {
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest) {
     }
 
     const config = generateConfig(answers)
+
+    // Design the REAL data model with the LLM (replaces the generic "Item").
+    const ents = await designEntities({ name: answers.name, what: answers.what, benefits: answers.benefits })
+    if (ents && ents.length) config.entities = ents
 
     // unique slug
     let slug = slugify(answers.name)

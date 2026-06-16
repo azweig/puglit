@@ -6,11 +6,13 @@
  * demo is genuinely functional — "Get started" actually creates an account.
  */
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
 type User = { email: string; name: string } | null
 
 export function DemoAuthOverlay({ slug, productName, entity, color }: { slug: string; productName: string; entity?: string; color?: string }) {
   const brand = color || "#7C3AED"
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<"register" | "login">("register")
   const [user, setUser] = useState<User>(null)
@@ -25,11 +27,11 @@ export function DemoAuthOverlay({ slug, productName, entity, color }: { slug: st
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       const t = (e.target as HTMLElement)?.closest("[data-demo-cta]")
-      if (t) { e.preventDefault(); setErr(""); setOpen(true) }
+      if (t) { e.preventDefault(); if (user) router.push(`/x/${slug}/app`); else { setErr(""); setOpen(true) } }
     }
     document.addEventListener("click", onClick)
     return () => document.removeEventListener("click", onClick)
-  }, [])
+  }, [user, slug, router])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setErr(""); setBusy(true)
@@ -41,6 +43,7 @@ export function DemoAuthOverlay({ slug, productName, entity, color }: { slug: st
       const d = await r.json()
       if (!r.ok || !d.ok) { setErr(d.error || "Error"); return }
       setUser(d.user)
+      router.push(`/x/${slug}/app`) // into the functional dashboard
     } catch { setErr("Network error") } finally { setBusy(false) }
   }
   async function logout() {
@@ -51,9 +54,10 @@ export function DemoAuthOverlay({ slug, productName, entity, color }: { slug: st
   return (
     <>
       {user && (
-        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-3 bg-white shadow-xl border border-black/10 rounded-full pl-4 pr-2 py-2 text-sm">
-          <span className="text-ink/70">Signed in as <b className="text-ink">{user.name}</b></span>
-          <button onClick={logout} className="text-white text-xs font-semibold rounded-full px-3 py-1.5" style={{ background: brand }}>Log out</button>
+        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2 bg-white shadow-xl border border-black/10 rounded-full pl-4 pr-2 py-2 text-sm">
+          <span className="text-ink/70">Hi, <b className="text-ink">{user.name}</b></span>
+          <a href={`/x/${slug}/app`} className="text-white text-xs font-semibold rounded-full px-3 py-1.5" style={{ background: brand }}>Open app →</a>
+          <button onClick={logout} className="text-ink/50 hover:text-ink text-xs font-semibold px-2">Log out</button>
         </div>
       )}
 
@@ -64,12 +68,8 @@ export function DemoAuthOverlay({ slug, productName, entity, color }: { slug: st
               <div className="text-center">
                 <div className="text-4xl mb-2">🎉</div>
                 <h3 className="text-xl font-extrabold">You’re in, {user.name}!</h3>
-                <p className="text-ink/65 text-sm mt-2">Your <b>{productName}</b> account is live — this demo really registered you, running on Puglit’s infrastructure.</p>
-                <div className="mt-4 rounded-xl border border-black/10 bg-black/[0.02] p-4 text-left text-sm text-ink/70">
-                  <div className="font-semibold text-ink mb-1">Your dashboard</div>
-                  This is where your {entity || "items"} would live. The full generated app builds these screens from your config’s entities — that’s the next step.
-                </div>
-                <button onClick={() => setOpen(false)} className="mt-5 w-full py-2.5 rounded-lg text-white font-semibold" style={{ background: brand }}>Got it</button>
+                <p className="text-ink/65 text-sm mt-2">Your <b>{productName}</b> account is live and your {entity || "data"} are ready to manage.</p>
+                <a href={`/x/${slug}/app`} className="mt-5 inline-block w-full py-2.5 rounded-lg text-white font-semibold" style={{ background: brand }}>Open your dashboard →</a>
               </div>
             ) : (
               <>
