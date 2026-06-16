@@ -7,7 +7,7 @@
  * persisted to localStorage. Add languages by extending identity.languages + DICT.
  */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
-import config from "@/domain.config"
+import config, { type Localized } from "@/domain.config"
 
 type Lang = string
 const SUPPORTED = config.identity.languages
@@ -54,6 +54,8 @@ interface Ctx {
   lang: Lang
   setLang: (l: Lang) => void
   t: (key: string) => string
+  /** Resolve a Localized value (string | {es,en}) against the active language. */
+  tr: (v: Localized | undefined) => string
   languages: string[]
 }
 const LanguageContext = createContext<Ctx | null>(null)
@@ -73,8 +75,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const t = (key: string) => DICT[lang]?.[key] ?? DICT[DEFAULT_LANG]?.[key] ?? key
 
+  const tr = (v: Localized | undefined): string => {
+    if (v == null) return ""
+    if (typeof v === "string") return v
+    return v[lang] ?? v[DEFAULT_LANG] ?? Object.values(v)[0] ?? ""
+  }
+
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t, languages: SUPPORTED }}>
+    <LanguageContext.Provider value={{ lang, setLang, t, tr, languages: SUPPORTED }}>
       {children}
     </LanguageContext.Provider>
   )

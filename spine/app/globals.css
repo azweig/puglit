@@ -4,7 +4,8 @@
    (set inline on <html> in layout.tsx), so a generated project recolors with zero edits. */
 :root {
   --brand: #7c3aed;
-  --brand-bright: #9f67ff;
+  /* always a lighter tint of --brand, so the mark's gem matches any brand color */
+  --brand-bright: color-mix(in srgb, var(--brand) 62%, white);
   --ink: #0e0b1a;
   --paper: #faf9fd;
 }
