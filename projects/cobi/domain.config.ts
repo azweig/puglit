@@ -53,7 +53,56 @@ const config: DomainConfig = {
   },
   "entities": [
     {
-      "name": "Item",
+      "name": "Expense",
+      "fields": [
+        {
+          "name": "description",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "amount",
+          "type": "float",
+          "required": true
+        },
+        {
+          "name": "date_incurred",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "paid_by",
+          "type": "json",
+          "required": true
+        }
+      ],
+      "plural": "Expenses",
+      "ownedByUser": true
+    },
+    {
+      "name": "Roommate",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": true
+        },
+        {
+          "name": "share_percentage",
+          "type": "float",
+          "required": true
+        }
+      ],
+      "plural": "Roommates",
+      "ownedByUser": true
+    },
+    {
+      "name": "Bill",
       "fields": [
         {
           "name": "title",
@@ -61,10 +110,27 @@ const config: DomainConfig = {
           "required": true
         },
         {
-          "name": "data",
-          "type": "json"
+          "name": "total_amount",
+          "type": "float",
+          "required": true
+        },
+        {
+          "name": "due_date",
+          "type": "date",
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "enum",
+          "required": true,
+          "enumValues": [
+            "paid",
+            "unpaid",
+            "overdue"
+          ]
         }
       ],
+      "plural": "Bills",
       "ownedByUser": true
     }
   ],
