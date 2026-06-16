@@ -31,6 +31,8 @@ function pool(): Pool {
       connectionTimeoutMillis: 8000,
       allowExitOnIdle: true,
       application_name: "puglit-web",
+      // Supabase requires TLS. Set POSTGRES_SSL=disable for a local plain DB.
+      ssl: process.env.POSTGRES_SSL === "disable" ? undefined : { rejectUnauthorized: false },
     })
     _pool.on("error", (e) => console.error("[pg] pool error:", e.message))
   }
