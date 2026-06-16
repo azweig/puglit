@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Plus_Jakarta_Sans } from "next/font/google"
 import config from "@/domain.config"
 import { LanguageProvider } from "@/lib/i18n"
@@ -16,6 +16,8 @@ function metaStr(v: string | Record<string, string>): string {
   return v.en ?? v[langs[0]] ?? Object.values(v)[0] ?? ""
 }
 const tagline = metaStr(config.identity.tagline)
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1 }
 
 export const metadata: Metadata = {
   title: { default: `${config.identity.name} — ${tagline}`, template: `%s · ${config.identity.name}` },
