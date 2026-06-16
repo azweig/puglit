@@ -18,7 +18,7 @@ import type { DomainConfig } from "../domain.config"
 const cancha: DomainConfig = {
   identity: {
     name: "Cancha",
-    tagline: "Organizá tu pichanga, equipos parejos en un toque",
+    tagline: { es: "Organizá tu pichanga, equipos parejos en un toque", en: "Organize your pickup game, even teams in one tap" },
     domain: "cancha.club",
     languages: ["es", "en"],
     brandColor: "#16A34A", // vivid pitch green

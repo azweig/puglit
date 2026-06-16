@@ -10,7 +10,7 @@ import type { DomainConfig } from "../domain.config"
 const pulso: DomainConfig = {
   identity: {
     name: "Pulso",
-    tagline: "Tu entrenador con IA que se adapta a vos",
+    tagline: { es: "Tu entrenador con IA que se adapta a vos", en: "Your AI coach that adapts to you" },
     domain: "pulso.fit",
     languages: ["es", "en"],
     brandColor: "#F97316", // energetic orange — recolors the entire app

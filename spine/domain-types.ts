@@ -105,7 +105,7 @@ export interface LandingConfig {
 
 export interface Identity {
   name: string
-  tagline: string
+  tagline: Localized
   domain: string
   languages: ("es" | "en" | string)[]
   brandColor?: string

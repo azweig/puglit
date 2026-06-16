@@ -18,7 +18,7 @@ import type { DomainConfig } from "../domain.config"
 const boleta: DomainConfig = {
   identity: {
     name: "Boleta",
-    tagline: "Facturá en 30 segundos y cobrá más rápido",
+    tagline: { es: "Facturá en 30 segundos y cobrá más rápido", en: "Invoice in 30 seconds, get paid faster" },
     domain: "boleta.app",
     languages: ["es", "en"],
     brandColor: "#2563EB", // trustworthy blue — money product, trust is the brand

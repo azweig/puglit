@@ -8,13 +8,22 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakart
 
 const brand = config.identity.brandColor || "#7c3aed"
 
+// Resolve a Localized value to a single string for SSR metadata (no client
+// context here). Prefer English, then the product's first language.
+const langs = config.identity.languages
+function metaStr(v: string | Record<string, string>): string {
+  if (typeof v === "string") return v
+  return v.en ?? v[langs[0]] ?? Object.values(v)[0] ?? ""
+}
+const tagline = metaStr(config.identity.tagline)
+
 export const metadata: Metadata = {
-  title: { default: `${config.identity.name} — ${config.identity.tagline}`, template: `%s · ${config.identity.name}` },
-  description: config.identity.tagline,
+  title: { default: `${config.identity.name} — ${tagline}`, template: `%s · ${config.identity.name}` },
+  description: tagline,
   metadataBase: new URL(`https://${config.identity.domain}`),
   openGraph: {
     title: config.identity.name,
-    description: config.identity.tagline,
+    description: tagline,
     siteName: config.identity.name,
     type: "website",
   },

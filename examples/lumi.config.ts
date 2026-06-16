@@ -11,7 +11,7 @@ const lumi: DomainConfig = {
   // Block 1 — Identity
   identity: {
     name: "Lumi",
-    tagline: "Un cuento nuevo cada noche, hecho para tu peque",
+    tagline: { es: "Un cuento nuevo cada noche, hecho para tu peque", en: "A new story every night, made for your little one" },
     domain: "getlumi.app",
     languages: ["es", "en"],
     brandColor: "#6366F1", // soft dreamy indigo

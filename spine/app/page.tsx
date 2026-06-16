@@ -18,7 +18,7 @@ export default function Landing() {
   const es = lang === "es"
 
   const headline = tr(landing?.hero.headline) || identity.name
-  const sub = tr(landing?.hero.subheadline) || identity.tagline
+  const sub = tr(landing?.hero.subheadline) || tr(identity.tagline)
   const ctaPrimary = tr(landing?.hero.ctaPrimary) || t("getStarted")
   const ctaSecondary = tr(landing?.hero.ctaSecondary) || t("pricing")
 
@@ -55,7 +55,7 @@ export default function Landing() {
         <div className="absolute inset-0 -z-10" style={{ background: `radial-gradient(60% 60% at 75% 0%, color-mix(in srgb, var(--brand) 14%, transparent), transparent 70%)` }} />
         <div className="max-w-6xl mx-auto px-5 py-20 sm:py-28 grid lg:grid-cols-2 gap-12 items-center">
           <div>
-            <span className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-brand bg-brand/10 px-3 py-1 rounded-full">{identity.tagline}</span>
+            <span className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-brand bg-brand/10 px-3 py-1 rounded-full">{tr(identity.tagline)}</span>
             <h1 className="mt-5 text-4xl sm:text-6xl font-extrabold tracking-tight text-ink leading-[1.04]">{headline}</h1>
             <p className="mt-5 text-lg text-ink/70 max-w-xl">{sub}</p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -69,29 +69,28 @@ export default function Landing() {
               </p>
             )}
           </div>
-          {/* product mock — a visual preview of the app, not real data */}
-          <div className="relative">
-            <div className="rounded-2xl bg-white border border-black/5 shadow-2xl shadow-black/10 p-5 rotate-1">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-brand"><Mark size={22} /></span>
-                <span className="font-bold text-ink text-sm">{es ? "Tu semana" : "Your week"}</span>
-                <span className="ml-auto text-[10px] font-semibold text-brand bg-brand/10 px-2 py-0.5 rounded-full">{es ? "Generado con IA" : "AI-generated"}</span>
+          {/* product summary card — derived from the config's own value props
+              (NOT fake domain data), so it's always relevant to the product. */}
+          {landing?.valueProps && landing.valueProps.length > 0 && (
+            <div className="relative">
+              <div className="rounded-2xl bg-white border border-black/5 shadow-2xl shadow-black/10 p-5 rotate-1">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-brand"><Mark size={22} /></span>
+                  <span className="font-bold text-ink text-sm">{identity.name}</span>
+                  <span className="ml-auto text-[10px] font-semibold text-brand bg-brand/10 px-2 py-0.5 rounded-full">{es ? "Vistazo" : "Overview"}</span>
+                </div>
+                <div className="space-y-2">
+                  {landing.valueProps.slice(0, 4).map((v, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-lg bg-paper px-3 py-2.5">
+                      <span className="text-brand text-sm font-bold">✓</span>
+                      <span className="text-sm text-ink/85">{tr(v.title)}</span>
+                    </div>
+                  ))}
+                </div>
+                <button className="mt-4 w-full rounded-lg py-2.5 text-sm font-semibold text-white" style={{ background: "var(--brand)" }}>{ctaPrimary}</button>
               </div>
-              <div className="space-y-2">
-                {(es
-                  ? [["Lun", "Bowl de quinoa y palta"], ["Mar", "Pollo al limón + verduras"], ["Mié", "Pasta integral pesto"], ["Jue", "Tacos de lentejas"]]
-                  : [["Mon", "Quinoa & avocado bowl"], ["Tue", "Lemon chicken + veggies"], ["Wed", "Whole-wheat pesto pasta"], ["Thu", "Lentil tacos"]]
-                ).map(([d, meal], i) => (
-                  <div key={i} className="flex items-center gap-3 rounded-lg bg-paper px-3 py-2.5">
-                    <span className="w-9 text-xs font-bold text-ink/40 uppercase">{d}</span>
-                    <span className="text-sm text-ink/85">{meal}</span>
-                    <span className="ml-auto text-brand text-sm">✓</span>
-                  </div>
-                ))}
-              </div>
-              <button className="mt-4 w-full rounded-lg py-2.5 text-sm font-semibold text-white" style={{ background: "var(--brand)" }}>{es ? "Ver lista de compras" : "View shopping list"}</button>
             </div>
-          </div>
+          )}
         </div>
       </section>
 

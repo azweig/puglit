@@ -7,7 +7,7 @@ import type { DomainConfig } from "../domain.config"
 const mesa: DomainConfig = {
   identity: {
     name: "Mesa",
-    tagline: "Planificá tus comidas con IA",
+    tagline: { es: "Planificá tus comidas con IA", en: "Plan your meals with AI" },
     domain: "mesa.app",
     languages: ["es", "en"],
     brandColor: "#10B981",
