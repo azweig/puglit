@@ -10,6 +10,21 @@ import { randomBytes } from "node:crypto"
 import { generateConfig, slugify, type IntakeAnswers } from "@/lib/generate"
 import { saveProject, slugExists, isConfigured } from "@/lib/db"
 
+// The AI may return human labels ("English", "Both", "Subscription") — normalize.
+function normLang(v: string): IntakeAnswers["languages"] {
+  const s = v.toLowerCase()
+  if (s.includes("both") || s.includes("ambos")) return "both"
+  if (s.startsWith("es") || s.includes("span") || s.includes("español")) return "es"
+  return "en"
+}
+function normMon(v: string): IntakeAnswers["monetization"] {
+  const s = v.toLowerCase()
+  if (s.includes("freemium")) return "freemium"
+  if (s.includes("subscription") || s.includes("suscrip")) return "subscription"
+  if (s.includes("free") || s.includes("gratis")) return "free"
+  return "freemium"
+}
+
 export async function POST(request: NextRequest) {
   try {
     const a = (await request.json()) as Partial<IntakeAnswers>
@@ -22,8 +37,8 @@ export async function POST(request: NextRequest) {
       audience: String(a.audience || "").slice(0, 120),
       benefits: (a.benefits || []).map((b) => String(b).slice(0, 80)).filter(Boolean).slice(0, 3),
       color: String(a.color || "#7C3AED"),
-      languages: (["es", "en", "both"].includes(String(a.languages)) ? a.languages : "en") as IntakeAnswers["languages"],
-      monetization: (["free", "freemium", "subscription"].includes(String(a.monetization)) ? a.monetization : "freemium") as IntakeAnswers["monetization"],
+      languages: normLang(String(a.languages || "")),
+      monetization: normMon(String(a.monetization || "")),
       price: Number(a.price) || 0,
       modules: Array.isArray(a.modules) ? a.modules.map(String) : [],
       email: String(a.email || "").slice(0, 255),
