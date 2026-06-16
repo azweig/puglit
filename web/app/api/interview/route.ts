@@ -28,11 +28,14 @@ HOW TO INTERVIEW:
    For the BRAND COLOR step (kind="color"): act as a branding + color-psychology expert FOR THIS SPECIFIC RUBRO. Return EXACTLY 5 distinct palette options (not the usual generic greens). Each option: a concrete primary "color" hex, a "label" naming the palette (e.g. "Cálido confiable"), and a "detail" with the emotion/psychology rationale tied to this product's sector + audience. Vary hues meaningfully across the 5.
 7. Accumulate everything you learn in "answers" (free-form keys are fine, e.g. countries, providers, data_sources, plus what/audience/benefits/monetization/price/modules/languages/color).
 
+Also include "progress": an integer 0–100 estimating how complete the discovery is so far (how much of what's needed to build the product you already understand). It must rise gradually turn by turn and only reach 100 when you set done=true.
+
 Respond with ONLY a JSON object of this exact shape (question/reflection/option text in the founder's language):
 {
  "reflection": string,
  "question": string,
  "field": string,
+ "progress": number,
  "kind": "text"|"choice"|"color"|"done",
  "options": [{"id":"A","label":string,"detail":string,"color":string|null}],
  "allowOther": boolean,
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
     // and return a done step immediately (no more questions).
     if (finish) {
       const answers = await extractAnswers(productName, history)
-      return NextResponse.json({ ok: true, step: { done: true, kind: "done", reflection: "", answers } })
+      return NextResponse.json({ ok: true, step: { done: true, kind: "done", reflection: "", answers, progress: 100 } })
     }
 
     const ctx: string[] = []
@@ -89,6 +92,7 @@ export async function POST(request: NextRequest) {
       step.answers = { ...(step.answers as object || {}), ...fresh }
       step.done = true
       step.kind = "done"
+      step.progress = 100
     }
     return NextResponse.json({ ok: true, step })
   } catch (e) {

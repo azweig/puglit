@@ -14,7 +14,7 @@ import { Mark } from "@/components/Mark"
 
 type Msg = { role: "user" | "assistant"; content: string }
 type Opt = { id: string; label: string; detail?: string; color?: string | null }
-type Step = { reflection?: string; question?: string; field?: string; kind?: string; options?: Opt[]; allowOther?: boolean; answers?: Record<string, unknown>; done?: boolean }
+type Step = { reflection?: string; question?: string; field?: string; kind?: string; options?: Opt[]; allowOther?: boolean; answers?: Record<string, unknown>; done?: boolean; progress?: number }
 type Entry = { who: "ai" | "you"; text: string }
 
 const card = "rounded-2xl border border-white/10 bg-ink2 p-4"
@@ -57,6 +57,7 @@ export default function Generate() {
   const [spec, setSpec] = useState<Record<string, any> | null>(null)
   const [pendingAnswers, setPendingAnswers] = useState<Record<string, unknown>>({})
   const [history, setHistory] = useState<{ messages: Msg[]; step: Step | null; log: Entry[] }[]>([])
+  const [progress, setProgress] = useState(0)
   const [name, setName] = useState("")
   const [messages, setMessages] = useState<Msg[]>([])
   const [step, setStep] = useState<Step | null>(null)
@@ -84,6 +85,7 @@ export default function Generate() {
       if (!r.ok) { setErr(d.error === "ai_not_configured" ? "The AI interview isn’t connected yet (missing OpenAI key)." : "AI error — try again."); return }
       const s: Step = d.step
       setStep(s)
+      if (typeof s.progress === "number") setProgress(Math.max(progress, Math.min(100, s.progress)))
       if (s.reflection) setLog((l) => [...l, { who: "ai", text: s.reflection! }])
       if (s.done) await produceSpec(s.answers || {}, msgs)
     } catch { setErr("Network error.") } finally { setBusy(false) }
@@ -139,7 +141,7 @@ export default function Generate() {
     try {
       const r = await fetch("/api/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, logo, websiteImage: website }),
+        body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, logo, websiteImage: website, branding: spec?.branding }),
       })
       const d = await r.json()
       if (!d.ok || !d.saved) { setErr("Generated, but couldn’t save."); setPhase("chat"); return }
@@ -284,12 +286,15 @@ export default function Generate() {
     <main className="max-w-xl mx-auto px-5 py-10">
       <Link href="/" className="flex items-center gap-2 text-violet-bright mb-4"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
 
-      <div className="flex items-center justify-between mb-5 text-xs">
-        <div className="flex items-center gap-3">
-          {history.length > 0 && <button onClick={goBack} disabled={busy} className="text-white/60 hover:text-white font-semibold disabled:opacity-40">← Volver</button>}
-          <span className="text-white/35">Pregunta {log.filter((e) => e.who === "ai").length} · entrevista adaptativa</span>
+      <div className="mb-5">
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          <div className="flex items-center gap-3">
+            {history.length > 0 && <button onClick={goBack} disabled={busy} className="text-white/60 hover:text-white font-semibold disabled:opacity-40">← Volver</button>}
+            <span className="text-white/40">Entendido ~{progress}%</span>
+          </div>
+          {log.filter((e) => e.who === "you").length >= 3 && <button onClick={finishNow} disabled={busy} className="text-violet-bright font-semibold hover:underline disabled:opacity-40">Terminar y ver diagnóstico →</button>}
         </div>
-        {log.filter((e) => e.who === "you").length >= 3 && <button onClick={finishNow} disabled={busy} className="text-violet-bright font-semibold hover:underline disabled:opacity-40">Terminar y ver diagnóstico →</button>}
+        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: "var(--violet)" }} /></div>
       </div>
 
       {/* transcript */}

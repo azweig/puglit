@@ -23,6 +23,11 @@ export function Landing({ config }: { config: DomainConfig }) {
   const es = lang === "es"
   const tr = makeTr(lang, identity.languages[0] || "en")
   const brand = identity.brandColor || "#7C3AED"
+  const accent = identity.accentColor || brand
+  const Logo = ({ size }: { size: number }) =>
+    identity.logoUrl ? <img src={identity.logoUrl} alt={identity.name} style={{ height: size }} className="w-auto" />
+      : identity.logoMonogram ? <span className="rounded-lg inline-flex items-center justify-center font-extrabold text-white shrink-0" style={{ width: size, height: size, background: brand, fontSize: Math.round(size * 0.46) }}>{identity.logoMonogram}</span>
+      : <Mark size={size} />
 
   const headline = tr(landing?.hero.headline) || identity.name
   const sub = tr(landing?.hero.subheadline) || tr(identity.tagline)
@@ -37,7 +42,7 @@ export function Landing({ config }: { config: DomainConfig }) {
     <div style={{ ["--brand" as string]: brand }} className="bg-paper text-ink min-h-screen">
       <header className="sticky top-0 z-30 backdrop-blur bg-paper/85 border-b border-black/5">
         <nav className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-brand">{identity.logoUrl ? <img src={identity.logoUrl} alt={identity.name} className="h-7 w-auto" /> : <Mark size={28} />}<span className="font-extrabold text-ink text-lg tracking-tight">{identity.name}</span></div>
+          <div className="flex items-center gap-2 text-brand"><Logo size={28} /><span className="font-extrabold text-ink text-lg tracking-tight">{identity.name}</span></div>
           <div className="flex items-center gap-4 text-sm font-medium text-ink/70">
             {!isFree && <a href="#pricing" className="hidden sm:inline hover:text-ink">{es ? "Precios" : "Pricing"}</a>}
             <button data-demo-cta className="px-4 py-2 rounded-lg text-white font-semibold cursor-pointer" style={{ background: brand }}>{ctaPrimary}</button>
@@ -60,7 +65,7 @@ export function Landing({ config }: { config: DomainConfig }) {
           </div>
           {landing?.valueProps && landing.valueProps.length > 0 && (
             <div className="rounded-2xl bg-white border border-black/5 shadow-2xl shadow-black/10 p-5 rotate-1">
-              <div className="flex items-center gap-2 mb-4 text-brand"><Mark size={22} /><span className="font-bold text-ink text-sm">{identity.name}</span><span className="ml-auto text-[10px] font-semibold text-brand bg-brand/10 px-2 py-0.5 rounded-full">{es ? "Vistazo" : "Overview"}</span></div>
+              <div className="flex items-center gap-2 mb-4 text-brand"><Logo size={22} /><span className="font-bold text-ink text-sm">{identity.name}</span><span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full text-white" style={{ background: accent }}>{es ? "Vistazo" : "Overview"}</span></div>
               <div className="space-y-2">
                 {landing.valueProps.slice(0, 4).map((v, i) => (
                   <div key={i} className="flex items-center gap-3 rounded-lg bg-paper px-3 py-2.5"><span className="text-brand text-sm font-bold">✓</span><span className="text-sm text-ink/85">{tr(v.title)}</span></div>
@@ -77,7 +82,7 @@ export function Landing({ config }: { config: DomainConfig }) {
           <div className="grid gap-6 sm:grid-cols-3">
             {landing.valueProps.map((v, i) => (
               <div key={i} className="rounded-2xl border border-black/5 bg-white p-7 shadow-sm">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg font-bold mb-4" style={{ background: brand }}>✦</div>
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg font-bold mb-4" style={{ background: accent }}>✦</div>
                 <h3 className="font-bold text-ink text-lg">{tr(v.title)}</h3>
                 <p className="mt-2 text-ink/65 leading-relaxed">{tr(v.body)}</p>
               </div>
@@ -129,7 +134,7 @@ export function Landing({ config }: { config: DomainConfig }) {
       )}
 
       <footer className="border-t border-black/5"><div className="max-w-6xl mx-auto px-5 py-8 flex items-center justify-between text-sm text-ink/50">
-        <div className="flex items-center gap-2 text-brand"><Mark size={20} /><span className="text-ink/70 font-semibold">{identity.name}</span></div>
+        <div className="flex items-center gap-2 text-brand"><Logo size={20} /><span className="text-ink/70 font-semibold">{identity.name}</span></div>
         <span>Built with <Link href="/" className="font-semibold text-brand">Puglit</Link></span>
       </div></footer>
     </div>
