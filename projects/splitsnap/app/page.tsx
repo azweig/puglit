@@ -44,8 +44,8 @@ export default function Landing() {
             <a href="#pricing" className="hidden sm:inline hover:text-ink">{t("pricing")}</a>
             <button onClick={() => setLang(es ? (languages.find((x) => x !== "es") || "en") : "es")}
               className="uppercase text-xs tracking-wider hover:text-ink">{es ? "EN" : "ES"}</button>
-            <Link href="/login" className="hover:text-ink">{t("signin")}</Link>
-            <Link href="/register" className="px-4 py-2 rounded-lg text-white font-semibold shadow-sm" style={{ background: "var(--brand)" }}>{ctaPrimary}</Link>
+            <Link href="/split" className="hover:text-ink">{es ? "Abrir la calculadora" : "Open the calculator"}</Link>
+            <Link href="/split" className="px-4 py-2 rounded-lg text-white font-semibold shadow-sm" style={{ background: "var(--brand)" }}>{ctaPrimary}</Link>
           </div>
         </nav>
       </header>
@@ -59,7 +59,7 @@ export default function Landing() {
             <h1 className="mt-5 text-4xl sm:text-6xl font-extrabold tracking-tight text-ink leading-[1.04]">{headline}</h1>
             <p className="mt-5 text-lg text-ink/70 max-w-xl">{sub}</p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Link href="/register" className="px-6 py-3.5 rounded-xl text-white font-semibold shadow-lg" style={{ background: "var(--brand)", boxShadow: "0 12px 30px -8px color-mix(in srgb, var(--brand) 55%, transparent)" }}>{ctaPrimary}</Link>
+              <Link href="/split" className="px-6 py-3.5 rounded-xl text-white font-semibold shadow-lg" style={{ background: "var(--brand)", boxShadow: "0 12px 30px -8px color-mix(in srgb, var(--brand) 55%, transparent)" }}>{ctaPrimary}</Link>
               <a href="#why" className="px-6 py-3.5 rounded-xl font-semibold text-ink border border-black/10 hover:border-black/25">{ctaSecondary}</a>
             </div>
             {landing?.socialProof && (
@@ -128,7 +128,7 @@ export default function Landing() {
                     <li key={j} className="flex gap-2"><span className="text-brand font-bold">✓</span>{tr(f)}</li>
                   ))}
                 </ul>
-                <Link href="/register" className={`mt-7 block text-center px-4 py-2.5 rounded-lg font-semibold ${p.highlight ? "text-white" : "text-ink border border-black/10 hover:border-black/25"}`} style={p.highlight ? { background: "var(--brand)" } : undefined}>{p.priceUsd === 0 ? t("getStarted") : t("choose")}</Link>
+                <Link href="/split" className={`mt-7 block text-center px-4 py-2.5 rounded-lg font-semibold ${p.highlight ? "text-white" : "text-ink border border-black/10 hover:border-black/25"}`} style={p.highlight ? { background: "var(--brand)" } : undefined}>{p.priceUsd === 0 ? t("getStarted") : t("choose")}</Link>
               </div>
             ))}
           </div>
@@ -150,7 +150,7 @@ export default function Landing() {
         <section className="px-5 pb-20">
           <div className="max-w-5xl mx-auto rounded-3xl px-8 py-16 text-center text-white" style={{ background: "var(--brand)" }}>
             <h2 className="text-3xl sm:text-4xl font-extrabold">{tr(landing.finalCta.headline)}</h2>
-            <Link href="/register" className="mt-7 inline-block px-7 py-3.5 rounded-xl bg-white text-ink font-bold hover:bg-white/90">{tr(landing.finalCta.button)}</Link>
+            <Link href="/split" className="mt-7 inline-block px-7 py-3.5 rounded-xl bg-white text-ink font-bold hover:bg-white/90">{tr(landing.finalCta.button)}</Link>
           </div>
         </section>
       )}
