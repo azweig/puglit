@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --violet: #7C3AED; --violet-bright: #9F67FF; --ink: #0B0912; --ink-2: #141021; --paper: #FAF9FD;
+  --brand: #7C3AED;
+  --brand-bright: color-mix(in srgb, var(--brand) 62%, white);
+}
+@theme inline {
+  --color-violet: var(--violet);
+  --color-violet-bright: var(--violet-bright);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-2);
+  --color-paper: var(--paper);
+  --color-brand: var(--brand);
+  --color-brand-bright: var(--brand-bright);
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+}
+html { scroll-behavior: smooth; }
+body { background: var(--ink); color: #EDEAF6; -webkit-font-smoothing: antialiased; }
+
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(124,58,237,.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(124,58,237,.06) 1px, transparent 1px);
+  background-size: 46px 46px;
+}
