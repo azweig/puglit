@@ -39,6 +39,18 @@ Respond with ONLY a JSON object of this exact shape:
  "done": boolean
 }`
 
+const EXTRACT = `From the interview transcript, output ONLY this JSON with the final answers (infer the best value for each from the whole conversation):
+{"what": string, "audience": string, "benefits": [string,string,string], "monetization": "free"|"freemium"|"subscription", "price": number, "modules": string[] (subset of ["aiLayer","payments","emailLifecycle","contentBlog","engine","gamification","profiling","growth","geo","mobile"]), "languages": "en"|"es"|"both", "color": "#RRGGBB"}`
+
+async function extractAnswers(productName: string, history: ChatMessage[]): Promise<Record<string, unknown>> {
+  try {
+    return (await chatJSON([
+      { role: "system", content: EXTRACT },
+      { role: "user", content: `Product name: "${productName}".\n\nTranscript:\n${history.map((m) => `${m.role}: ${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}`).join("\n")}` },
+    ], { temperature: 0 })) as Record<string, unknown>
+  } catch { return {} }
+}
+
 export async function POST(request: NextRequest) {
   if (!aiConfigured()) {
     return NextResponse.json({ error: "ai_not_configured" }, { status: 503 })
@@ -58,7 +70,18 @@ export async function POST(request: NextRequest) {
       ...history,
     ]
 
-    const step = await chatJSON(full)
+    const step = (await chatJSON(full)) as Record<string, unknown>
+
+    // Normalize completion: the model sometimes signals done via kind/field but
+    // not the boolean, and doesn't reliably accumulate `answers`. When finished,
+    // run a dedicated extraction so generate always gets complete answers.
+    const finished = step.done === true || step.kind === "done" || step.field === "done"
+    if (finished) {
+      const fresh = await extractAnswers(productName, history)
+      step.answers = { ...(step.answers as object || {}), ...fresh }
+      step.done = true
+      step.kind = "done"
+    }
     return NextResponse.json({ ok: true, step })
   } catch (e) {
     const msg = (e as Error).message || "error"

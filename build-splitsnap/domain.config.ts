@@ -1,0 +1,128 @@
+export * from "./domain-types"
+import type { DomainConfig } from "./domain-types"
+const config: DomainConfig = {
+  "infra": {
+    "deploy": "fly",
+    "emailProvider": "resend"
+  },
+  "landing": {
+    "faq": [
+      {
+        "a": "SplitSnap is free.",
+        "q": "How much does it cost?"
+      },
+      {
+        "a": "Yes — one click, no questions.",
+        "q": "Can I cancel anytime?"
+      },
+      {
+        "a": "Yes. Your data is yours and you can export it.",
+        "q": "Do I own my data?"
+      }
+    ],
+    "hero": {
+      "headline": "Scan the receipt with your phone camera",
+      "ctaPrimary": "Get started",
+      "subheadline": "Split a restaurant bill fairly: snap a photo of the receipt and instantly see how much each person owes. Mobile-first, no account needed.",
+      "ctaSecondary": "See pricing"
+    },
+    "finalCta": {
+      "button": "Get started",
+      "headline": "Ready to try SplitSnap?"
+    },
+    "valueProps": [
+      {
+        "body": "Built into SplitSnap from day one — no glue code.",
+        "title": "Scan the receipt with your phone camera"
+      },
+      {
+        "body": "It just works, so you can focus on your users.",
+        "title": "See each person's exact share instantly"
+      },
+      {
+        "body": "Reliable, secure and ready to scale.",
+        "title": "No sign-up — works right in your mobile browser"
+      }
+    ],
+    "socialProof": "Made for Restaurant diners."
+  },
+  "modules": {},
+  "entities": [
+    {
+      "name": "Receipt",
+      "fields": [
+        {
+          "name": "image_url",
+          "type": "url",
+          "required": true
+        },
+        {
+          "name": "total_amount",
+          "type": "float",
+          "required": true
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": true
+        }
+      ],
+      "plural": "Receipts",
+      "ownedByUser": true
+    },
+    {
+      "name": "Participant",
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": false
+        },
+        {
+          "name": "share_amount",
+          "type": "float",
+          "required": true
+        }
+      ],
+      "plural": "Participants",
+      "ownedByUser": true
+    }
+  ],
+  "identity": {
+    "name": "SplitSnap",
+    "domain": "splitsnap.app",
+    "tagline": "Split a restaurant bill fairly: snap a photo of the receipt and instantly see how much each person owes. Mobile-first, no account needed.",
+    "languages": [
+      "en",
+      "es"
+    ],
+    "brandColor": "#4CAF50",
+    "targetMarkets": []
+  },
+  "platforms": {
+    "web": true,
+    "admin": true
+  },
+  "monetization": {
+    "model": "free",
+    "plans": [
+      {
+        "id": "free",
+        "features": [
+          "Core features",
+          "Community support"
+        ],
+        "priceUsd": 0
+      }
+    ],
+    "providers": [
+      "stripe"
+    ]
+  }
+}
+export default config

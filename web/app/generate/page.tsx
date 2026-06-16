@@ -53,7 +53,9 @@ function avgColor(dataURL: string): Promise<string> {
 
 export default function Generate() {
   const router = useRouter()
-  const [phase, setPhase] = useState<"name" | "chat" | "saving">("name")
+  const [phase, setPhase] = useState<"name" | "chat" | "spec" | "saving">("name")
+  const [spec, setSpec] = useState<Record<string, any> | null>(null)
+  const [pendingAnswers, setPendingAnswers] = useState<Record<string, unknown>>({})
   const [name, setName] = useState("")
   const [messages, setMessages] = useState<Msg[]>([])
   const [step, setStep] = useState<Step | null>(null)
@@ -82,7 +84,17 @@ export default function Generate() {
       const s: Step = d.step
       setStep(s)
       if (s.reflection) setLog((l) => [...l, { who: "ai", text: s.reflection! }])
-      if (s.done) { await finalize(s.answers || {}) }
+      if (s.done) {
+        // STEP 1: do NOT build yet — produce a full diagnosis (Master Spec) first.
+        const a = s.answers || {}
+        setPendingAnswers(a)
+        try {
+          const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: name }) })
+          const sd = await sr.json()
+          if (sr.ok && sd.ok) { setSpec(sd.spec); setPhase("spec") }
+          else { await finalize(a) } // fallback: if the spec can't be produced, build
+        } catch { await finalize(a) }
+      }
     } catch { setErr("Network error.") } finally { setBusy(false) }
   }
 
@@ -166,6 +178,53 @@ export default function Generate() {
         {result.emailed && <p className="text-emerald-400 text-sm mt-5">📬 We also emailed you the link.</p>}
         {!result.url && <p className="text-amber-400 text-sm mt-5">Code delivery to GitHub isn’t connected yet — your config is saved and the preview is live.</p>}
         <Link href="/generate" onClick={() => location.reload()} className="inline-block mt-8 text-violet-bright font-semibold">← Build another</Link>
+      </main>
+    )
+  }
+
+  if (phase === "spec" && spec) {
+    const Sec = ({ title, children }: { title: string; children: React.ReactNode }) => (
+      <div className="mb-5"><h3 className="text-xs font-bold uppercase tracking-wider text-violet-bright mb-2">{title}</h3>{children}</div>
+    )
+    const List = ({ items }: { items?: string[] }) => (
+      <ul className="space-y-1 text-sm text-white/75">{(items || []).map((x, i) => <li key={i} className="flex gap-2"><span className="text-violet-bright">•</span>{x}</li>)}</ul>
+    )
+    return (
+      <main className="max-w-2xl mx-auto px-5 py-12">
+        <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
+        <span className="text-xs font-bold uppercase tracking-widest text-violet-bright">Diagnosis · before we build anything</span>
+        <h1 className="text-3xl font-extrabold mt-2">{name}: what we’ll build</h1>
+        <p className="text-white/60 mt-2 mb-7">Review the full spec. Nothing is generated until you approve it.</p>
+
+        <div className="rounded-2xl border border-white/10 bg-ink2 p-6">
+          <Sec title="Executive summary"><p className="text-sm text-white/80">{spec.executiveSummary}</p></Sec>
+          <div className="grid sm:grid-cols-2 gap-x-6">
+            <Sec title="Problem"><p className="text-sm text-white/75">{spec.problem}</p></Sec>
+            <Sec title="Audience"><p className="text-sm text-white/75">{spec.audience}</p></Sec>
+          </div>
+          <Sec title="Use cases"><List items={spec.useCases} /></Sec>
+          <Sec title="Must-have features"><List items={spec.features?.mustHave} /></Sec>
+          {spec.features?.niceToHave?.length ? <Sec title="Nice to have"><List items={spec.features.niceToHave} /></Sec> : null}
+          <Sec title="User roles">{(spec.roles || []).map((r: any, i: number) => <p key={i} className="text-sm text-white/75"><b className="text-white">{r.role}:</b> {(r.permissions || []).join(", ")}</p>)}</Sec>
+          <Sec title="Data model">{(spec.dataModel || []).map((e: any, i: number) => <p key={i} className="text-sm text-white/75"><b className="text-white">{e.entity}</b> — {(e.fields || []).join(", ")}{e.relations?.length ? ` · rel: ${e.relations.join(", ")}` : ""}</p>)}</Sec>
+          <Sec title="Screens">{(spec.screens || []).map((s2: any, i: number) => <p key={i} className="text-sm text-white/75"><b className="text-white">{s2.name}</b> — {s2.purpose}</p>)}</Sec>
+          <Sec title="Key user flows"><List items={spec.userFlows} /></Sec>
+          {spec.branding && <Sec title="Branding"><p className="text-sm text-white/75">{spec.branding.tagline} · {spec.branding.voice} · {spec.branding.colorRationale}</p></Sec>}
+          <Sec title="Monetization"><p className="text-sm text-white/75">{spec.monetization}</p></Sec>
+          {spec.integrations?.length ? <Sec title="Integrations">{spec.integrations.map((it: any, i: number) => <p key={i} className="text-sm text-white/75"><b className="text-white">{it.name}</b> — {it.purpose}</p>)}</Sec> : null}
+          {spec.ai ? <Sec title="AI"><p className="text-sm text-white/75">{spec.ai}</p></Sec> : null}
+          <Sec title="Analytics / KPIs"><List items={spec.analytics} /></Sec>
+          <Sec title="Risks"><List items={spec.risks} /></Sec>
+          <Sec title="Assumptions"><List items={spec.assumptions} /></Sec>
+          <Sec title="What Puglit will generate"><List items={spec.generatedStack} /></Sec>
+          {spec.openQuestions?.length ? <Sec title="Open questions"><List items={spec.openQuestions} /></Sec> : null}
+        </div>
+
+        {err && <p className="text-red-400 text-sm mt-4">{err}</p>}
+        <div className="flex gap-3 mt-6">
+          <button onClick={() => finalize(pendingAnswers)} className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Looks good — build it →</button>
+          <button onClick={() => { setSpec(null); setPhase("chat") }} className="px-6 py-3 rounded-xl font-semibold text-white/70 border border-white/15">Keep refining</button>
+        </div>
       </main>
     )
   }

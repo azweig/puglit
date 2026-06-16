@@ -24,8 +24,6 @@ export const pool = new Pool({
   connectionTimeoutMillis: 8000,
   allowExitOnIdle: true,
   application_name: process.env.APP_NAME || "puglit-app",
-  // Supabase/managed Postgres require TLS. Set POSTGRES_SSL=disable for local.
-  ssl: process.env.POSTGRES_SSL === "disable" ? undefined : { rejectUnauthorized: false },
 })
 
 pool.on("error", (err: Error & { code?: string }) => {
