@@ -25,7 +25,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || "Error"); return }
-      router.push("/")
+      router.push("/app")
     } catch {
       setError(es ? "Error de red" : "Network error")
     } finally {
