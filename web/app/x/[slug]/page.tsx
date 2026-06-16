@@ -5,6 +5,7 @@
 import Link from "next/link"
 import { getProject } from "@/lib/db"
 import { Landing } from "@/components/Landing"
+import { DemoAuthOverlay } from "@/components/DemoAuthOverlay"
 
 export const dynamic = "force-dynamic"
 
@@ -21,5 +22,15 @@ export default async function PreviewPage({ params }: { params: Promise<{ slug: 
       </div>
     )
   }
-  return <Landing config={project.config} />
+  return (
+    <>
+      <Landing config={project.config} />
+      <DemoAuthOverlay
+        slug={project.slug}
+        productName={project.config.identity.name}
+        entity={project.config.entities?.[0]?.plural || project.config.entities?.[0]?.name}
+        color={project.config.identity.brandColor}
+      />
+    </>
+  )
 }

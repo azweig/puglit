@@ -39,6 +39,11 @@ function pool(): Pool {
   return _pool
 }
 
+/** Shared query helper (used by demo-auth too). */
+export async function query(text: string, params?: unknown[]): Promise<{ rows: any[]; rowCount: number | null }> {
+  return pool().query(text, params as never)
+}
+
 let initialized = process.env.NODE_ENV === "production"
 async function ensureSchema(): Promise<void> {
   if (initialized) return

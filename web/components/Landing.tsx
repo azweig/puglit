@@ -40,7 +40,7 @@ export function Landing({ config }: { config: DomainConfig }) {
           <div className="flex items-center gap-2 text-brand">{identity.logoUrl ? <img src={identity.logoUrl} alt={identity.name} className="h-7 w-auto" /> : <Mark size={28} />}<span className="font-extrabold text-ink text-lg tracking-tight">{identity.name}</span></div>
           <div className="flex items-center gap-4 text-sm font-medium text-ink/70">
             {!isFree && <a href="#pricing" className="hidden sm:inline hover:text-ink">{es ? "Precios" : "Pricing"}</a>}
-            <span className="px-4 py-2 rounded-lg text-white font-semibold" style={{ background: brand }}>{ctaPrimary}</span>
+            <button data-demo-cta className="px-4 py-2 rounded-lg text-white font-semibold cursor-pointer" style={{ background: brand }}>{ctaPrimary}</button>
           </div>
         </nav>
       </header>
@@ -53,7 +53,7 @@ export function Landing({ config }: { config: DomainConfig }) {
             <h1 className="mt-5 text-4xl sm:text-6xl font-extrabold tracking-tight text-ink leading-[1.04]">{headline}</h1>
             <p className="mt-5 text-lg text-ink/70 max-w-xl">{sub}</p>
             <div className="mt-8 flex gap-3">
-              <span className="px-6 py-3.5 rounded-xl text-white font-semibold shadow-lg" style={{ background: brand }}>{ctaPrimary}</span>
+              <button data-demo-cta className="px-6 py-3.5 rounded-xl text-white font-semibold shadow-lg cursor-pointer" style={{ background: brand }}>{ctaPrimary}</button>
               {!isFree && <a href="#pricing" className="px-6 py-3.5 rounded-xl font-semibold text-ink border border-black/10">{tr(landing?.hero.ctaSecondary) || (es ? "Ver precios" : "See pricing")}</a>}
             </div>
             {landing?.socialProof && <p className="mt-6 text-sm text-ink/55">{tr(landing.socialProof)}</p>}
@@ -66,7 +66,7 @@ export function Landing({ config }: { config: DomainConfig }) {
                   <div key={i} className="flex items-center gap-3 rounded-lg bg-paper px-3 py-2.5"><span className="text-brand text-sm font-bold">✓</span><span className="text-sm text-ink/85">{tr(v.title)}</span></div>
                 ))}
               </div>
-              <div className="mt-4 w-full rounded-lg py-2.5 text-center text-sm font-semibold text-white" style={{ background: brand }}>{ctaPrimary}</div>
+              <button data-demo-cta className="mt-4 w-full rounded-lg py-2.5 text-center text-sm font-semibold text-white cursor-pointer" style={{ background: brand }}>{ctaPrimary}</button>
             </div>
           )}
         </div>
@@ -99,7 +99,7 @@ export function Landing({ config }: { config: DomainConfig }) {
                 <ul className="mt-6 space-y-2.5 text-sm text-ink/75">
                   {p.features.map((f, j) => <li key={j} className="flex gap-2"><span className="text-brand font-bold">✓</span>{tr(f)}</li>)}
                 </ul>
-                <div className={`mt-7 text-center px-4 py-2.5 rounded-lg font-semibold ${p.highlight ? "text-white" : "text-ink border border-black/10"}`} style={p.highlight ? { background: brand } : undefined}>{p.priceUsd === 0 ? (es ? "Empezar" : "Get started") : (es ? "Elegir" : "Choose")}</div>
+                <button data-demo-cta className={`mt-7 w-full text-center px-4 py-2.5 rounded-lg font-semibold cursor-pointer ${p.highlight ? "text-white" : "text-ink border border-black/10"}`} style={p.highlight ? { background: brand } : undefined}>{p.priceUsd === 0 ? (es ? "Empezar" : "Get started") : (es ? "Elegir" : "Choose")}</button>
               </div>
             ))}
           </div>
@@ -124,7 +124,7 @@ export function Landing({ config }: { config: DomainConfig }) {
       {landing?.finalCta && (
         <section className="px-5 pb-20"><div className="max-w-5xl mx-auto rounded-3xl px-8 py-16 text-center text-white" style={{ background: brand }}>
           <h2 className="text-3xl sm:text-4xl font-extrabold">{tr(landing.finalCta.headline)}</h2>
-          <div className="mt-7 inline-block px-7 py-3.5 rounded-xl bg-white text-ink font-bold">{tr(landing.finalCta.button)}</div>
+          <button data-demo-cta className="mt-7 inline-block px-7 py-3.5 rounded-xl bg-white text-ink font-bold cursor-pointer">{tr(landing.finalCta.button)}</button>
         </div></section>
       )}
 
