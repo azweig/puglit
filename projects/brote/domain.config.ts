@@ -53,18 +53,52 @@ const config: DomainConfig = {
   },
   "entities": [
     {
-      "name": "Item",
+      "name": "Plant",
       "fields": [
         {
-          "name": "title",
+          "name": "name",
           "type": "text",
           "required": true
         },
         {
-          "name": "data",
-          "type": "json"
+          "name": "species",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "water_frequency",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "care_tips",
+          "type": "longtext",
+          "required": false
         }
       ],
+      "plural": "Plants",
+      "ownedByUser": true
+    },
+    {
+      "name": "Reminder",
+      "fields": [
+        {
+          "name": "plant_id",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "reminder_date",
+          "type": "datetime",
+          "required": true
+        },
+        {
+          "name": "message",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "plural": "Reminders",
       "ownedByUser": true
     }
   ],
