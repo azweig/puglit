@@ -35,7 +35,7 @@ export function Landing({ config }: { config: DomainConfig }) {
     <div style={{ ["--brand" as string]: brand }} className="bg-paper text-ink min-h-screen">
       <header className="sticky top-0 z-30 backdrop-blur bg-paper/85 border-b border-black/5">
         <nav className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-brand"><Mark size={28} /><span className="font-extrabold text-ink text-lg tracking-tight">{identity.name}</span></div>
+          <div className="flex items-center gap-2 text-brand">{identity.logoUrl ? <img src={identity.logoUrl} alt={identity.name} className="h-7 w-auto" /> : <Mark size={28} />}<span className="font-extrabold text-ink text-lg tracking-tight">{identity.name}</span></div>
           <div className="flex items-center gap-4 text-sm font-medium text-ink/70">
             <a href="#pricing" className="hidden sm:inline hover:text-ink">{es ? "Precios" : "Pricing"}</a>
             <span className="px-4 py-2 rounded-lg text-white font-semibold" style={{ background: brand }}>{ctaPrimary}</span>

@@ -1,153 +1,208 @@
 "use client"
 /**
- * /generate — the interview. Collects the answers, posts to /api/generate, and
- * (when the DB is connected) sends the founder straight to their live example.
- * Free while in beta — the generated project becomes a public Puglit example.
+ * /generate — AI-driven conversational interview.
+ * Step 1 is just the product name. From there an LLM (gpt-4o-mini) reads the
+ * founder's free text, reflects what it understood, and proposes A/B/C/D options
+ * (+ "Other"). Brand color is asked LAST, as 3 AI-suggested palettes with
+ * rationale — and the founder can upload an existing logo / website screenshot.
+ * On "done" we assemble the config deterministically, save it, and show it live.
  */
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Mark } from "@/components/Mark"
 
-const MODULES: [string, string][] = [
-  ["aiLayer", "AI features"],
-  ["payments", "Payments & subscriptions"],
-  ["emailLifecycle", "Email lifecycle"],
-  ["contentBlog", "Blog with AI authors"],
-  ["engine", "Custom engine / algorithm"],
-  ["gamification", "Streaks & gamification"],
-  ["profiling", "Profiling & recommendations"],
-  ["growth", "Growth & A/B tests"],
-  ["geo", "Location / maps"],
-  ["mobile", "Mobile app"],
-]
+type Msg = { role: "user" | "assistant"; content: string }
+type Opt = { id: string; label: string; detail?: string; color?: string | null }
+type Step = { reflection?: string; question?: string; field?: string; kind?: string; options?: Opt[]; allowOther?: boolean; answers?: Record<string, unknown>; done?: boolean }
+type Entry = { who: "ai" | "you"; text: string }
 
-const field = "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/35 focus:border-violet focus:outline-none focus:ring-2 focus:ring-violet/30"
-const label = "block text-sm font-semibold text-white/80 mb-1.5"
+const card = "rounded-2xl border border-white/10 bg-ink2 p-4"
+
+// --- client image helpers ---
+function fileToDataURL(file: File, maxDim: number, mime = "image/png", q = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const r = new FileReader()
+    r.onload = () => { img.onload = () => {
+      const s = Math.min(1, maxDim / Math.max(img.width, img.height))
+      const c = document.createElement("canvas")
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s)
+      c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height)
+      resolve(c.toDataURL(mime, q))
+    }; img.onerror = reject; img.src = r.result as string }
+    r.onerror = reject; r.readAsDataURL(file)
+  })
+}
+function avgColor(dataURL: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = 12; c.height = 12
+      const ctx = c.getContext("2d")!; ctx.drawImage(img, 0, 0, 12, 12)
+      const d = ctx.getImageData(0, 0, 12, 12).data
+      let r = 0, g = 0, b = 0, n = 0
+      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 40) continue; r += d[i]; g += d[i + 1]; b += d[i + 2]; n++ }
+      if (!n) return resolve("#7C3AED")
+      const h = (x: number) => Math.round(x / n).toString(16).padStart(2, "0")
+      resolve(`#${h(r)}${h(g)}${h(b)}`)
+    }
+    img.onerror = () => resolve("#7C3AED"); img.src = dataURL
+  })
+}
 
 export default function Generate() {
   const router = useRouter()
-  const [step, setStep] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [phase, setPhase] = useState<"name" | "chat" | "saving">("name")
+  const [name, setName] = useState("")
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [step, setStep] = useState<Step | null>(null)
+  const [log, setLog] = useState<Entry[]>([])
+  const [busy, setBusy] = useState(false)
   const [err, setErr] = useState("")
-  const [result, setResult] = useState<{ slug: string; config: unknown; saved: boolean } | null>(null)
+  const [other, setOther] = useState("")
+  const [logo, setLogo] = useState<string | null>(null)
+  const [website, setWebsite] = useState<string | null>(null)
+  const [color, setColor] = useState<string | null>(null)
+  const endRef = useRef<HTMLDivElement>(null)
 
-  const [f, setF] = useState({
-    name: "", what: "", audience: "",
-    b0: "", b1: "", b2: "",
-    color: "#7C3AED", languages: "en",
-    monetization: "freemium", price: 9,
-    modules: ["aiLayer", "payments"] as string[],
-    email: "",
-  })
-  const set = (k: string, v: unknown) => setF((s) => ({ ...s, [k]: v }))
-  const toggleMod = (m: string) => set("modules", f.modules.includes(m) ? f.modules.filter((x) => x !== m) : [...f.modules, m])
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [log, step, busy])
 
-  const canNext = step === 0 ? f.name.trim() && f.what.trim() : step === 1 ? (f.b0 || f.b1 || f.b2) : true
-
-  async function generate() {
-    setErr(""); setLoading(true)
+  async function callInterview(msgs: Msg[]) {
+    setBusy(true); setErr("")
     try {
-      const res = await fetch("/api/generate", {
+      const r = await fetch("/api/interview", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: f.name, what: f.what, audience: f.audience,
-          benefits: [f.b0, f.b1, f.b2], color: f.color, languages: f.languages,
-          monetization: f.monetization, price: Number(f.price), modules: f.modules, email: f.email,
-        }),
+        body: JSON.stringify({ messages: msgs, productName: name, hasLogo: !!logo, hasWebsite: !!website }),
       })
-      const d = await res.json()
-      if (!res.ok) { setErr(d.error || "Error"); return }
-      if (d.saved) { router.push(`/x/${d.slug}`); return }
-      setResult(d) // DB not connected yet → show the config inline
-    } catch { setErr("Network error") } finally { setLoading(false) }
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error === "ai_not_configured" ? "The AI interview isn’t connected yet (missing OpenAI key)." : "AI error — try again."); return }
+      const s: Step = d.step
+      setStep(s)
+      if (s.reflection) setLog((l) => [...l, { who: "ai", text: s.reflection! }])
+      if (s.done) { await finalize(s.answers || {}) }
+    } catch { setErr("Network error.") } finally { setBusy(false) }
   }
 
-  if (result) {
+  function start() {
+    if (!name.trim()) return
+    setPhase("chat")
+    const first: Msg[] = [{ role: "user", content: `My product is called "${name.trim()}".` }]
+    setMessages(first); callInterview(first)
+  }
+
+  function answer(sendText: string, show: string, pickedColor?: string) {
+    if (pickedColor) setColor(pickedColor)
+    setLog((l) => [...l, { who: "you", text: show }])
+    const next: Msg[] = [...messages, { role: "assistant", content: JSON.stringify(step) }, { role: "user", content: sendText }]
+    setMessages(next); setOther(""); callInterview(next)
+  }
+
+  async function finalize(answers: Record<string, unknown>) {
+    setPhase("saving")
+    try {
+      const r = await fetch("/api/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, logo, websiteImage: website }),
+      })
+      const d = await r.json()
+      if (d.ok && d.saved) { router.push(`/x/${d.slug}`); return }
+      setErr("Generated, but couldn’t save to the gallery."); setPhase("chat")
+    } catch { setErr("Network error while saving."); setPhase("chat") }
+  }
+
+  async function onLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; if (!f) return
+    const url = await fileToDataURL(f, 400, "image/png"); setLogo(url)
+    const c = await avgColor(url); setColor(c)
+    setLog((l) => [...l, { who: "you", text: "Uploaded my logo ✓" }])
+  }
+  async function onWebsite(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; if (!f) return
+    const url = await fileToDataURL(f, 800, "image/jpeg", 0.7); setWebsite(url)
+    setLog((l) => [...l, { who: "you", text: "Uploaded a screenshot of my site ✓" }])
+  }
+
+  // ---------- render ----------
+  if (phase === "name") {
     return (
-      <main className="max-w-2xl mx-auto px-5 py-16">
-        <Link href="/" className="flex items-center gap-2 text-violet-bright mb-8"><Mark size={26} /><span className="font-extrabold">Puglit</span></Link>
-        <h1 className="text-2xl font-extrabold">Generated: {f.name} 🎉</h1>
-        <p className="text-white/60 mt-2">Your <code className="text-violet-bright">domain.config.ts</code> is ready. (Database isn’t connected yet, so it wasn’t saved to the gallery — once it is, you’ll get a live preview link.)</p>
-        <pre className="mt-6 bg-black/40 border border-white/10 rounded-xl p-4 text-xs overflow-x-auto text-white/80">{JSON.stringify(result.config, null, 2)}</pre>
-        <Link href="/generate" className="inline-block mt-6 text-violet-bright font-semibold">← Generate another</Link>
+      <main className="max-w-xl mx-auto px-5 py-20">
+        <Link href="/" className="flex items-center gap-2 text-violet-bright mb-10"><Mark size={26} /><span className="font-extrabold text-white">Puglit</span></Link>
+        <h1 className="text-3xl font-extrabold">Let’s build your SaaS.</h1>
+        <p className="text-white/60 mt-2">It’s a quick chat — I’ll read your answers and suggest options as we go. First:</p>
+        <label className="block text-sm font-semibold text-white/80 mt-8 mb-2">What’s your product called?</label>
+        <input autoFocus className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/35 focus:border-violet focus:outline-none" placeholder="e.g. Mesa" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && start()} />
+        <button onClick={start} disabled={!name.trim()} className="mt-5 px-6 py-3 rounded-xl font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>Start →</button>
       </main>
     )
   }
 
+  const s = step
   return (
-    <main className="max-w-2xl mx-auto px-5 py-12">
-      <Link href="/" className="flex items-center gap-2 text-violet-bright mb-8"><Mark size={26} /><span className="font-extrabold">Puglit</span></Link>
-      <div className="flex items-center gap-2 mb-7">
-        {[0, 1, 2].map((i) => <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= step ? "bg-violet" : "bg-white/10"}`} />)}
+    <main className="max-w-xl mx-auto px-5 py-10">
+      <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
+
+      {/* transcript */}
+      <div className="space-y-3 mb-5">
+        {log.map((e, i) => (
+          <div key={i} className={e.who === "ai" ? "flex gap-2" : "flex gap-2 justify-end"}>
+            {e.who === "ai" && <span className="text-violet-bright mt-0.5"><Mark size={20} /></span>}
+            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${e.who === "ai" ? "bg-ink2 border border-white/10" : "bg-violet/20 border border-violet/30"}`}>{e.text}</div>
+          </div>
+        ))}
+        {busy && <div className="flex gap-2"><span className="text-violet-bright mt-0.5"><Mark size={20} /></span><div className="bg-ink2 border border-white/10 rounded-2xl px-4 py-2.5 text-sm text-white/50">thinking…</div></div>}
       </div>
 
-      {step === 0 && (
-        <div className="space-y-5">
-          <h1 className="text-2xl font-extrabold">Tell us your idea</h1>
-          <div><label className={label}>Product name</label><input className={field} placeholder="e.g. Mesa" value={f.name} onChange={(e) => set("name", e.target.value)} /></div>
-          <div><label className={label}>In one line, what does it do?</label><input className={field} placeholder="AI meal planning for busy families" value={f.what} onChange={(e) => set("what", e.target.value)} /></div>
-          <div><label className={label}>Who is it for?</label><input className={field} placeholder="busy parents who hate deciding what to cook" value={f.audience} onChange={(e) => set("audience", e.target.value)} /></div>
-        </div>
-      )}
+      {/* current question + input */}
+      {phase === "saving" && <div className={card}>Building your SaaS… ✦</div>}
 
-      {step === 1 && (
-        <div className="space-y-5">
-          <h1 className="text-2xl font-extrabold">What makes it great</h1>
-          <div><label className={label}>3 key benefits</label>
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => <input key={i} className={field} placeholder={["Personalized in seconds", "Zero food waste", "Shopping list, automatic"][i]} value={f[`b${i}` as "b0"]} onChange={(e) => set(`b${i}`, e.target.value)} />)}
-            </div>
-          </div>
-          <div className="flex gap-5 flex-wrap">
-            <div><label className={label}>Brand color</label><input type="color" className="h-12 w-20 bg-transparent rounded-lg cursor-pointer" value={f.color} onChange={(e) => set("color", e.target.value)} /></div>
-            <div className="flex-1 min-w-[180px]"><label className={label}>Languages</label>
-              <div className="flex gap-2">
-                {[["en", "English"], ["es", "Español"], ["both", "Both"]].map(([v, l]) => (
-                  <button key={v} type="button" onClick={() => set("languages", v)} className={`flex-1 py-3 rounded-xl border text-sm font-semibold ${f.languages === v ? "border-violet bg-violet/15 text-white" : "border-white/10 text-white/60"}`}>{l}</button>
+      {phase === "chat" && !busy && s && !s.done && (
+        <div className={card}>
+          {s.question && <p className="font-semibold mb-3">{s.question}</p>}
+
+          {s.kind === "color" ? (
+            <div className="space-y-3">
+              <div className="grid gap-2">
+                {(s.options || []).map((o) => (
+                  <button key={o.id} onClick={() => answer(`I'll go with ${o.label} (${o.color})`, `${o.label}`, o.color || undefined)} className="flex items-center gap-3 text-left rounded-xl border border-white/10 hover:border-violet/50 p-3">
+                    <span className="w-8 h-8 rounded-lg shrink-0 border border-white/15" style={{ background: o.color || "#7C3AED" }} />
+                    <span><span className="font-semibold text-sm">{o.label}</span>{o.detail && <span className="block text-xs text-white/55">{o.detail}</span>}</span>
+                  </button>
                 ))}
               </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <label className="cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-white/10 hover:border-violet/50">📎 Upload my logo<input type="file" accept="image/*" className="hidden" onChange={onLogo} /></label>
+                <label className="cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-white/10 hover:border-violet/50">🖼️ Upload my website<input type="file" accept="image/*" className="hidden" onChange={onWebsite} /></label>
+                <label className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-white/10">Pick<input type="color" value={color || "#7C3AED"} onChange={(e) => setColor(e.target.value)} className="w-6 h-6 bg-transparent" /></label>
+                {(logo || color) && <button onClick={() => answer(`I'll use ${logo ? "my uploaded logo and color " : ""}${color || "#7C3AED"}`, logo ? "Use my logo & color" : `Color ${color}`, color || undefined)} className="text-xs font-bold px-3 py-2 rounded-lg text-white" style={{ background: "var(--violet)" }}>Continue →</button>}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="space-y-6">
-          <h1 className="text-2xl font-extrabold">Business & build</h1>
-          <div><label className={label}>Monetization</label>
-            <div className="flex gap-2">
-              {[["free", "Free"], ["freemium", "Freemium"], ["subscription", "Subscription"]].map(([v, l]) => (
-                <button key={v} type="button" onClick={() => set("monetization", v)} className={`flex-1 py-3 rounded-xl border text-sm font-semibold ${f.monetization === v ? "border-violet bg-violet/15 text-white" : "border-white/10 text-white/60"}`}>{l}</button>
-              ))}
-            </div>
-          </div>
-          {f.monetization !== "free" && (
-            <div><label className={label}>Monthly price (USD)</label><input type="number" min={1} className={field} value={f.price} onChange={(e) => set("price", e.target.value)} /></div>
-          )}
-          <div><label className={label}>What should it include?</label>
-            <div className="grid grid-cols-2 gap-2">
-              {MODULES.map(([k, l]) => (
-                <button key={k} type="button" onClick={() => toggleMod(k)} className={`text-left px-3 py-2.5 rounded-xl border text-sm font-medium ${f.modules.includes(k) ? "border-violet bg-violet/15 text-white" : "border-white/10 text-white/60"}`}>
-                  <span className="mr-1.5">{f.modules.includes(k) ? "✓" : "+"}</span>{l}
+          ) : s.kind === "choice" && s.options?.length ? (
+            <div className="space-y-2">
+              {s.options.map((o) => (
+                <button key={o.id} onClick={() => answer(o.label, o.label)} className="block w-full text-left rounded-xl border border-white/10 hover:border-violet/50 p-3">
+                  <span className="font-semibold text-sm">{o.label}</span>{o.detail && <span className="block text-xs text-white/55 mt-0.5">{o.detail}</span>}
                 </button>
               ))}
+              {s.allowOther !== false && (
+                <div className="flex gap-2 pt-1">
+                  <input value={other} onChange={(e) => setOther(e.target.value)} onKeyDown={(e) => e.key === "Enter" && other.trim() && answer(other, other)} placeholder="Something else…" className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:border-violet focus:outline-none" />
+                  <button onClick={() => other.trim() && answer(other, other)} className="px-4 rounded-xl text-sm font-bold text-white" style={{ background: "var(--violet)" }}>Send</button>
+                </div>
+              )}
             </div>
-          </div>
-          <div><label className={label}>Your email <span className="text-white/40 font-normal">(optional — to reach you when paid generation opens)</span></label><input type="email" className={field} placeholder="you@startup.com" value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
+          ) : (
+            <div className="flex gap-2">
+              <input autoFocus value={other} onChange={(e) => setOther(e.target.value)} onKeyDown={(e) => e.key === "Enter" && other.trim() && answer(other, other)} placeholder="Type your answer…" className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:border-violet focus:outline-none" />
+              <button onClick={() => other.trim() && answer(other, other)} className="px-4 rounded-xl text-sm font-bold text-white" style={{ background: "var(--violet)" }}>Send</button>
+            </div>
+          )}
         </div>
       )}
 
       {err && <p className="text-red-400 text-sm mt-4">{err}</p>}
-
-      <div className="flex justify-between mt-8">
-        <button onClick={() => setStep((s) => Math.max(0, s - 1))} className={`px-5 py-3 rounded-xl font-semibold text-white/70 ${step === 0 ? "invisible" : ""}`}>← Back</button>
-        {step < 2 ? (
-          <button onClick={() => canNext && setStep((s) => s + 1)} disabled={!canNext} className="px-6 py-3 rounded-xl font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>Next →</button>
-        ) : (
-          <button onClick={generate} disabled={loading} className="px-7 py-3 rounded-xl font-bold text-white disabled:opacity-60" style={{ background: "var(--violet)" }}>{loading ? "Generating…" : "Generate my SaaS ✦"}</button>
-        )}
-      </div>
+      {(logo || website) && <p className="text-xs text-white/40 mt-3">{logo && "logo attached · "}{website && "website attached"}</p>}
+      <div ref={endRef} />
     </main>
   )
 }

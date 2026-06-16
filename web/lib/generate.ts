@@ -19,6 +19,8 @@ export interface IntakeAnswers {
   price: number
   modules: string[]
   email: string
+  logo?: string        // data URL of an uploaded logo (rendered on the landing)
+  websiteImage?: string // data URL of an existing site screenshot (reference only)
 }
 
 const VALID_MODULES = [
@@ -99,6 +101,7 @@ export function generateConfig(a: IntakeAnswers): DomainConfig {
       languages: langs,
       brandColor: /^#[0-9a-fA-F]{6}$/.test(a.color) ? a.color : "#7C3AED",
       targetMarkets: [],
+      ...(a.logo && a.logo.startsWith("data:image") ? { logoUrl: a.logo } : {}),
     },
     modules,
     entities: [

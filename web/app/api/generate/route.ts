@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
       price: Number(a.price) || 0,
       modules: Array.isArray(a.modules) ? a.modules.map(String) : [],
       email: String(a.email || "").slice(0, 255),
+      // uploaded assets (data URLs) — capped to keep the row small
+      logo: typeof a.logo === "string" && a.logo.startsWith("data:image") && a.logo.length < 700_000 ? a.logo : undefined,
+      websiteImage: typeof a.websiteImage === "string" && a.websiteImage.startsWith("data:image") && a.websiteImage.length < 900_000 ? a.websiteImage : undefined,
     }
 
     const config = generateConfig(answers)
