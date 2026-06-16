@@ -56,6 +56,7 @@ export default function Generate() {
   const [phase, setPhase] = useState<"name" | "chat" | "spec" | "saving">("name")
   const [spec, setSpec] = useState<Record<string, any> | null>(null)
   const [pendingAnswers, setPendingAnswers] = useState<Record<string, unknown>>({})
+  const [history, setHistory] = useState<{ messages: Msg[]; step: Step | null; log: Entry[] }[]>([])
   const [name, setName] = useState("")
   const [messages, setMessages] = useState<Msg[]>([])
   const [step, setStep] = useState<Step | null>(null)
@@ -84,18 +85,38 @@ export default function Generate() {
       const s: Step = d.step
       setStep(s)
       if (s.reflection) setLog((l) => [...l, { who: "ai", text: s.reflection! }])
-      if (s.done) {
-        // STEP 1: do NOT build yet — produce a full diagnosis (Master Spec) first.
-        const a = s.answers || {}
-        setPendingAnswers(a)
-        try {
-          const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: name }) })
-          const sd = await sr.json()
-          if (sr.ok && sd.ok) { setSpec(sd.spec); setPhase("spec") }
-          else { await finalize(a) } // fallback: if the spec can't be produced, build
-        } catch { await finalize(a) }
-      }
+      if (s.done) await produceSpec(s.answers || {}, msgs)
     } catch { setErr("Network error.") } finally { setBusy(false) }
+  }
+
+  // After the interview (or "finish now"): produce the diagnosis, don't build yet.
+  async function produceSpec(answers: Record<string, unknown>, msgs: Msg[]) {
+    setPendingAnswers(answers)
+    try {
+      const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: name }) })
+      const sd = await sr.json()
+      if (sr.ok && sd.ok) { setSpec(sd.spec); setPhase("spec") }
+      else { await finalize(answers) }
+    } catch { await finalize(answers) }
+  }
+
+  async function finishNow() {
+    setBusy(true); setErr("")
+    try {
+      const r = await fetch("/api/interview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages, productName: name, finish: true }) })
+      const d = await r.json()
+      if (r.ok && d.step?.done) await produceSpec(d.step.answers || {}, messages)
+      else setErr("Couldn't wrap up — try one more answer.")
+    } catch { setErr("Network error.") } finally { setBusy(false) }
+  }
+
+  function goBack() {
+    setHistory((h) => {
+      if (!h.length) return h
+      const prev = h[h.length - 1]
+      setMessages(prev.messages); setStep(prev.step); setLog(prev.log); setOther(""); setErr("")
+      return h.slice(0, -1)
+    })
   }
 
   function start() {
@@ -106,6 +127,7 @@ export default function Generate() {
   }
 
   function answer(sendText: string, show: string, pickedColor?: string) {
+    setHistory((h) => [...h, { messages, step, log }]) // snapshot so the user can go back
     if (pickedColor) setColor(pickedColor)
     setLog((l) => [...l, { who: "you", text: show }])
     const next: Msg[] = [...messages, { role: "assistant", content: JSON.stringify(step) }, { role: "user", content: sendText }]
@@ -197,6 +219,34 @@ export default function Generate() {
         <p className="text-white/60 mt-2 mb-7">Review the full spec. Nothing is generated until you approve it.</p>
 
         <div className="rounded-2xl border border-white/10 bg-ink2 p-6">
+          {/* generated identity: logo lockup + palette */}
+          {(() => {
+            const primary = spec.branding?.primaryColor || color || "#7C3AED"
+            const mono = (spec.branding?.logo?.monogram || name.trim().slice(0, 2)).toUpperCase()
+            const palette: { hex: string; label?: string }[] = Array.isArray(spec.branding?.palette) && spec.branding.palette.length
+              ? spec.branding.palette : [{ hex: primary, label: "Primary" }]
+            return (
+              <div className="mb-6 pb-6 border-b border-white/10">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-violet-bright mb-3">Identidad (preview generado)</h3>
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-extrabold text-xl shrink-0" style={{ background: primary }}>{mono}</div>
+                  <div>
+                    <div className="text-2xl font-extrabold" style={{ color: primary }}>{name}</div>
+                    {spec.branding?.tagline && <div className="text-sm text-white/55">{spec.branding.tagline}</div>}
+                  </div>
+                </div>
+                {spec.branding?.logo?.concept && <p className="text-xs text-white/45 mt-2">Logo: {spec.branding.logo.concept}</p>}
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {palette.map((c, i) => (
+                    <div key={i} className="text-center">
+                      <div className="w-12 h-12 rounded-lg border border-white/10" style={{ background: c.hex }} title={c.hex} />
+                      <div className="text-[9px] text-white/40 mt-1">{c.label || c.hex}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
           <Sec title="Executive summary"><p className="text-sm text-white/80">{spec.executiveSummary}</p></Sec>
           <div className="grid sm:grid-cols-2 gap-x-6">
             <Sec title="Problem"><p className="text-sm text-white/75">{spec.problem}</p></Sec>
@@ -232,7 +282,15 @@ export default function Generate() {
   const s = step
   return (
     <main className="max-w-xl mx-auto px-5 py-10">
-      <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
+      <Link href="/" className="flex items-center gap-2 text-violet-bright mb-4"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
+
+      <div className="flex items-center justify-between mb-5 text-xs">
+        <div className="flex items-center gap-3">
+          {history.length > 0 && <button onClick={goBack} disabled={busy} className="text-white/60 hover:text-white font-semibold disabled:opacity-40">← Volver</button>}
+          <span className="text-white/35">Pregunta {log.filter((e) => e.who === "ai").length} · entrevista adaptativa</span>
+        </div>
+        {log.filter((e) => e.who === "you").length >= 3 && <button onClick={finishNow} disabled={busy} className="text-violet-bright font-semibold hover:underline disabled:opacity-40">Terminar y ver diagnóstico →</button>}
+      </div>
 
       {/* transcript */}
       <div className="space-y-3 mb-5">
@@ -276,12 +334,10 @@ export default function Generate() {
                   <span className="font-semibold text-sm">{o.label}</span>{o.detail && <span className="block text-xs text-white/55 mt-0.5">{o.detail}</span>}
                 </button>
               ))}
-              {s.allowOther !== false && (
-                <div className="flex gap-2 pt-1">
-                  <input value={other} onChange={(e) => setOther(e.target.value)} onKeyDown={(e) => e.key === "Enter" && other.trim() && answer(other, other)} placeholder="Something else…" className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:border-violet focus:outline-none" />
-                  <button onClick={() => other.trim() && answer(other, other)} className="px-4 rounded-xl text-sm font-bold text-white" style={{ background: "var(--violet)" }}>Send</button>
-                </div>
-              )}
+              <div className="flex gap-2 pt-1">
+                <input value={other} onChange={(e) => setOther(e.target.value)} onKeyDown={(e) => e.key === "Enter" && other.trim() && answer(other, other)} placeholder="✏️ Otra — escribí la tuya…" className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:border-violet focus:outline-none" />
+                <button onClick={() => other.trim() && answer(other, other)} className="px-4 rounded-xl text-sm font-bold text-white" style={{ background: "var(--violet)" }}>Send</button>
+              </div>
             </div>
           ) : (
             <div className="flex gap-2">

@@ -25,6 +25,7 @@ HOW TO INTERVIEW:
 4. INFER aggressively and NEVER re-ask what's known or implied. If they said "free", do NOT ask a price. If they said the country, don't ask again.
 5. Cover, as RELEVANT to this idea (skip what doesn't apply): vision/problem, audience, core use cases, the key features & user flows, THE DATA (sources, who maintains it, freshness), countries/localization, monetization, integrations the idea implies, and brand. Ask BRAND COLOR last (kind="color", exactly 3 palette options each with a real hex + a one-line color-psychology rationale tied to this product).
 6. Go genuinely deep — typically 8–14 strong questions. Only set done=true when you understand how the product actually works AND where its data/content comes from well enough to write a real spec.
+   For the BRAND COLOR step (kind="color"): act as a branding + color-psychology expert FOR THIS SPECIFIC RUBRO. Return EXACTLY 5 distinct palette options (not the usual generic greens). Each option: a concrete primary "color" hex, a "label" naming the palette (e.g. "Cálido confiable"), and a "detail" with the emotion/psychology rationale tied to this product's sector + audience. Vary hues meaningfully across the 5.
 7. Accumulate everything you learn in "answers" (free-form keys are fine, e.g. countries, providers, data_sources, plus what/audience/benefits/monetization/price/modules/languages/color).
 
 Respond with ONLY a JSON object of this exact shape (question/reflection/option text in the founder's language):
@@ -56,8 +57,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "ai_not_configured" }, { status: 503 })
   }
   try {
-    const { messages, productName, hasLogo, hasWebsite } = await request.json()
+    const { messages, productName, hasLogo, hasWebsite, finish } = await request.json()
     const history: ChatMessage[] = Array.isArray(messages) ? messages : []
+
+    // "Finish now": the user chose to stop the interview — extract what we have
+    // and return a done step immediately (no more questions).
+    if (finish) {
+      const answers = await extractAnswers(productName, history)
+      return NextResponse.json({ ok: true, step: { done: true, kind: "done", reflection: "", answers } })
+    }
 
     const ctx: string[] = []
     if (productName) ctx.push(`Product name: "${productName}".`)

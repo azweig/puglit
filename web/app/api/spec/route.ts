@@ -14,6 +14,13 @@ LANGUAGE: write ALL prose values in the SAME language the founder used in the tr
 
 Pay special attention to product-specific essentials the founder mentioned — e.g. for a data aggregator: the COUNTRIES targeted, the PROVIDERS covered, and WHERE THE DATA COMES FROM (scraping/APIs/partnerships/manual) and how it's kept fresh. If something critical wasn't decided, put it in "openQuestions" rather than inventing it.
 
+BE COMPLETE — this must be enough to build a WHOLE app, not a sketch:
+- screens: list EVERY screen for EVERY role, including PUBLIC/end-customer-facing ones (e.g. a public booking page for diners, a search page for visitors), auth screens, and admin screens — each with its purpose.
+- roles: include every distinct actor (e.g. restaurant/owner, diner/customer, admin) with a real permission list.
+- userFlows: include the critical and EDGE flows (e.g. payment authorization → capture vs refund, cancellation/no-show handling, same-day reminders, repeat-customer tracking).
+- dataModel: every entity with fields + relations needed for the features.
+- For branding.palette give a full, sector-appropriate palette (primary/secondary/accent/background/text + shades) with real distinct hexes — NOT a single color repeated; branding.primaryColor is the main brand hex; branding.logo gives a monogram (1-2 letters from the name) and a one-line logo concept fitting the sector.
+
 IMPORTANT: Do NOT choose or ask about the tech stack — it is FIXED by the platform (Next.js, TypeScript, PostgreSQL, auth, Stripe, Resend, Fly.io). In "generatedStack" just state what will be generated on that fixed stack for THIS product.
 
 Return ONLY JSON with this exact shape (arrays of short, concrete strings unless noted):
@@ -27,7 +34,7 @@ Return ONLY JSON with this exact shape (arrays of short, concrete strings unless
   "dataModel": [{ "entity": string, "fields": string[], "relations": string[] }],
   "screens": [{ "name": string, "purpose": string }],
   "userFlows": string[],
-  "branding": { "name": string, "tagline": string, "colorRationale": string, "voice": string },
+  "branding": { "name": string, "tagline": string, "voice": string, "primaryColor": "#RRGGBB", "palette": [{ "hex": "#RRGGBB", "label": string }] (5-8 colors: primary, secondary, accent, background, text, plus shades), "logo": { "monogram": string (1-2 letters), "concept": string (one line describing the logo idea) } },
   "content": { "emails": string[], "notifications": string[], "legal": string[] },
   "monetization": string,
   "integrations": [{ "name": string, "purpose": string }],
