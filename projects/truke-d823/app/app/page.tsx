@@ -21,7 +21,11 @@ const DescubrirPage = () => {
         const data = await res.json();
         setItems(data);
       } catch (err) {
-        setError(err.message);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('An unknown error occurred');
+        }
       } finally {
         setLoading(false);
       }
