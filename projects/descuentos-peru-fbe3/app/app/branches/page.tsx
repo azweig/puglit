@@ -27,7 +27,11 @@ export default function BranchesPage() {
         const data: Branch[] = await response.json();
         setBranches(data);
       } catch (err) {
-        setError(err.message);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("An unknown error occurred");
+        }
       } finally {
         setLoading(false);
       }
@@ -55,7 +59,11 @@ export default function BranchesPage() {
       setBranches((prev) => [...prev, addedBranch]);
       setNewBranch({ name: "", address: "", opening_hours: "" });
     } catch (err) {
-      setError(err.message);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unknown error occurred");
+      }
     }
   };
 
