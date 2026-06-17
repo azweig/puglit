@@ -156,7 +156,7 @@ ${tablesDoc(bp)}
 Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
     { role: "user", content: `File: ${rf.path}\nMethods to implement: ${[...rf.methods].join(", ")}\nOperations:\n${ops}` },
   ], { model: "gpt-4o", temperature: 0.2 })) as { code?: string }
-  return out.code ? { path: rf.path, content: String(out.code).slice(0, 30_000) } : null
+  return out.code ? { path: rf.path, content: String(out.code).slice(0, 30_000).replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {") } : null
 }
 
 /** Art Director: a DISTINCTIVE, product-specific visual identity for the app screens
@@ -225,6 +225,8 @@ function postTsx(code: string): string {
   // Pages sometimes hardcode placeholder coords (?lat=0&lng=0) on a near-me fetch, returning
   // nothing. Strip that query so the route uses the SAVED location / real geolocation.
   fixed = fixed.replace(/(\/api\/[\w/-]*(?:near|nearby|offer|discount|deal|cerca)[\w/-]*)\?lat=0(?:\.0+)?&lng=0(?:\.0+)?[^"'`]*/gi, "$1")
+  // Strict TS: `catch (err) { … err.message }` errors as 'err is unknown' — type it. (#1 recurring compile bug.)
+  fixed = fixed.replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {")
   return fixNextLinks(fixClientDirective(fixed))
 }
 
