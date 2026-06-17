@@ -24,7 +24,7 @@ const Page = () => {
         const json = await res.json();
         setMatches(json.matches ?? []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
