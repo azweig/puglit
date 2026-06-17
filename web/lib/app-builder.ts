@@ -45,7 +45,8 @@ const RULES = `HARD RULES:
 - Image upload = <input type="file"> → FileReader.readAsDataURL → send the data: URL string; store in a TEXT column. No S3/blob storage.
 - Every route handler: export async function GET/POST/etc(request: NextRequest). import { NextRequest, NextResponse } from "next/server".
 - Never reference a variable/import that you do not define. Code must compile with \`tsc --noEmit\`.
-- Next 16 navigation: use \`<Link href="/x">label</Link>\` directly. NEVER nest an <a> inside <Link> (runtime crash).`
+- Next 16 navigation: use \`<Link href="/x">label</Link>\` directly. NEVER nest an <a> inside <Link> (runtime crash).
+- Dynamic route params ([id]) in client pages: read them with useParams() from "next/navigation" (e.g. const { matchId } = useParams<{ matchId: string }>()). NEVER use router.query (it does not exist in the App Router).`
 
 /** Domain Architect: infer the product's functional blueprint from the idea+config. */
 export async function planBlueprint(config: DomainConfig, contracts: string): Promise<Blueprint> {
