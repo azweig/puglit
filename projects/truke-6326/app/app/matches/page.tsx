@@ -1,9 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { NextRequest, NextResponse } from "next/server";
-
-use client;
 
 interface Match {
   id: number;
