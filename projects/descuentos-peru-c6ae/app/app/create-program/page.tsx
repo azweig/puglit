@@ -42,7 +42,7 @@ export default function CreateProgram() {
       setDescription("");
       setStep(1);
       alert("Program created successfully!");
-    } catch (error) {
+    } catch (error: any) {
       setError(error.message);
     } finally {
       setLoading(false);
