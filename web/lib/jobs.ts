@@ -359,6 +359,12 @@ async function handleCiVerify(job: JobRow, step: Step): Promise<void> {
   if (!ci.runId) {
     const r = await latestRun()
     if (r && (!ci.waitingSince || new Date(r.created_at).getTime() >= new Date(ci.waitingSince).getTime() - 8000)) ci.runId = r.id
+    // Self-heal: if we've waited too long with no matching run, the dispatch never
+    // landed (or the job predates this fix) — re-dispatch instead of waiting forever.
+    if (!ci.runId && ci.waitingSince && Date.now() - new Date(ci.waitingSince).getTime() > 120_000) {
+      if ((ci.redispatches ||= 0) < 2) { ci.redispatches++; await dispatchCi(job.slug); ci.waitingSince = new Date().toISOString(); step.detail = "re-disparando CI (espera vencida)"; return }
+      step.status = "done"; step.detail = "CI no arrancó tras reintentos"; job.artifacts.ciGreen = false; return
+    }
     step.detail = ci.runId ? "CI en cola…" : "esperando CI…"; return
   }
   const run = await getRun(ci.runId)
