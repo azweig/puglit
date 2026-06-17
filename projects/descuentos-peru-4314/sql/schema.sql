@@ -1,0 +1,28 @@
+CREATE TABLE IF NOT EXISTS loyaltyprograms (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  program_name TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  membership_id TEXT NOT NULL,
+  expiration_date DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS discounts (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  store_name TEXT NOT NULL,
+  discount_percentage DOUBLE PRECISION NOT NULL,
+  valid_until DATE,
+  location JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS userlocations (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  address TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
