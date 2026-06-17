@@ -80,7 +80,7 @@ for (const f of routes) { const s = fs.readFileSync(f, "utf8"); const u = url(f)
   if (/insert\\s+into\\s+messages/i.test(s)) { msgPost = { url: u, keys: keys(s, "POST") }; msgUrl = u; if (/function GET/.test(s)) msgGetParam = param(s) }
   if (/from\\s+items/i.test(s) && /function GET/.test(s) && !/insert\\s+into\\s+items/i.test(s)) feedUrl = u
   if (/from\\s+matches/i.test(s) && /function GET/.test(s) && !/insert\\s+into\\s+messages/i.test(s)) matchesUrl = u }
-const itemsDdl = (fs.readFileSync("sql/app.sql", "utf8").match(/CREATE TABLE IF NOT EXISTS items[\\\\s\\\\S]*?\\\\);/) || [""])[0]
+const itemsDdl = (fs.readFileSync("sql/app.sql", "utf8").match(/CREATE TABLE IF NOT EXISTS items[\\s\\S]*?\\);/) || [""])[0]
 const enumFor = (k) => { const m = itemsDdl.match(new RegExp(k + "[^,]*CHECK\\\\s*\\\\([^)]*IN\\\\s*\\\\(([^)]*)\\\\)", "i")); return m ? m[1].split(",")[0].replace(/['\\s]/g, "") : null }
 const valFor = (k) => /image|photo|img|url|pic/i.test(k) ? "data:image/png;base64,iVBORw0KGgo=" : (enumFor(k) || (/price|amount|qty|num|count/i.test(k) ? 10 : "Prueba " + k))
 
