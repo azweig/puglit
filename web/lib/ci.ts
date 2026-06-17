@@ -54,7 +54,8 @@ async function jobLog(runId: number): Promise<string> {
 export async function runErrors(runId: number, slug: string): Promise<CiError[]> {
   const log = await jobLog(runId)
   if (!log) return []
-  const re = /([^\s(]+\.tsx?)\((\d+),\d+\):\s*error TS\d+:\s*(.+?)\s*$/gm
+  // Path chars only (excludes the `##[error]` log prefix GitHub prepends).
+  const re = /([\w./@-]+\.tsx?)\((\d+),\d+\):\s*error TS\d+:\s*(.+?)\s*$/gm
   const seen = new Set<string>(), out: CiError[] = []
   let m: RegExpExecArray | null
   while ((m = re.exec(log))) {
