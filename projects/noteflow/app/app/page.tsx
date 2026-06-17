@@ -23,7 +23,7 @@ export default function Page() {
         const data = await res.json();
         setNotes(data.notes);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
