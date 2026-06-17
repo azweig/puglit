@@ -15,7 +15,7 @@ const MatchesPage = () => {
         const data = await res.json();
         setMatches(data);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
