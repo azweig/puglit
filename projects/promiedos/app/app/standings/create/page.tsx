@@ -34,7 +34,7 @@ export default function CreateStandings() {
       setSuccess("Standings created successfully!");
       setTeamName("");
       setPoints("");
-    } catch (error) {
+    } catch (error: any) {
       setError(error.message);
     } finally {
       setLoading(false);
