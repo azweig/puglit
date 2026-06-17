@@ -23,7 +23,7 @@ export default function MatchesPage() {
         const data = await response.json();
         setMatches(data);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
