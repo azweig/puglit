@@ -68,7 +68,13 @@ Return ONLY JSON:
 Constraints: ${RULES}
 ${SPINE_API}
 
-Make tables, routes and pages mutually consistent (same table/column names everywhere). Keep it focused: 3-6 tables, 4-7 routes, 3-5 pages. The home page route is "/app" (file app/app/page.tsx) and is the product's MAIN screen, not a generic dashboard. Use the product's language for UI labels.` },
+COMPLETENESS (CRITICAL — generators die here; never ship a read-only app):
+- For EVERY kind of user-generated content (items a user publishes, a message a user sends), include BOTH a CREATE route (POST) AND a UI page/form to create it. Anything listable must be creatable.
+- Any feed/list is fed by one of your CREATE routes. Trace each journey end-to-end: every step maps to a route AND a page; add whatever is missing.
+- Messaging/chat MUST have POST (send) and GET (list), BOTH scoped to the conversation's participants (verify the caller belongs to the match before reading/writing).
+- A swipe/like route must DETECT the mutual condition and create the match atomically.
+
+Make tables, routes and pages mutually consistent (same table/column names everywhere). Keep it focused: 4-6 tables, 5-8 routes, 4-6 pages, and ALWAYS include a publish/create page when users contribute content. The home page route is "/app" (file app/app/page.tsx) and is the product's MAIN screen, not a generic dashboard. Use the product's language for UI labels.` },
     { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n\nCONTRACTS:\n${contracts}` },
   ], { model: "gpt-4o", temperature: 0.3 })) as Partial<Blueprint>
 
@@ -220,10 +226,79 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 }
 
+/** Completeness Critic (LLM): find journey steps that break (content listable but
+ *  not creatable, chat readable but not sendable, unscoped reads) → missing pieces. */
+async function critiqueBlueprint(config: DomainConfig, bp: Blueprint): Promise<{ addRoutes: RouteSpec[]; addPages: PageSpec[] }> {
+  const summary = { tables: bp.tables.map((t) => t.name), routes: bp.routes.map((r) => ({ path: r.path, methods: r.methods, purpose: r.purpose })), pages: bp.pages.map((p) => ({ route: p.route, title: p.title })) }
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are the Completeness Critic. Find every place a real user journey BREAKS because something is missing, and return ONLY the missing pieces.
+Check: a CREATE (POST) route AND a create page for every user-generated content type? chat with BOTH send (POST) and list (GET), each scoped to participants? every route reachable from a page, every page's routes present?
+Return ONLY JSON: {"addRoutes":[{"path":"app/api/.../route.ts","methods":["POST"],"purpose":"...","logic":"precise SQL + scoping, exact tables/columns"}],"addPages":[{"route":"/app/...","file":"app/app/.../page.tsx","title":"...","behavior":"precise behavior + which routes it calls"}]}. Same table/column names as the blueprint. Empty arrays if complete. No duplicates of existing routes/pages.
+DB tables:\n${tablesDoc(bp)}\n\n${SPINE_API}` },
+      { role: "user", content: `Product: ${config.identity.name}\nBlueprint:\n${JSON.stringify(summary, null, 1)}\n\nRoute logic:\n${bp.routes.map((r) => `${r.path}: ${r.logic}`).join("\n")}` },
+    ], { model: "gpt-4o", temperature: 0.2 })) as { addRoutes?: RouteSpec[]; addPages?: PageSpec[] }
+    const haveR = new Set(bp.routes.map((r) => r.path)), haveP = new Set(bp.pages.map((p) => p.file))
+    return {
+      addRoutes: (Array.isArray(out.addRoutes) ? out.addRoutes : []).filter((r) => r?.path && r?.logic && !haveR.has(r.path)),
+      addPages: (Array.isArray(out.addPages) ? out.addPages : []).filter((p) => p?.file && p?.behavior && !haveP.has(p.file)),
+    }
+  } catch { return { addRoutes: [], addPages: [] } }
+}
+
+/** NOT NULL, user-fillable columns of a table (for auto-generated create forms). */
+function fillableCols(ddl: string): string[] {
+  const cols: string[] = []
+  for (const line of ddl.split("\n")) {
+    const m = line.match(/^\s*([a-z_]+)\s+[A-Za-z].*\bNOT NULL\b/i)
+    if (m && !/PRIMARY KEY|REFERENCES/i.test(line)) {
+      const c = m[1].toLowerCase()
+      if (!["id", "owner_id", "user_id", "created_at", "updated_at"].includes(c)) cols.push(c)
+    }
+  }
+  return cols
+}
+
+/** DETERMINISTIC completeness backstop (don't trust the LLM critic for this): every
+ *  user-published content table (has an owner_id) MUST be creatable — guarantee a
+ *  POST/GET route + a create page + nav, unless one already exists. Generalizable. */
+function ensureContentCreation(bp: Blueprint): void {
+  const SYSTEM = new Set(["users", "auth_tokens", "page_visits", "analytics_events", "records", "sessions"])
+  for (const t of bp.tables) {
+    if (SYSTEM.has(t.name) || !/\bowner_id\b/i.test(t.ddl)) continue
+    const created = bp.routes.some((r) =>
+      new RegExp(`insert\\s+into\\s+${t.name}\\b`, "i").test(r.logic) ||
+      (r.methods.map((m) => m.toUpperCase()).includes("POST") && new RegExp(`/${t.name}s?(/|$)`).test(r.path)))
+    if (created) continue
+    const cols = fillableCols(t.ddl)
+    const colList = cols.join(", ") || "title"
+    bp.routes.push({
+      path: `app/api/${t.name}/route.ts`,
+      methods: ["POST", "GET"],
+      purpose: `Publicar y listar ${t.name}`,
+      logic: `POST: read the JSON body {${colList}}; INSERT INTO ${t.name} (owner_id, ${colList}) VALUES (u.userId, ...) RETURNING id; return the new row. GET: return rows WHERE owner_id=$1 (the caller's own ${t.name}), newest first.`,
+    })
+    bp.pages.push({
+      route: "/app/publicar",
+      file: "app/app/publicar/page.tsx",
+      title: "Publicar",
+      behavior: `A form to publish a ${t.name} with fields: ${colList}. For any image/photo field use <input type="file"> → FileReader.readAsDataURL → submit the resulting data: URL string. POST the JSON to /api/${t.name}. Show validation + a success state, then navigate to /app (the feed).`,
+    })
+    if (!bp.nav.some((n) => n.href === "/app/publicar")) bp.nav.push({ label: "Publicar", href: "/app/publicar" })
+  }
+}
+
 /** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
 export async function buildBespokeApp(config: DomainConfig, contracts: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
   const blueprint = await planBlueprint(config, contracts)
   if (!blueprint.routes.length && !blueprint.pages.length) return { files: [], blueprint }
+
+  // Completeness: LLM critic + DETERMINISTIC backstop (the critic alone is unreliable;
+  // the backstop GUARANTEES every user-published content table is creatable).
+  const gaps = await critiqueBlueprint(config, blueprint)
+  blueprint.routes.push(...gaps.addRoutes)
+  blueprint.pages.push(...gaps.addPages)
+  ensureContentCreation(blueprint)
 
   const routeFiles = groupRoutes(blueprint.routes)
   // dedupe pages by file (keep first)
