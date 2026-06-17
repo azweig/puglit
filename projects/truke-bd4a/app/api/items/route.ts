@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   try {
     await pool.query(
       'INSERT INTO items (title, description, image_url, condition, owner_id) VALUES ($1, $2, $3, $4, $5)',
-      [title, description, imageUrl, condition, u.id]
+      [title, description, imageUrl, condition, u.userId]
     );
     return NextResponse.json({ success: true });
   } catch (error) {
