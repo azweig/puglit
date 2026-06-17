@@ -25,7 +25,7 @@ export default function Descubrir() {
   useEffect(() => {
     const fetchOffers = async () => {
       try {
-        const response = await fetch("/api/nearby?lat=0&lng=0&radius=5");
+        const response = await fetch("/api/nearby");
         if (!response.ok) throw new Error("Failed to fetch offers");
         const data: Offer[] = await response.json();
         setOffers(data);

@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const latP = sp.get("lat") ?? sp.get("latitude"), lngP = sp.get("lng") ?? sp.get("longitude")
   let lat = latP != null && latP !== "" ? Number(latP) : NaN
   let lng = lngP != null && lngP !== "" ? Number(lngP) : NaN
-  const radius = Number(sp.get("radius")) || 5
+  const radius = Number(sp.get("radius")) || 25
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     const loc = await pool.query("SELECT latitude, longitude FROM user_locations WHERE user_id=$1", [u.userId])
     if (!loc.rows[0]) return NextResponse.json([])
