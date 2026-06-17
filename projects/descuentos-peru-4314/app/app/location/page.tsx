@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { NextRequest, NextResponse } from "next/server";
+import Link from "next/link";
 
 export default function LocationPage() {
   const [latitude, setLatitude] = useState<string>("");
@@ -10,6 +10,9 @@ export default function LocationPage() {
   const [status, setStatus] = useState<string>("");
 
   useEffect(() => {
+    const locationInterval = setInterval(() => {
+      // Logic to update location if needed
+    }, 10000);
     return () => {
       clearInterval(locationInterval);
     };
