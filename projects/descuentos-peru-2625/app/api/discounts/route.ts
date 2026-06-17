@@ -2,8 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
 
+interface UserProfile {
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
+interface AuthUser {
+  userId: string;
+  profile: UserProfile;
+}
+
 export async function GET(request: NextRequest) {
-  const u = await getAuthUser(request);
+  const u = await getAuthUser(request) as AuthUser;
   if (!u) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const { latitude, longitude } = u.profile.location;
