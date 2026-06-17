@@ -85,26 +85,60 @@ function tablesDoc(bp: Blueprint): string {
   return bp.tables.map((t) => t.ddl).join("\n\n")
 }
 
-/** Backend swarm: one agent per API operation → a real route file. */
-async function genRoute(config: DomainConfig, bp: Blueprint, r: RouteSpec): Promise<AppFile | null> {
+interface RouteFile { path: string; methods: Set<string>; specs: { methods: string[]; purpose: string; logic: string }[] }
+
+/** Coerce any LLM-proposed route path to a VALID Next App Router handler path:
+ *  always `app/api/<segments>/route.ts` (drops bad filenames like /create.ts). */
+function canonicalRoutePath(p: string): string {
+  let x = String(p || "").replace(/\\/g, "/").trim()
+  x = x.replace(/^\/+/, "")
+  if (!x.startsWith("app/")) x = "app/" + x.replace(/^app\//, "")
+  if (!x.startsWith("app/api/")) x = "app/api/" + x.slice("app/".length).replace(/^api\//, "")
+  x = x.replace(/\/[^/]*\.tsx?$/, "")        // drop any trailing filename (route.ts, create.ts, …)
+  x = x.replace(/\/+$/, "")
+  return `${x}/route.ts`
+}
+
+/** Group operations by canonical file so ONE route.ts implements all its methods. */
+function groupRoutes(routes: RouteSpec[]): RouteFile[] {
+  const byFile = new Map<string, RouteFile>()
+  for (const r of routes) {
+    const path = canonicalRoutePath(r.path)
+    const methods = (r.methods?.length ? r.methods : ["GET"]).map((m) => m.toUpperCase())
+    const rf = byFile.get(path) || { path, methods: new Set<string>(), specs: [] }
+    methods.forEach((m) => rf.methods.add(m))
+    rf.specs.push({ methods, purpose: r.purpose, logic: r.logic })
+    byFile.set(path, rf)
+  }
+  return [...byFile.values()]
+}
+
+/** Backend swarm: one agent per route FILE → a real handler implementing ALL its methods. */
+async function genRouteFile(config: DomainConfig, bp: Blueprint, rf: RouteFile): Promise<AppFile | null> {
+  const ops = rf.specs.map((s) => `• ${s.methods.join("/")} — ${s.purpose}\n  Logic: ${s.logic}`).join("\n")
   const out = (await chatJSON([
-    { role: "system", content: `You are a Backend Engineer. Write ONE Next.js 16 route handler file implementing this operation with REAL, working logic (no TODOs, no stubs). It must compile under tsc --noEmit.
+    { role: "system", content: `You are a Backend Engineer. Write ONE Next.js 16 App Router route handler file at ${rf.path} implementing ALL the listed HTTP methods with REAL, working logic (no TODOs, no stubs). It must compile under tsc --noEmit.
 
 ${RULES}
 ${SPINE_API}
 
-DATABASE TABLES (already created in sql/app.sql — use these exact names/columns):
+ROUTE COMPLETENESS:
+- Export one handler per method needed: ${[...rf.methods].join(", ")} (e.g. export async function GET(...) / POST(...)).
+- If this resource is a COLLECTION the UI both reads and writes (messages, comments, items, posts…), implement BOTH a GET (list/read, scoped to the caller's permission) AND a POST (create). Reads/writes touching another user's conversation/match MUST be scoped (verify the caller is a participant first).
+- Read params for GET from new URL(request.url).searchParams; read JSON body for POST/PUT/PATCH via await request.json().
+
+DATABASE TABLES (already created — use these EXACT names/columns):
 ${tablesDoc(bp)}
 
-Return ONLY JSON: {"code":"<the full contents of ${r.path}>"}` },
-    { role: "user", content: `File: ${r.path}\nMethods: ${r.methods.join(", ")}\nPurpose: ${r.purpose}\nLogic to implement EXACTLY:\n${r.logic}` },
+Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
+    { role: "user", content: `File: ${rf.path}\nMethods to implement: ${[...rf.methods].join(", ")}\nOperations:\n${ops}` },
   ], { model: "gpt-4o", temperature: 0.2 })) as { code?: string }
-  return out.code ? { path: r.path, content: String(out.code).slice(0, 30_000) } : null
+  return out.code ? { path: rf.path, content: String(out.code).slice(0, 30_000) } : null
 }
 
 /** Frontend swarm: one agent per surface → a real Next page. */
 async function genPage(config: DomainConfig, bp: Blueprint, p: PageSpec): Promise<AppFile | null> {
-  const routeList = bp.routes.map((r) => `${r.methods.join("/")} ${r.path.replace(/^app/, "").replace(/\/route\.ts$/, "")} — ${r.purpose}`).join("\n")
+  const routeList = groupRoutes(bp.routes).map((rf) => `${[...rf.methods].join("/")} ${rf.path.replace(/^app/, "").replace(/\/route\.ts$/, "")} — ${rf.specs.map((s) => s.purpose).join("; ")}`).join("\n")
   const out = (await chatJSON([
     { role: "system", content: `You are a Frontend Engineer. Write ONE Next.js 16 page (App Router) implementing this surface with REAL interactivity (no placeholder copy, no TODOs). It must compile under tsc --noEmit and work against the listed APIs.
 
@@ -191,15 +225,21 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   const blueprint = await planBlueprint(config, contracts)
   if (!blueprint.routes.length && !blueprint.pages.length) return { files: [], blueprint }
 
-  const [routeFiles, pageFiles] = await Promise.all([
-    Promise.all(blueprint.routes.map((r) => genRoute(config, blueprint, r).catch(() => null))),
-    Promise.all(blueprint.pages.map((p) => genPage(config, blueprint, p).catch(() => null))),
+  const routeFiles = groupRoutes(blueprint.routes)
+  // dedupe pages by file (keep first)
+  const seenPages = new Set<string>()
+  const pages = blueprint.pages.filter((p) => (seenPages.has(p.file) ? false : seenPages.add(p.file)))
+  blueprint.pages = pages
+
+  const [routeOut, pageOut] = await Promise.all([
+    Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).catch(() => null))),
+    Promise.all(pages.map((p) => genPage(config, blueprint, p).catch(() => null))),
   ])
 
   const files: AppFile[] = []
   const appSql = blueprint.tables.map((t) => t.ddl).join("\n\n")
   if (appSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${appSql}\n` })
-  for (const f of [...routeFiles, ...pageFiles]) if (f) files.push(f)
+  for (const f of [...routeOut, ...pageOut]) if (f) files.push(f)
   files.push(navComponent(blueprint))
   files.push(appShell(config))
   return { files, blueprint }
