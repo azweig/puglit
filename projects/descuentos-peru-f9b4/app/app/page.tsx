@@ -23,7 +23,7 @@ export default function Descubrir() {
         const data = await response.json();
         setOffers(data.offers ?? []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       }
     };
 
