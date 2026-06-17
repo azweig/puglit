@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     let createdTags = [];
     if (tags && tags.length > 0) {
-      const tagInserts = tags.map(tag => {
+      const tagInserts = tags.map((tag: { id?: number; name: string; color: string; }) => {
         if (!('id' in tag) || !('name' in tag) || !('color' in tag)) {
           throw new Error('Invalid tag structure');
         }
