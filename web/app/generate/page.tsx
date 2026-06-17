@@ -59,6 +59,7 @@ export default function Generate() {
   const [pendingAnswers, setPendingAnswers] = useState<Record<string, unknown>>({})
   const [history, setHistory] = useState<{ messages: Msg[]; step: Step | null; log: Entry[] }[]>([])
   const [progress, setProgress] = useState(0)
+  const [creds, setCreds] = useState({ gaId: "", clarityId: "", supabaseUrl: "" })
   const [name, setName] = useState("")
   const [messages, setMessages] = useState<Msg[]>([])
   const [step, setStep] = useState<Step | null>(null)
@@ -157,7 +158,7 @@ export default function Generate() {
     try {
       const r = await fetch("/api/job/create", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...pendingAnswers, name: name.trim(), color: color || pendingAnswers.color, branding: spec?.branding, landingHtml }),
+        body: JSON.stringify({ ...pendingAnswers, name: name.trim(), color: color || pendingAnswers.color, branding: spec?.branding, landingHtml, creds }),
       })
       const d = await r.json()
       if (r.ok && d.id) { router.push(`/build/${d.id}`); return }
@@ -240,7 +241,16 @@ export default function Generate() {
       <main className="max-w-5xl mx-auto px-5 py-12">
         <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
         <h1 className="text-3xl font-extrabold">Elegí tu diseño</h1>
-        <p className="text-white/60 mt-2 mb-7">Generamos 2 opciones para {name}. Elegí con cuál seguimos — después la convertimos en la app.</p>
+        <p className="text-white/60 mt-2 mb-5">Generamos 2 opciones para {name}. Elegí con cuál seguimos — después la convertimos en la app.</p>
+        <details className="mb-6 rounded-xl border border-white/10 bg-ink2 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-white/80">🔑 Tus credenciales (opcional) — para cablear analytics y Supabase</summary>
+          <div className="grid sm:grid-cols-3 gap-3 mt-3">
+            <input placeholder="Google Analytics ID (G-…)" value={creds.gaId} onChange={(e) => setCreds({ ...creds, gaId: e.target.value })} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:border-violet focus:outline-none" />
+            <input placeholder="Clarity Project ID" value={creds.clarityId} onChange={(e) => setCreds({ ...creds, clarityId: e.target.value })} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:border-violet focus:outline-none" />
+            <input placeholder="Supabase URL (https://…supabase.co)" value={creds.supabaseUrl} onChange={(e) => setCreds({ ...creds, supabaseUrl: e.target.value })} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:border-violet focus:outline-none" />
+          </div>
+          <p className="text-xs text-white/40 mt-2">Solo IDs públicos (se cablean en el código). Las claves secretas (Stripe, OpenAI, Resend…) quedan como placeholders en <code>.env.example</code> — nunca se commitean.</p>
+        </details>
         {err && <p className="text-red-400 text-sm mb-4">{err}</p>}
         {busy || designs.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-ink2 p-10 text-center text-white/60"><span className="inline-block animate-pulse">✦</span> Diseñando 2 opciones distintas… (unos segundos)</div>

@@ -48,6 +48,7 @@ export async function assembleProject(opts: {
   name: string
   configTs: string
   readme: string
+  extraFiles?: { path: string; content: string }[]
 }): Promise<{ url: string; commit: string }> {
   const { slug } = opts
   // 1. base ref + commit + root tree
@@ -77,6 +78,12 @@ export async function assembleProject(opts: {
     method: "POST", body: JSON.stringify({ content: opts.readme, encoding: "utf-8" }),
   })
   entries.push({ path: `${base}README.md`, mode: "100644", type: "blob", sha: readmeBlob.sha })
+
+  for (const f of opts.extraFiles || []) {
+    if (!f?.content) continue
+    const blob = await gh(`/repos/${OWNER}/${REPO}/git/blobs`, { method: "POST", body: JSON.stringify({ content: f.content, encoding: "utf-8" }) })
+    entries.push({ path: `${base}${f.path}`, mode: "100644", type: "blob", sha: blob.sha })
+  }
 
   // 4. tree (merged onto the existing root) → commit → move the branch
   const newTree = await gh(`/repos/${OWNER}/${REPO}/git/trees`, {

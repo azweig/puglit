@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       modules: Array.isArray(a.modules) ? a.modules.map(String) : [],
       email: String(a.email || "").slice(0, 255),
     }
-    const id = await createJob({ answers, branding: a.branding, chosenLanding: a.landingHtml })
+    const id = await createJob({ answers, branding: a.branding, chosenLanding: a.landingHtml, creds: a.creds })
     return NextResponse.json({ ok: true, id })
   } catch (e) {
     console.error("[job/create]", (e as Error).message)
