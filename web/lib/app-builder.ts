@@ -788,7 +788,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   const gaps = await critiqueBlueprint(config, blueprint)
   blueprint.routes.push(...gaps.addRoutes)
   blueprint.pages.push(...gaps.addPages)
-  ensureContentCreation(blueprint)
+  if (blueprint.kind !== "public") ensureContentCreation(blueprint) // public catalogs are ingested, not user-created
   ensureHomepage(blueprint) // the product's homepage (app/page.tsx) is generated bespoke — no spine landing
 
   const routeFiles = groupRoutes(blueprint.routes)
