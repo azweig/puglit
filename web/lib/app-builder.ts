@@ -207,7 +207,10 @@ function fixNextLinks(code: string): string {
 function postTsx(code: string): string {
   // App Router: useRouter/usePathname must come from next/navigation, NOT next/router
   // (which throws "NextRouter was not mounted"). Rewrite the import path.
-  const fixed = code.replace(/from\s+["']next\/router["']/g, 'from "next/navigation"')
+  let fixed = code.replace(/from\s+["']next\/router["']/g, 'from "next/navigation"')
+  // Pages sometimes hardcode placeholder coords (?lat=0&lng=0) on a near-me fetch, returning
+  // nothing. Strip that query so the route uses the SAVED location / real geolocation.
+  fixed = fixed.replace(/(\/api\/[\w/-]*(?:near|nearby|offer|discount|deal|cerca)[\w/-]*)\?lat=0(?:\.0+)?&lng=0(?:\.0+)?[^"'`]*/gi, "$1")
   return fixNextLinks(fixClientDirective(fixed))
 }
 
@@ -551,7 +554,7 @@ export async function GET(request: NextRequest) {
   const latP = sp.get("lat") ?? sp.get("latitude"), lngP = sp.get("lng") ?? sp.get("longitude")
   let lat = latP != null && latP !== "" ? Number(latP) : NaN
   let lng = lngP != null && lngP !== "" ? Number(lngP) : NaN
-  const radius = Number(sp.get("radius")) || 5
+  const radius = Number(sp.get("radius")) || 25
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     const loc = await pool.query("SELECT latitude, longitude FROM user_locations WHERE user_id=$1", [u.userId])
     if (!loc.rows[0]) return NextResponse.json([])
