@@ -147,8 +147,22 @@ export default function Generate() {
       })
       const d = await r.json()
       if (r.ok && d.ok && d.designs?.length) setDesigns(d.designs)
-      else { await finalize(pendingAnswers) }
+      else { await startBuild() }
     } catch { setErr("Error de red generando diseños.") } finally { setBusy(false) }
+  }
+
+  // Kick off the multi-agent build job and go to the live progress URL.
+  async function startBuild(landingHtml?: string) {
+    setErr("")
+    try {
+      const r = await fetch("/api/job/create", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...pendingAnswers, name: name.trim(), color: color || pendingAnswers.color, branding: spec?.branding, landingHtml }),
+      })
+      const d = await r.json()
+      if (r.ok && d.id) { router.push(`/build/${d.id}`); return }
+      setErr("No se pudo iniciar el build.")
+    } catch { setErr("Error de red iniciando el build.") }
   }
 
   async function finalize(answers: Record<string, unknown>, landingHtml?: string) {
@@ -237,7 +251,7 @@ export default function Generate() {
                 <div className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-violet-bright border-b border-white/10">Opción {i + 1}</div>
                 <iframe srcDoc={html} sandbox="allow-same-origin" className="w-full h-[420px] bg-white border-0" title={`Opción ${i + 1}`} />
                 <div className="p-3 flex gap-2">
-                  <button onClick={() => finalize(pendingAnswers, html)} className="flex-1 py-2.5 rounded-lg font-bold text-white" style={{ background: "var(--violet)" }}>Elegir esta →</button>
+                  <button onClick={() => startBuild(html)} className="flex-1 py-2.5 rounded-lg font-bold text-white" style={{ background: "var(--violet)" }}>Elegir esta →</button>
                   <a href={`data:text/html;charset=utf-8,${encodeURIComponent(html)}`} target="_blank" rel="noopener" className="px-3 py-2.5 rounded-lg text-sm text-white/70 border border-white/15">Ampliar</a>
                 </div>
               </div>
