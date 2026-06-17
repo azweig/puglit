@@ -24,7 +24,7 @@ export default function MembershipsPage() {
         const data = await response.json();
         setPrograms(data ?? []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
@@ -37,7 +37,7 @@ export default function MembershipsPage() {
         const data = await response.json();
         setCatalog(data ?? []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       }
     }
 
@@ -62,7 +62,7 @@ export default function MembershipsPage() {
         setSelectedProgram("");
       }
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     }
   };
 
