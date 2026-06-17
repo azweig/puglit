@@ -10,6 +10,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     ok: true, status: job.status, name: job.name, slug: job.slug,
     sql: job.artifacts?.sql || null,
     erd: job.artifacts?.erd || null,
+    contracts: job.artifacts?.contracts || null,
+    engine: job.artifacts?.engine || null,
+    findings: job.artifacts?.findings || [],
     githubUrl: job.artifacts?.githubUrl || null,
     previewUrl: job.artifacts?.previewUrl || null,
   })

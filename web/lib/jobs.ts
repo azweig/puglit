@@ -13,7 +13,7 @@ import { designEntities } from "@/lib/entitygen"
 import { generateLogoSvg } from "@/lib/logo-gen"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
-import { chatText, aiConfigured } from "@/lib/openai"
+import { runContracts, genVerifiedEngine } from "@/lib/agents"
 import type { DomainConfig, Entity, FieldType } from "@/lib/domain-types"
 
 export type StepStatus = "pending" | "running" | "done" | "error"
@@ -26,6 +26,7 @@ export interface Step { key: string; label: string; status: StepStatus; detail?:
 // (wired as a placeholder to be completed).
 const PLAN: { key: string; label: string }[] = [
   { key: "data-model", label: "Arquitecto · modelo de datos" },
+  { key: "contracts", label: "Contracts · tipos + contrato de API" },
   { key: "brand", label: "Marca · logo + paleta" },
   { key: "design", label: "Diseño · landing" },
   { key: "schema", label: "DBA · esquema SQL + migraciones" },
@@ -194,17 +195,24 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
       case "analytics": step.detail = "page_visits + analytics_events + /api/track + A/B — del spine"; break
       case "seo": step.detail = "metadata + sitemap + JSON-LD — scaffold"; break
       case "security": step.detail = "RLS, rate-limit map, security headers, validación — del spine"; break
+      case "contracts": {
+        if (job.config) job.artifacts.contracts = await runContracts(job.config)
+        step.detail = job.artifacts.contracts ? "tipos + contrato de API definidos" : "—"
+        break
+      }
       case "engine": {
-        const lang = A.languages === "es" || A.languages === "both" ? "es" : "en"
-        if (aiConfigured()) {
-          try {
-            job.artifacts.featureMd = await chatText([
-              { role: "system", content: `You are a principal engineer. Write a CONCISE implementation plan in ${lang} (Markdown) for the UNIQUE core feature ("engine") of this product — the bespoke 20%. Cover: the API route(s) to add, data flow over the spine's Postgres + auth + records, any cron/job, external integrations, and the key logic/edge cases. Be specific to the product. No fluff.` },
-              { role: "user", content: `Product: ${A.name}. What it does: ${A.what}. Entities: ${(job.config?.entities || []).map((e) => e.name).join(", ")}.` },
-            ], { model: "gpt-4o", temperature: 0.4 })
-          } catch { /* optional */ }
+        // Real generate → verify → repair loop (control plane: only BLOCKING findings
+        // trigger repair; capped iterations). Produces real code for the bespoke 20%.
+        if (job.config) {
+          const r = await genVerifiedEngine(job.config, job.artifacts.contracts || "")
+          if (r) {
+            job.artifacts.engine = { path: r.path, code: r.code }
+            job.artifacts.findings = r.findings
+            const block = r.findings.filter((f) => f.severity === "BLOCKING").length
+            const adv = r.findings.filter((f) => f.severity === "ADVISORY").length
+            step.detail = `${r.path} · ${r.iterations} iteración(es) · ${block} blocking abiertos · ${adv} advisory diferidos`
+          } else step.detail = "—"
         }
-        step.detail = job.artifacts.featureMd ? "plan del feature generado (FEATURE.md)" : "—"
         break
       }
       case "env": { job.artifacts.envFile = genEnvExample(job.artifacts.creds); step.detail = "(.env.example + analytics cableado)"; break }
@@ -212,12 +220,16 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         if (job.config) {
           await saveProject({ slug: job.slug, email: job.email, name: job.name, answers: A as any, config: job.config, landingHtml: job.artifacts.landingHtml })
           if (githubConfigured()) {
+            const f = job.artifacts.findings || []
+            const report = `# Build report — ${job.name}\n\n## Findings (control plane)\n\n### BLOCKING (resolved before ship)\n${f.filter((x: any) => x.severity === "BLOCKING").map((x: any) => "- " + x.desc).join("\n") || "- none"}\n\n### ADVISORY (deferred to backlog)\n${f.filter((x: any) => x.severity === "ADVISORY").map((x: any) => "- " + x.desc).join("\n") || "- none"}\n`
             const extraFiles = [
               { path: ".env.example", content: job.artifacts.envFile || genEnvExample(job.artifacts.creds) },
               { path: "sql/schema.sql", content: job.artifacts.sql || "" },
               { path: "sql/seed.sql", content: job.artifacts.seedSql || "" },
               { path: "docs/ER-DIAGRAM.md", content: "```mermaid\n" + (job.artifacts.erd || "") + "\n```" },
-              { path: "docs/FEATURE.md", content: job.artifacts.featureMd || "# Feature plan\n\n(pending)" },
+              { path: "docs/CONTRACTS.md", content: job.artifacts.contracts || "" },
+              { path: "docs/BUILD_REPORT.md", content: report },
+              ...(job.artifacts.engine?.path ? [{ path: job.artifacts.engine.path, content: job.artifacts.engine.code }] : []),
             ].filter((f) => f.content)
             const built = await assembleProject({ slug: job.slug, name: job.name, configTs: configToTs(job.config), readme: `# ${job.name}\n\nGenerated by Puglit. See docs/ for the ER diagram and feature plan; sql/ for migrations + seed; .env.example for setup.`, extraFiles })
             job.artifacts.githubUrl = built.url
