@@ -1,0 +1,54 @@
+name: verify-generated
+
+# Real verification substrate for generated projects: compiles each generated
+# project under projects/<slug>/ with the actual TypeScript compiler. This is the
+# ground truth the codegen agents repair against (no LLM-only review). Runs on
+# push to projects/** and can be triggered manually for one project.
+
+on:
+  push:
+    paths:
+      - "projects/**"
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "project slug under projects/ (blank = changed ones)"
+        required: false
+        default: ""
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Resolve target projects
+        id: detect
+        run: |
+          set -e
+          if [ -n "${{ github.event.inputs.project }}" ]; then
+            dirs="projects/${{ github.event.inputs.project }}"
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then base="HEAD~1"; fi
+            dirs=$(git diff --name-only "$base" "${{ github.sha }}" 2>/dev/null | grep '^projects/' | cut -d/ -f1-2 | sort -u || true)
+          fi
+          echo "dirs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$dirs" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "Targets: $dirs"
+      - name: Install + typecheck each project
+        run: |
+          set -e
+          fail=0
+          for d in ${{ steps.detect.outputs.dirs }}; do
+            [ -f "$d/package.json" ] || { echo "skip $d (no package.json)"; continue; }
+            echo "::group::$d"
+            ( cd "$d" && npm install --no-audit --no-fund --silent && npx tsc --noEmit ) || { echo "::error::typecheck failed in $d"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail
