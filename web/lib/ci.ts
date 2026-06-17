@@ -79,7 +79,9 @@ export async function fixFiles(errors: CiError[]): Promise<{ fixed: string[] }> 
       const cur = await gh(`/repos/${OWNER}/${REPO}/contents/${encodeURI(path)}?ref=main`)
       const code = Buffer.from(cur.content, "base64").toString("utf8")
       const out = (await chatJSON([
-        { role: "system", content: `You are the Fixer. Repair this file so the TypeScript compiler errors below are gone. Make MINIMAL surgical changes; do not change behavior or break other files. Return ONLY JSON {"code":"<full corrected file>"}.` },
+        { role: "system", content: `You are the Fixer. Repair this file so the TypeScript compiler errors below are gone. Make MINIMAL surgical changes; do not change behavior or break other files. Return ONLY JSON {"code":"<full corrected file>"}.
+
+This project has NO external npm deps. For "Cannot find module 'X'" errors, do NOT add the package — replace it with the in-repo spine: auth via \`import { getAuthUser } from "@/lib/auth"\` (→ \`const u = await getAuthUser(request)\`, u.userId), DB via \`import { pool } from "@/lib/db"\`, email via "@/lib/mailer". Never use jsonwebtoken/jose/bcrypt/axios/etc.; rewrite the usage to the spine equivalent.` },
         { role: "user", content: `FILE ${path}:\n${code}\n\nReal tsc errors:\n${errs.join("\n")}` },
       ], { model: "gpt-4o", temperature: 0.1 })) as { code?: string }
       if (out.code && out.code !== code) {
