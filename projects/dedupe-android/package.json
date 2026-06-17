@@ -1,0 +1,25 @@
+{
+  "name": "dedupe-android",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test-dedup.mjs"
+  },
+  "dependencies": {
+    "expo": "~51.0.0",
+    "expo-crypto": "~13.0.2",
+    "expo-file-system": "~17.0.1",
+    "expo-media-library": "~16.0.5",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.79",
+    "typescript": "~5.3.3"
+  },
+  "private": true
+}
