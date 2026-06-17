@@ -56,18 +56,19 @@ export interface ProjectRow {
   name: string
   email: string | null
   config: DomainConfig
+  landing_html: string | null
   created_at: string
 }
 
 export async function saveProject(input: {
   slug: string; email: string | null; name: string
-  answers: Record<string, unknown>; config: DomainConfig
+  answers: Record<string, unknown>; config: DomainConfig; landingHtml?: string | null
 }): Promise<void> {
   await ensureSchema()
   await pool().query(
-    `INSERT INTO puglit_projects (slug, email, name, answers, config)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [input.slug, input.email, input.name, JSON.stringify(input.answers), JSON.stringify(input.config)]
+    `INSERT INTO puglit_projects (slug, email, name, answers, config, landing_html)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [input.slug, input.email, input.name, JSON.stringify(input.answers), JSON.stringify(input.config), input.landingHtml || null]
   )
 }
 
@@ -75,7 +76,7 @@ export async function getProject(slug: string): Promise<ProjectRow | null> {
   if (!isConfigured()) return null
   await ensureSchema()
   const { rows } = await pool().query(
-    `SELECT slug, name, email, config, created_at FROM puglit_projects WHERE slug = $1 LIMIT 1`,
+    `SELECT slug, name, email, config, landing_html, created_at FROM puglit_projects WHERE slug = $1 LIMIT 1`,
     [slug]
   )
   return rows[0] || null

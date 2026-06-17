@@ -9,6 +9,21 @@ export function aiConfigured(): boolean {
   return !!process.env.OPENAI_API_KEY
 }
 
+export async function chatText(messages: ChatMessage[], opts?: { model?: string; temperature?: number }): Promise<string> {
+  const key = process.env.OPENAI_API_KEY
+  if (!key) throw new Error("ai_not_configured")
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: opts?.model || "gpt-4o", temperature: opts?.temperature ?? 0.7, messages }),
+  })
+  if (!res.ok) throw new Error(`openai_${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`)
+  const data = await res.json()
+  const content = data?.choices?.[0]?.message?.content
+  if (!content) throw new Error("openai_empty")
+  return String(content)
+}
+
 export async function chatJSON(messages: ChatMessage[], opts?: { model?: string; temperature?: number }): Promise<unknown> {
   const key = process.env.OPENAI_API_KEY
   if (!key) throw new Error("ai_not_configured")

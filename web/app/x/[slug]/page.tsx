@@ -22,6 +22,11 @@ export default async function PreviewPage({ params }: { params: Promise<{ slug: 
       </div>
     )
   }
+  // Bespoke AI-generated landing (unique layout per product) → render sandboxed.
+  if (project.landing_html) {
+    return <iframe srcDoc={project.landing_html} sandbox="allow-same-origin allow-popups allow-top-navigation-by-user-activation" className="w-screen h-screen border-0" title={project.name} />
+  }
+
   return (
     <>
       <Landing config={project.config} />

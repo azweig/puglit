@@ -10,6 +10,7 @@ import { randomBytes } from "node:crypto"
 import { generateConfig, slugify, type IntakeAnswers } from "@/lib/generate"
 import { saveProject, slugExists, isConfigured } from "@/lib/db"
 import { designEntities } from "@/lib/entitygen"
+import { generateLandingHtml } from "@/lib/landing-gen"
 
 // The AI may return human labels ("English", "Both", "Subscription") — normalize.
 function normLang(v: string): IntakeAnswers["languages"] {
@@ -74,10 +75,13 @@ export async function POST(request: NextRequest) {
     let slug = slugify(answers.name)
     if (await slugExists(slug)) slug = `${slug}-${randomBytes(2).toString("hex")}`
 
+    // Generate a bespoke landing (HTML/CSS) so each site has its own design.
+    const landingHtml = await generateLandingHtml(config)
+
     let saved = false
     if (isConfigured()) {
       try {
-        await saveProject({ slug, email: answers.email || null, name: answers.name, answers: answers as unknown as Record<string, unknown>, config })
+        await saveProject({ slug, email: answers.email || null, name: answers.name, answers: answers as unknown as Record<string, unknown>, config, landingHtml })
         saved = true
       } catch (e) {
         console.error("[generate] save failed:", (e as Error).message)
