@@ -34,14 +34,38 @@ export async function getRun(id: number): Promise<{ status: string; conclusion: 
   try { const r = await gh(`/repos/${OWNER}/${REPO}/actions/runs/${id}`); return { status: r.status, conclusion: r.conclusion, head_sha: r.head_sha } } catch { return null }
 }
 
-/** tsc errors of a finished run, read from the job's check-run annotations. */
-export async function runErrors(headSha: string): Promise<CiError[]> {
-  const checks = await gh(`/repos/${OWNER}/${REPO}/commits/${headSha}/check-runs`)
-  const cr = (checks.check_runs || []).find((c: any) => /typecheck/i.test(c.name)) || (checks.check_runs || [])[0]
-  if (!cr) return []
-  const ann = await gh(`/repos/${OWNER}/${REPO}/check-runs/${cr.id}/annotations`)
-  return (Array.isArray(ann) ? ann : []).filter((a: any) => a.annotation_level === "failure" || /error TS/.test(a.message || ""))
-    .map((a: any) => ({ path: a.path, line: a.start_line || 0, message: a.message }))
+/** Raw plaintext logs of a run's first job (follows the signed-URL redirect). */
+async function jobLog(runId: number): Promise<string> {
+  const jobs = await gh(`/repos/${OWNER}/${REPO}/actions/runs/${runId}/jobs`)
+  const jid = jobs.jobs?.[0]?.id
+  if (!jid) return ""
+  // The logs endpoint 302s to a signed blob URL that must be fetched WITHOUT our auth header.
+  const r1 = await fetch(`${GH}/repos/${OWNER}/${REPO}/actions/jobs/${jid}/logs`, { headers: h(), redirect: "manual" })
+  const loc = r1.headers.get("location")
+  const r2 = loc ? await fetch(loc) : r1
+  return r2.ok ? await r2.text() : ""
+}
+
+/**
+ * REAL tsc errors of a finished run, parsed straight from the job logs.
+ * tsc runs with `cd projects/<slug>`, so its paths are relative — we prefix them.
+ * Far more reliable than check-run annotations (which mix in workflow-level noise).
+ */
+export async function runErrors(runId: number, slug: string): Promise<CiError[]> {
+  const log = await jobLog(runId)
+  if (!log) return []
+  const re = /([^\s(]+\.tsx?)\((\d+),\d+\):\s*error TS\d+:\s*(.+?)\s*$/gm
+  const seen = new Set<string>(), out: CiError[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(log))) {
+    let p = m[1].replace(/^\.\//, "")
+    if (!p.startsWith("projects/")) p = `projects/${slug}/${p}`
+    const key = `${p}:${m[2]}:${m[3]}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ path: p, line: Number(m[2]), message: m[3] })
+  }
+  return out
 }
 
 /** Fixer: repair each errored file against the REAL tsc errors, push it back. */

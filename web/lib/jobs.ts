@@ -360,12 +360,13 @@ async function handleCiVerify(job: JobRow, step: Step): Promise<void> {
   if (run.status !== "completed") { step.detail = `CI compilando (${run.status})`; return }
   if (run.conclusion === "success") { step.status = "done"; step.detail = `✅ compila (intentos: ${ci.attempt})`; job.artifacts.ciGreen = true; return }
   if (ci.attempt >= MAX_CI) { step.status = "done"; step.detail = `verde no alcanzado en ${MAX_CI} intentos`; job.artifacts.ciGreen = false; return }
-  const errors: CiError[] = await runErrors(run.head_sha)
+  const errors: CiError[] = await runErrors(ci.runId, job.slug)
   job.artifacts.ciErrors = errors.slice(0, 20)
-  if (!errors.length) { step.status = "done"; step.detail = "CI falló sin errores legibles"; return }
-  await fixFiles(errors) // pushes fixes → triggers a fresh CI run
+  if (!errors.length) { step.status = "done"; step.detail = "CI falló sin errores legibles en logs"; job.artifacts.ciGreen = false; return }
+  const { fixed } = await fixFiles(errors) // pushes fixes → push triggers a fresh CI run
+  if (!fixed.length) { step.status = "done"; step.detail = `${errors.length} errores tsc no reparables automáticamente — entregado con reporte`; job.artifacts.ciGreen = false; return }
   ci.attempt++; ci.runId = null; ci.waitingSince = new Date().toISOString()
-  step.detail = `reparando (intento ${ci.attempt}/${MAX_CI}): ${errors.length} errores tsc reales`
+  step.detail = `reparando (intento ${ci.attempt}/${MAX_CI}): ${fixed.length}/${errors.length} archivos`
 }
 
 function configToTs(config: DomainConfig): string {
