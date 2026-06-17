@@ -26,6 +26,8 @@ const CONCURRENCY = 2          // max jobs running at once (queue the rest)
 const STEP_TIMEOUT_MS = 120_000 // a "running" step older than this is considered stuck
 const MAX_ATTEMPTS = 3         // per-step retries before marking it errored
 const LEASE_MS = 100_000       // lock window while a step is being advanced
+const LIVE_MS = 300_000        // a "running" job occupies a slot only if updated this recently
+const CI_STEP_TIMEOUT_MS = 900_000 // ci-verify polls real CI for minutes — far longer leash
 
 // The "agents" / phases. TodoAstros-grade baseline is assembled from the spine;
 // the domain-specific parts are generated.
@@ -146,7 +148,9 @@ export async function createJob(input: { answers: IntakeAnswers; branding: any; 
 
 /** Promote queued jobs to running while under the global concurrency cap. */
 export async function promoteQueued(): Promise<void> {
-  const { rows } = await query(`SELECT count(*)::int AS n FROM puglit_jobs WHERE status='running'`)
+  // Count only LIVE running jobs: a job orphaned (tab closed + no cron) goes stale
+  // and must not jam the queue forever. Stale running jobs free their slot.
+  const { rows } = await query(`SELECT count(*)::int AS n FROM puglit_jobs WHERE status='running' AND updated_at > NOW() - INTERVAL '${Math.round(LIVE_MS / 1000)} seconds'`)
   let slots = CONCURRENCY - (rows[0]?.n || 0)
   if (slots <= 0) return
   const q = await query(`SELECT id FROM puglit_jobs WHERE status='queued' ORDER BY created_at ASC LIMIT $1`, [slots])
@@ -326,7 +330,9 @@ export async function sweep(): Promise<{ promoted: boolean; advanced: string[]; 
     const steps: Step[] = row.steps
     let changed = false
     for (const s of steps) {
-      if (s.status === "running" && s.startedAt && Date.now() - new Date(s.startedAt).getTime() > STEP_TIMEOUT_MS) {
+      // ci-verify is re-entrant and legitimately polls real CI for minutes — give it a far longer leash.
+      const timeout = s.key === "ci-verify" ? CI_STEP_TIMEOUT_MS : STEP_TIMEOUT_MS
+      if (s.status === "running" && s.startedAt && Date.now() - new Date(s.startedAt).getTime() > timeout) {
         if ((s.attempts || 0) < MAX_ATTEMPTS) { s.status = "pending"; s.detail = "recuperado (estaba trabado)" }
         else { s.status = "error" }
         changed = true; recovered++
