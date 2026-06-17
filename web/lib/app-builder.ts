@@ -22,6 +22,7 @@ export interface TableSpec { name: string; ddl: string }
 export interface RouteSpec { path: string; methods: string[]; purpose: string; logic: string }
 export interface PageSpec { route: string; file: string; title: string; behavior: string }
 export interface Blueprint {
+  kind: "public" | "accounts" // public = the product IS the homepage, no login (scoreboard, tool, feed); accounts = per-user data behind auth
   tables: TableSpec[]
   routes: RouteSpec[]
   pages: PageSpec[]
@@ -60,13 +61,21 @@ Think hard about the real user journeys. Examples of inference:
 - A LOCATION + MEMBERSHIP aggregator (e.g. "which nearby places give me a discount with the loyalty programs / cards I own") ⇒ this is a CATALOG the app curates/ingests, NOT user-generated content. Tables: programs (the global catalog of loyalty programs/cards, e.g. id, name, provider, category), user_memberships (user_id, program_id — which programs THIS user owns), merchants (id, name, category), branches (id, merchant_id, address, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION — a merchant has many geolocated branches), offers (id, merchant_id, title, discount_label, program_id — an offer is tied to the program that unlocks it; use an offer_programs join if an offer accepts several programs). Operations: list the catalog of programs; add/remove a program from MY memberships; save my location; the CORE route → "nearby offers for MY programs": given my lat/lng + a radius (km), return branches within the radius whose offer's program is in my memberships, with the distance and the program name, ORDERED BY distance (Haversine in SQL). Pages: home = nearby results (after location), my programs (pick from the catalog), set location. The catalog (programs + merchants + branches + offers) is SEEDED/INGESTED by the app, not created by end users.
 GENERAL RULE: distinguish CATALOG/reference data (curated or ingested from external sources — seed it, refresh via cron, users only READ/filter it) from USER-GENERATED content (users create it). Model both correctly. For any "near me"/location feature, geolocated rows MUST store latitude & longitude as DOUBLE PRECISION and the core query uses the Haversine formula ordered by distance.
 
+FIRST decide the product's KIND — this drives the whole shape, there is NO landing/login template:
+- "public": the product itself IS the homepage, usable with no account (a sports scoreboard, a news/feed site, a public tool, a directory). NO login, NO signup, NO pricing. The homepage at route "/" (file app/app/../page.tsx → use "/" → app/page.tsx) renders the actual product. API routes are PUBLIC (no auth).
+- "accounts": the core value is per-user/private data (a marketplace with my listings, a social app, a personal dashboard). Has signup/login and per-user data behind auth.
+Choose honestly from the concept; most "clone of <public site>" or tools are "public".
+
+The HOMEPAGE (route "/", file app/page.tsx) MUST be the real product (for public: the live product itself; for accounts: a real entry screen), NEVER a generic SaaS marketing landing.
+
 Return ONLY JSON:
 {
+ "kind": "public" | "accounts",
  "summary": "one paragraph of the core experience",
  "tables": [{"name":"items","ddl":"CREATE TABLE IF NOT EXISTS items (\\n  id BIGSERIAL PRIMARY KEY,\\n  ...,\\n  created_at TIMESTAMPTZ DEFAULT NOW()\\n);"}],
- "routes": [{"path":"app/api/feed/route.ts","methods":["GET"],"purpose":"...","logic":"precise step-by-step of the SQL and rules, incl. exact tables/columns and the mutual-match detection where relevant"}],
- "pages": [{"route":"/app","file":"app/app/page.tsx","title":"Descubrir","behavior":"precise description: what it fetches, the interactions (swipe buttons/keys), what each action calls"}],
- "nav": [{"label":"Descubrir","href":"/app"}]
+ "routes": [{"path":"app/api/feed/route.ts","methods":["GET"],"purpose":"...","logic":"precise SQL + rules; for a public product do NOT require auth"}],
+ "pages": [{"route":"/","file":"app/page.tsx","title":"...","behavior":"the product's main screen (public products render the product here)"}],
+ "nav": [{"label":"...","href":"/"}]
 }
 
 Constraints: ${RULES}
@@ -78,11 +87,12 @@ COMPLETENESS (CRITICAL — generators die here; never ship a read-only app):
 - Messaging/chat MUST have POST (send) and GET (list), BOTH scoped to the conversation's participants (verify the caller belongs to the match before reading/writing).
 - A swipe/like route must DETECT the mutual condition and create the match atomically.
 
-Make tables, routes and pages mutually consistent (same table/column names everywhere). Keep it focused: 4-6 tables, 5-8 routes, 4-6 pages, and ALWAYS include a publish/create page when users contribute content. The home page route is "/app" (file app/app/page.tsx) and is the product's MAIN screen, not a generic dashboard. Use the product's language for UI labels.` },
+Make tables, routes and pages mutually consistent (same table/column names everywhere). Keep it focused: 4-6 tables, 5-8 routes, 4-6 pages. ALWAYS include the homepage page at route "/" (app/page.tsx) as the product itself, plus a publish/create page when users contribute content. Use the product's language for UI labels.` },
     { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n\nCONTRACTS:\n${contracts}` },
   ], { model: "gpt-4o", temperature: 0.3 })) as Partial<Blueprint>
 
   return {
+    kind: out.kind === "public" ? "public" : "accounts",
     summary: out.summary || "",
     tables: Array.isArray(out.tables) ? out.tables.filter((t) => t?.name && t?.ddl) : [],
     routes: Array.isArray(out.routes) ? out.routes.filter((r) => r?.path && r?.logic) : [],
@@ -136,6 +146,9 @@ ROUTE COMPLETENESS:
 - Export one handler per method needed: ${[...rf.methods].join(", ")} (e.g. export async function GET(...) / POST(...)).
 - If this resource is a COLLECTION the UI both reads and writes (messages, comments, items, posts…), implement BOTH a GET (list/read, scoped to the caller's permission) AND a POST (create). Reads/writes touching another user's conversation/match MUST be scoped (verify the caller is a participant first).
 - Read params for GET from new URL(request.url).searchParams; read JSON body for POST/PUT/PATCH via await request.json().
+${bp.kind === "public"
+  ? "- THIS IS A PUBLIC PRODUCT: do NOT call getAuthUser. Routes are PUBLIC reads/writes over the catalog/data; no per-user auth."
+  : "- This product has accounts: protect per-user routes with getAuthUser (401 if missing)."}
 
 DATABASE TABLES (already created — use these EXACT names/columns):
 ${tablesDoc(bp)}
@@ -180,8 +193,8 @@ async function genPage(config: DomainConfig, bp: Blueprint, p: PageSpec, brief: 
 ${RULES}
 
 DESIGN BRIEF — follow this EXACTLY so every screen shares one bespoke identity (do NOT produce a generic CRUD page):
-${brief || "Bold, modern, mobile-first. Use the brand palette. Make the feed an immersive photo-card experience, not a list."}
-
+${brief || "Bold, modern, mobile-first. Use the brand palette."}
+${bp.kind === "public" && p.file === "app/page.tsx" ? "\nThis is the PUBLIC HOMEPAGE and the product itself — render the real product here (the data, the tool), usable with NO login. No marketing hero, no 'Empezar gratis', no pricing.\n" : bp.kind === "public" ? "\nThis is a PUBLIC product page — no login assumed.\n" : ""}
 AVAILABLE APIs (call these with fetch):
 ${routeList}
 ${shapes ? `\nAPI RESPONSE SHAPES — the data you will receive (consume these EXACT field names):\n${shapes}\n` : ""}
@@ -251,6 +264,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
  *  dashboard …), NOT a fixed template. Preserves the client-side auth gate. This is the
  *  fix for "every app has the same structure": the skeleton itself is generated. */
 async function genAppShell(config: DomainConfig, brief: string, bp: Blueprint): Promise<AppFile | null> {
+  if (bp.kind === "public") return null // public product: no auth gate; the homepage IS the product
   const nav = (bp.nav.length ? bp.nav : [{ label: "Inicio", href: "/app" }]).map((n) => `${n.label} → ${n.href}`).join(", ")
   try {
     const out = (await chatJSON([
@@ -748,6 +762,20 @@ function reconcilePageRoutes(files: AppFile[]): void {
   }
 }
 
+/** Guarantee a bespoke homepage at "/" (app/page.tsx) — the product itself, since the
+ *  spine landing is no longer copied. Adds it if the architect didn't include it. */
+function ensureHomepage(bp: Blueprint): void {
+  if (bp.pages.some((p) => p.file === "app/page.tsx" || p.route === "/")) return
+  const first = bp.pages[0]
+  bp.pages.unshift({
+    route: "/",
+    file: "app/page.tsx",
+    title: bp.summary.split(/[.\n]/)[0].slice(0, 40) || "Inicio",
+    behavior: `The product's main homepage — render the actual product here (${bp.summary.slice(0, 160)}). ${bp.kind === "public" ? "Public, no login." : "Real entry screen."} ${first ? `It links to the other screens (${bp.pages.map((p) => p.route).join(", ")}).` : ""}`,
+  })
+  if (!bp.nav.some((n) => n.href === "/")) bp.nav.unshift({ label: "Inicio", href: "/" })
+}
+
 /** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
 export async function buildBespokeApp(config: DomainConfig, contracts: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
   const blueprint = await planBlueprint(config, contracts)
@@ -759,6 +787,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   blueprint.routes.push(...gaps.addRoutes)
   blueprint.pages.push(...gaps.addPages)
   ensureContentCreation(blueprint)
+  ensureHomepage(blueprint) // the product's homepage (app/page.tsx) is generated bespoke — no spine landing
 
   const routeFiles = groupRoutes(blueprint.routes)
   // dedupe pages by file (keep first)
@@ -825,8 +854,11 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
 
   reconcilePageRoutes(files) // mirror deterministic routes to the paths the pages call
   // BESPOKE shell per product (its own structure/nav), with a minimal fallback.
-  const shell = (await genAppShell(config, brief, blueprint).catch(() => null)) || fallbackShell(blueprint)
-  const si = files.findIndex((f) => f.path === shell.path)
-  if (si >= 0) files[si] = shell; else files.push(shell)
+  // Auth-gated /app shell only for "accounts" products; public products are open (homepage = product).
+  if (blueprint.kind === "accounts") {
+    const shell = (await genAppShell(config, brief, blueprint).catch(() => null)) || fallbackShell(blueprint)
+    const si = files.findIndex((f) => f.path === shell.path)
+    if (si >= 0) files[si] = shell; else files.push(shell)
+  }
   return { files, blueprint }
 }

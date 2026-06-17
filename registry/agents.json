@@ -1,0 +1,70 @@
+{
+  "$comment": "Puglit's PERMANENT agent network. Agents are added here at runtime: when the orchestrator needs a capability no existing agent covers, it GENERATES a new agent definition (role + system prompt + the modules it owns) and appends it here, then commits it to GitHub so every future build inherits it. Build feedback updates an agent's prompt/quality-notes over time.",
+  "version": 1,
+  "agents": [
+    {
+      "id": "discovery-interviewer",
+      "role": "Product Discovery Lead",
+      "phase": "interview",
+      "purpose": "Adaptive interview until 90-95% understanding of the concept (vision, users, journeys, data + sources, edge cases). Gates the build: refuses to proceed while coverage is incomplete and states exactly what is still unknown.",
+      "owns": [],
+      "qualityNotes": []
+    },
+    {
+      "id": "researcher",
+      "role": "Domain Researcher",
+      "phase": "research",
+      "purpose": "Real web research on the concept: category references, real data sources/feeds, current APIs/versions, competitors. Output feeds the work plan with cited findings, not guesses.",
+      "owns": [],
+      "qualityNotes": []
+    },
+    {
+      "id": "chief-architect",
+      "role": "Chief Architect",
+      "phase": "plan",
+      "purpose": "From discovery + research, design the BESPOKE architecture for THIS concept (its own structure, data model, surfaces, integrations). Selects which registry modules to compose and what must be built fresh. No template.",
+      "owns": [],
+      "qualityNotes": []
+    },
+    {
+      "id": "frontend-architect",
+      "role": "Frontend Architect",
+      "phase": "build",
+      "purpose": "Generates the project's OWN frontend from scratch per concept (information architecture, navigation pattern, screens, components). The homepage IS the product (public where appropriate). Never a SaaS landing/login unless the concept is a SaaS.",
+      "owns": [],
+      "qualityNotes": []
+    },
+    {
+      "id": "backend-engineer",
+      "role": "Backend Engineer",
+      "phase": "build",
+      "purpose": "Generates bespoke API/server logic, composing registry modules (auth, payments, crons, db) where they fit and writing fresh logic for the concept's core.",
+      "owns": ["auth-session", "db-postgres", "payments-stripe", "crons-fire-and-forget"],
+      "qualityNotes": []
+    },
+    {
+      "id": "data-architect",
+      "role": "Data Architect",
+      "phase": "build",
+      "purpose": "Bespoke schema for the concept (FK-ordered), seeds, ingestion/scraping where the concept needs external data.",
+      "owns": ["db-postgres"],
+      "qualityNotes": []
+    },
+    {
+      "id": "quality-control",
+      "role": "Quality Control Plane",
+      "phase": "review",
+      "purpose": "Enforces the TodoAstros quality CONCEPTS as rubrics on the bespoke output (not a template): correct auth/gating, pooled+parameterized DB, fire-and-forget crons, persisted funnels, security (RLS/headers/rate-limit), a11y/performance. BLOCKING vs ADVISORY findings.",
+      "owns": [],
+      "qualityNotes": []
+    },
+    {
+      "id": "verifier",
+      "role": "Verification Engineer",
+      "phase": "verify",
+      "purpose": "Real verification: compiles (CI), runs (runtime e2e + headless render), checks the concept's journeys actually work. Feeds failures back to the network and to the modules.",
+      "owns": [],
+      "qualityNotes": []
+    }
+  ]
+}

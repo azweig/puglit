@@ -34,11 +34,32 @@ async function gh(path: string, init?: RequestInit): Promise<any> {
 
 interface TreeEntry { path: string; mode: string; type: string; sha: string }
 
+// The spine is a MODULE LIBRARY, not a template. We reuse its proven cross-cutting
+// modules (lib/*, auth API, middleware, db, infra, sql) but we DROP every imposed,
+// product-shaped surface — the SaaS landing, login/register, pricing, the Puglit logo,
+// the generic dashboard — so the agents generate those BESPOKE per concept. This is the
+// difference between "reuse a module" and "clone a template".
+const SPINE_DROP = [
+  "spine/app/page.tsx",            // marketing landing → homepage is generated bespoke (the product)
+  "spine/app/login/",              // auth pages → generated bespoke only if the concept needs accounts
+  "spine/app/register/",
+  "spine/app/app/page.tsx",        // generic dashboard overview → bespoke
+  "spine/app/app/[entity]/",       // generic CRUD pages → bespoke
+  "spine/app/app/account/",
+  "spine/app/app/layout.tsx",      // generic app shell → bespoke (genAppShell)
+  "spine/components/Mark.tsx",     // Puglit-ish logo → product gets its own
+  "spine/components/AppSidebar.tsx",
+  "spine/components/EntityManager.tsx",
+  "spine/components/AuthShell.tsx",
+  "spine/components/Landing.tsx",
+]
+
 /** Maps a repo path to its location inside the generated project (or null to skip). */
 function remap(path: string): string | null {
   if (path === "spine/domain.config.ts") return null // replaced with the user's config
-  if (path.startsWith("spine/")) return path.slice("spine/".length)
-  if (path.startsWith("infra/")) return path // keep infra/
+  if (SPINE_DROP.some((d) => path === d || path.startsWith(d))) return null // template surfaces — generated bespoke
+  if (path.startsWith("spine/")) return path.slice("spine/".length) // lib/*, api, middleware, config = modules
+  if (path.startsWith("infra/")) return path
   if (path.startsWith("scripts/sql/")) return "sql/" + path.slice("scripts/sql/".length)
   return null
 }
