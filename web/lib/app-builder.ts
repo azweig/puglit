@@ -157,9 +157,10 @@ async function genDesignBrief(config: DomainConfig, bp: Blueprint): Promise<stri
 
 Output a concrete DESIGN BRIEF the frontend engineers will follow verbatim. Cover, concisely:
 - MOOD + 1-2 references for this exact product.
+- LAYOUT ARCHITECTURE (decide the app's STRUCTURE — this must differ per product, not a fixed template): choose the navigation + page skeleton that fits THIS product and commit to it — e.g. a fixed left SIDEBAR + top header for a data/dashboard/admin app; a sticky TOP BAR with horizontal tabs and full-width content for a scores/news/feed app; a minimal FULL-BLEED wrapper with a floating action for an immersive/swipe/game app; a search-led header + grid for a marketplace. State the nav placement (sidebar / top tabs / floating / etc.), content width (full-bleed vs centered), and the home screen's overall composition. Avoid the generic "centered narrow column + bottom tab bar" unless it is genuinely the best fit.
 - COLOR ROLES: assign the given palette hexes to background, surface/cards, primary CTA, accent, text, muted. Use these EXACT hexes (Tailwind arbitrary values like bg-[#xxxxxx]).
 - TYPE: weight/scale personality (big bold titles? etc.).
-- COMPONENT RECIPES with concrete Tailwind classes: cards (rounded-3xl, shadow, etc.), primary & secondary buttons, chips/badges, inputs, and a bottom tab bar.
+- COMPONENT RECIPES with concrete Tailwind classes: cards, primary & secondary buttons, chips/badges, inputs — sized to the chosen layout architecture.
 - MOTION: subtle transitions (CSS only — no libraries).
 - PER-SCREEN layout for each screen: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}. Design the home for the product's REAL nature: a swipe/dating/match product → an immersive full-bleed card stack with like/pass buttons; a scores/standings/news/feed product → a dense, scannable live list/table grouped sensibly (NEVER like/pass buttons — those belong only to swipe apps); a marketplace/catalog → a rich grid/list with photos. Chat = modern bubble thread. Match the interaction to the product; do NOT impose swipe/like-pass unless the product is actually about swiping/matching.
 Keep it ~450 words, all actionable. No code, just the brief.` },
@@ -206,69 +207,58 @@ function fixClientDirective(code: string): string {
   return c
 }
 
-/** Shared nav component so generated pages can link between surfaces. */
-function navComponent(bp: Blueprint): AppFile {
-  const items = bp.nav.length ? bp.nav : [{ label: "Inicio", href: "/app" }]
-  const links = items.map((n) => `{ label: ${JSON.stringify(n.label)}, href: ${JSON.stringify(n.href)} }`).join(", ")
-  return {
-    path: "components/AppNav.tsx",
-    content: `"use client"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-
-const ITEMS = [${links}]
-
-export default function AppNav() {
-  const path = usePathname()
-  return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 flex justify-around border-t border-black/10 bg-white/90 backdrop-blur py-2 md:static md:justify-start md:gap-2 md:border-0 md:bg-transparent md:py-4">
-      {ITEMS.map((it) => {
-        const active = path === it.href || (it.href !== "/app" && path.startsWith(it.href))
-        return (
-          <Link key={it.href} href={it.href} className={\`px-4 py-2 rounded-xl text-sm font-semibold \${active ? "text-white" : "text-black/60 hover:text-black"}\`} style={active ? { background: "var(--brand, #7C3AED)" } : undefined}>
-            {it.label}
-          </Link>
-        )
-      })}
-    </nav>
-  )
-}
-`,
-  }
-}
-
-/** Deterministic app shell: client-side auth guard + the bespoke pages' nav.
- *  Overrides the spine's generic entity-sidebar dashboard shell. */
-function appShell(config: DomainConfig): AppFile {
+/** Minimal deterministic FALLBACK shell — only used if the bespoke generated shell
+ *  fails. Kept intentionally plain; the real shell is genAppShell (bespoke per product). */
+function fallbackShell(bp: Blueprint): AppFile {
+  const links = (bp.nav.length ? bp.nav : [{ label: "Inicio", href: "/app" }]).map((n) => `{label:${JSON.stringify(n.label)},href:${JSON.stringify(n.href)}}`).join(",")
   return {
     path: "app/app/layout.tsx",
     content: `"use client"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import AppNav from "@/components/AppNav"
-
+import Link from "next/link"
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
-  const [ok, setOk] = useState(false)
-  useEffect(() => {
-    let alive = true
-    fetch("/api/auth/me").then((r) => {
-      if (!alive) return
-      if (r.ok) setOk(true); else router.replace("/login")
-    }).catch(() => router.replace("/login"))
-    return () => { alive = false }
-  }, [router])
+  const router = useRouter(); const [ok, setOk] = useState(false)
+  useEffect(() => { let a = true; fetch("/api/auth/me").then(r => { if (!a) return; r.ok ? setOk(true) : router.replace("/login") }).catch(() => router.replace("/login")); return () => { a = false } }, [router])
   if (!ok) return <div className="min-h-screen grid place-items-center text-black/40">…</div>
-  return (
-    <div className="min-h-screen pb-20 md:pb-0 md:flex md:flex-col">
-      <header className="hidden md:block border-b border-black/10"><div className="max-w-3xl mx-auto px-4"><AppNav /></div></header>
-      <main className="max-w-3xl mx-auto w-full px-4 py-5 flex-1">{children}</main>
-      <div className="md:hidden"><AppNav /></div>
-    </div>
-  )
+  return (<div className="min-h-screen"><nav className="flex gap-2 p-3 border-b">{[${links}].map((i:{label:string;href:string}) => <Link key={i.href} href={i.href} className="px-3 py-1.5 rounded-lg font-semibold" style={{ background: "var(--brand,#7C3AED)", color: "#fff" }}>{i.label}</Link>)}</nav><main>{children}</main></div>)
 }
 `,
   }
+}
+
+/** Frontend Architect: generate a BESPOKE app shell/layout for THIS product — its own
+ *  navigation pattern and overall structure (sidebar / top-bar+tabs / full-bleed /
+ *  dashboard …), NOT a fixed template. Preserves the client-side auth gate. This is the
+ *  fix for "every app has the same structure": the skeleton itself is generated. */
+async function genAppShell(config: DomainConfig, brief: string, bp: Blueprint): Promise<AppFile | null> {
+  const nav = (bp.nav.length ? bp.nav : [{ label: "Inicio", href: "/app" }]).map((n) => `${n.label} → ${n.href}`).join(", ")
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are a Frontend Architect. Write app/app/layout.tsx — the SHELL that wraps every in-app screen. Make its STRUCTURE genuinely BESPOKE to this product; do NOT default to a centered column with a bottom tab-bar. Choose the navigation + layout architecture that actually fits the product, e.g.:
+- data/dashboard/admin → a fixed LEFT SIDEBAR with sections + a top header.
+- scores/news/feed → a sticky TOP BAR with horizontal tabs, full-width content.
+- immersive/swipe/game → a minimal full-bleed wrapper, maybe a floating action bar.
+- marketplace → top search/header + content; etc.
+Pick ONE coherent architecture and commit to it; different products must yield different skeletons.
+
+HARD REQUIREMENTS:
+- "use client" at the top.
+- Client-side auth gate: useEffect → fetch("/api/auth/me"); if response not ok → useRouter().replace("/login"); render a small loading state until checked.
+- Render {children} as the main content area.
+- Build the navigation from these items (use next/link <Link>, highlight the active route via usePathname): ${nav}
+- Tailwind classes only; use the palette from the brief (Tailwind arbitrary hex like bg-[#xxxxxx]); responsive (works on mobile AND desktop). No external libraries.
+- It must compile under tsc --noEmit (type children: React.ReactNode).
+
+DESIGN BRIEF (follow its structure + palette):
+${brief || "Pick a distinctive layout for the product."}
+
+Return ONLY JSON {"code":"<full contents of app/app/layout.tsx>"}` },
+      { role: "user", content: `Product: ${config.identity.name} — ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}\nScreens: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}` },
+    ], { model: "gpt-4o", temperature: 0.5 })) as { code?: string }
+    if (!out.code || !/auth\/me/.test(out.code) || out.code.length < 200) return null
+    return { path: "app/app/layout.tsx", content: fixClientDirective(String(out.code).slice(0, 16_000)) }
+  } catch { return null }
 }
 
 /** Completeness Critic (LLM): find journey steps that break (content listable but
@@ -815,7 +805,9 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   if (seed) { files.push(seed); files.push(refreshCron(config)) }
 
   reconcilePageRoutes(files) // mirror deterministic routes to the paths the pages call
-  files.push(navComponent(blueprint))
-  files.push(appShell(config))
+  // BESPOKE shell per product (its own structure/nav), with a minimal fallback.
+  const shell = (await genAppShell(config, brief, blueprint).catch(() => null)) || fallbackShell(blueprint)
+  const si = files.findIndex((f) => f.path === shell.path)
+  if (si >= 0) files[si] = shell; else files.push(shell)
   return { files, blueprint }
 }
