@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { advanceJob } from "@/lib/jobs"
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

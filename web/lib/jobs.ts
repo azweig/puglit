@@ -13,7 +13,8 @@ import { designEntities } from "@/lib/entitygen"
 import { generateLogoSvg } from "@/lib/logo-gen"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
-import { runContracts, genVerifiedEngine } from "@/lib/agents"
+import { runContracts } from "@/lib/agents"
+import { buildBespokeApp } from "@/lib/app-builder"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
 import { dispatchCi, latestRun, getRun, runErrors, fixFiles, type CiError } from "@/lib/ci"
 import type { DomainConfig, Entity, FieldType } from "@/lib/domain-types"
@@ -252,17 +253,18 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         break
       }
       case "engine": {
-        // Real generate → verify → repair loop (control plane: only BLOCKING findings
-        // trigger repair; capped iterations). Produces real code for the bespoke 20%.
+        // Bespoke-app generation swarm: Domain Architect → blueprint → Backend +
+        // Frontend swarms emit the REAL pages and API routes for the product's core
+        // journeys. Compilation is verified later by the real CI loop (ci-verify).
         if (job.config) {
-          const r = await genVerifiedEngine(job.config, job.artifacts.contracts || "")
-          if (r) {
-            job.artifacts.engine = { path: r.path, code: r.code }
-            job.artifacts.findings = r.findings
-            const block = r.findings.filter((f) => f.severity === "BLOCKING").length
-            const adv = r.findings.filter((f) => f.severity === "ADVISORY").length
-            step.detail = `${r.path} · ${r.iterations} iteración(es) · ${block} blocking abiertos · ${adv} advisory diferidos`
-          } else step.detail = "—"
+          const r = await buildBespokeApp(job.config, job.artifacts.contracts || "")
+          job.artifacts.appFiles = r.files
+          job.artifacts.blueprint = r.blueprint
+          const main = r.files.find((f) => /route\.ts$/.test(f.path)) || r.files[0]
+          if (main) job.artifacts.engine = { path: main.path, code: main.content }
+          const routes = r.files.filter((f) => /route\.ts$/.test(f.path)).length
+          const pages = r.files.filter((f) => /page\.tsx$/.test(f.path)).length
+          step.detail = `${r.files.length} archivos · ${routes} rutas API · ${pages} pantallas · ${r.blueprint.tables.length} tablas`
         }
         break
       }
@@ -283,8 +285,8 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         if (job.config) {
           await saveProject({ slug: job.slug, email: job.email, name: job.name, answers: A as any, config: job.config, landingHtml: job.artifacts.landingHtml })
           if (githubConfigured()) {
-            const f = job.artifacts.findings || []
-            const report = `# Build report — ${job.name}\n\n## Findings (control plane)\n\n### BLOCKING (resolved before ship)\n${f.filter((x: any) => x.severity === "BLOCKING").map((x: any) => "- " + x.desc).join("\n") || "- none"}\n\n### ADVISORY (deferred to backlog)\n${f.filter((x: any) => x.severity === "ADVISORY").map((x: any) => "- " + x.desc).join("\n") || "- none"}\n`
+            const bp = job.artifacts.blueprint
+            const report = `# Build report — ${job.name}\n\n## Bespoke app (generation swarm)\n\n${bp?.summary || ""}\n\n- Tablas: ${(bp?.tables || []).map((t: any) => t.name).join(", ") || "—"}\n- Rutas API: ${(bp?.routes || []).map((r: any) => r.path).join(", ") || "—"}\n- Pantallas: ${(bp?.pages || []).map((p: any) => p.route).join(", ") || "—"}\n`
             const extraFiles = [
               { path: ".env.example", content: job.artifacts.envFile || genEnvExample(job.artifacts.creds) },
               { path: "sql/schema.sql", content: job.artifacts.sql || "" },
@@ -292,7 +294,7 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
               { path: "docs/ER-DIAGRAM.md", content: "```mermaid\n" + (job.artifacts.erd || "") + "\n```" },
               { path: "docs/CONTRACTS.md", content: job.artifacts.contracts || "" },
               { path: "docs/BUILD_REPORT.md", content: report },
-              ...(job.artifacts.engine?.path ? [{ path: job.artifacts.engine.path, content: job.artifacts.engine.code }] : []),
+              ...((job.artifacts.appFiles || []) as { path: string; content: string }[]),
               ...((job.artifacts.techDocs || []) as { path: string; content: string }[]),
               ...((job.artifacts.bizDocs || []) as { path: string; content: string }[]),
             ].filter((f) => f.content)
@@ -342,9 +344,10 @@ export async function sweep(): Promise<{ promoted: boolean; advanced: string[]; 
   }
   // advance each running job by one step (drives jobs forward headlessly)
   const running = await query(`SELECT id FROM puglit_jobs WHERE status='running' ORDER BY updated_at ASC LIMIT $1`, [CONCURRENCY])
-  const advanced: string[] = []
-  for (const r of running.rows) { await advanceJob(r.id); advanced.push(r.id) }
-  return { promoted: true, advanced, recovered }
+  const ids = running.rows.map((r) => r.id)
+  // advance jobs in parallel — independent, each guarded by its own lease
+  await Promise.all(ids.map((id) => advanceJob(id).catch(() => {})))
+  return { promoted: true, advanced: ids, recovered }
 }
 
 // Re-entrant CI verify+repair: one short action per call (dispatch / poll / fix).

@@ -60,34 +60,29 @@ export async function assembleProject(opts: {
   // 2. recursive tree → reuse spine/infra/sql blobs under projects/<slug>/
   const full = await gh(`/repos/${OWNER}/${REPO}/git/trees/${rootTreeSha}?recursive=1`)
   const base = `projects/${slug}/`
-  const entries: TreeEntry[] = []
+  // keyed by full path so bespoke files OVERRIDE spine files at the same path
+  const byPath = new Map<string, TreeEntry>()
   for (const e of full.tree as TreeEntry[]) {
     if (e.type !== "blob") continue
     const mapped = remap(e.path)
     if (!mapped) continue
-    entries.push({ path: base + mapped, mode: e.mode, type: "blob", sha: e.sha })
+    byPath.set(base + mapped, { path: base + mapped, mode: e.mode, type: "blob", sha: e.sha })
   }
-  if (entries.length === 0) throw new Error("spine tree empty — nothing to assemble")
+  if (byPath.size === 0) throw new Error("spine tree empty — nothing to assemble")
 
-  // 3. new blobs: the user's domain.config.ts + README
-  const configBlob = await gh(`/repos/${OWNER}/${REPO}/git/blobs`, {
-    method: "POST", body: JSON.stringify({ content: opts.configTs, encoding: "utf-8" }),
-  })
-  entries.push({ path: `${base}domain.config.ts`, mode: "100644", type: "blob", sha: configBlob.sha })
-  const readmeBlob = await gh(`/repos/${OWNER}/${REPO}/git/blobs`, {
-    method: "POST", body: JSON.stringify({ content: opts.readme, encoding: "utf-8" }),
-  })
-  entries.push({ path: `${base}README.md`, mode: "100644", type: "blob", sha: readmeBlob.sha })
-
-  for (const f of opts.extraFiles || []) {
-    if (!f?.content) continue
-    const blob = await gh(`/repos/${OWNER}/${REPO}/git/blobs`, { method: "POST", body: JSON.stringify({ content: f.content, encoding: "utf-8" }) })
-    entries.push({ path: `${base}${f.path}`, mode: "100644", type: "blob", sha: blob.sha })
+  // 3. new blobs: the user's domain.config.ts + README + every bespoke/extra file.
+  //    These are written AFTER the spine so they win on path collisions.
+  const writeBlob = async (path: string, content: string) => {
+    const blob = await gh(`/repos/${OWNER}/${REPO}/git/blobs`, { method: "POST", body: JSON.stringify({ content, encoding: "utf-8" }) })
+    byPath.set(`${base}${path}`, { path: `${base}${path}`, mode: "100644", type: "blob", sha: blob.sha })
   }
+  await writeBlob("domain.config.ts", opts.configTs)
+  await writeBlob("README.md", opts.readme)
+  for (const f of opts.extraFiles || []) { if (f?.content) await writeBlob(f.path, f.content) }
 
   // 4. tree (merged onto the existing root) → commit → move the branch
   const newTree = await gh(`/repos/${OWNER}/${REPO}/git/trees`, {
-    method: "POST", body: JSON.stringify({ base_tree: rootTreeSha, tree: entries }),
+    method: "POST", body: JSON.stringify({ base_tree: rootTreeSha, tree: [...byPath.values()] }),
   })
   const commit = await gh(`/repos/${OWNER}/${REPO}/git/commits`, {
     method: "POST",
