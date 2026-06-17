@@ -22,7 +22,21 @@ Include: a header with the logo+name, a hero (headline + subhead + a primary CTA
 
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
 
-export async function generateLandingHtml(config: DomainConfig): Promise<string | null> {
+// Distinct design directions so the two options look genuinely different.
+const DIRECTIONS = [
+  "Bold & editorial: oversized headline typography, asymmetric layout, strong color blocks, generous whitespace, confident and premium.",
+  "Warm & approachable: rounded cards, soft shadows, friendly imagery via inline SVG/illustration shapes, gentle gradients, cozy and human.",
+  "Sleek & techy: dark or high-contrast theme, glassy/gradient accents, tight grid, modern mono+sans mix, product-led.",
+  "Minimal & elegant: lots of white space, refined serif/sans pairing, thin dividers, understated luxury.",
+]
+
+export async function generateLandingVariants(config: DomainConfig, count = 2): Promise<string[]> {
+  const dirs = DIRECTIONS.slice(0, count)
+  const results = await Promise.all(dirs.map((d) => generateLandingHtml(config, d)))
+  return results.filter((h): h is string => !!h)
+}
+
+export async function generateLandingHtml(config: DomainConfig, styleDirection?: string): Promise<string | null> {
   try {
     const lang = config.identity.languages?.[0] || "en"
     const id = config.identity
@@ -41,7 +55,7 @@ PALETTE (use these exact hexes): ${palette || id.brandColor}
 PRIMARY COLOR: ${id.brandColor}
 MONETIZATION: ${config.monetization?.model}
 VALUE PROPS:\n${vps}
-SECTOR/AUDIENCE: infer from the product; design accordingly.`
+SECTOR/AUDIENCE: infer from the product; design accordingly.${styleDirection ? `\nDESIGN DIRECTION (follow this style): ${styleDirection}` : ""}`
 
     const html = await chatText([
       { role: "system", content: SYSTEM },

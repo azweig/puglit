@@ -11,6 +11,7 @@ import { generateConfig, slugify, type IntakeAnswers } from "@/lib/generate"
 import { saveProject, slugExists, isConfigured } from "@/lib/db"
 import { designEntities } from "@/lib/entitygen"
 import { generateLandingHtml } from "@/lib/landing-gen"
+import { applyBranding } from "@/lib/branding"
 
 // The AI may return human labels ("English", "Both", "Subscription") — normalize.
 function normLang(v: string): IntakeAnswers["languages"] {
@@ -51,21 +52,8 @@ export async function POST(request: NextRequest) {
 
     const config = generateConfig(answers)
 
-    // Apply the branding the diagnosis produced (logo monogram + full palette)
-    // so every generated site has its OWN identity, not the default look.
-    const branding = (a as Record<string, any>).branding
-    const isHex = (s: unknown) => typeof s === "string" && /^#[0-9a-fA-F]{6}$/.test(s)
-    if (branding && typeof branding === "object") {
-      if (isHex(branding.primaryColor)) config.identity.brandColor = branding.primaryColor
-      if (branding.logo?.monogram) config.identity.logoMonogram = String(branding.logo.monogram).slice(0, 3)
-      if (branding.logo?.concept) config.identity.logoConcept = String(branding.logo.concept).slice(0, 160)
-      if (Array.isArray(branding.palette)) {
-        const pal = branding.palette.filter((c: any) => isHex(c?.hex)).slice(0, 8)
-        config.identity.palette = pal
-        if (isHex(pal[1]?.hex)) config.identity.secondaryColor = pal[1].hex
-        if (isHex(pal[2]?.hex)) config.identity.accentColor = pal[2].hex
-      }
-    }
+    // Apply the branding the diagnosis produced (logo monogram + full palette).
+    applyBranding(config, (a as Record<string, any>).branding)
 
     // Design the REAL data model with the LLM (replaces the generic "Item").
     const ents = await designEntities({ name: answers.name, what: answers.what, benefits: answers.benefits })
@@ -75,8 +63,9 @@ export async function POST(request: NextRequest) {
     let slug = slugify(answers.name)
     if (await slugExists(slug)) slug = `${slug}-${randomBytes(2).toString("hex")}`
 
-    // Generate a bespoke landing (HTML/CSS) so each site has its own design.
-    const landingHtml = await generateLandingHtml(config)
+    // Use the design the user chose; otherwise generate one.
+    const chosen = (a as Record<string, any>).landingHtml
+    const landingHtml = typeof chosen === "string" && chosen.length > 100 ? chosen : await generateLandingHtml(config)
 
     let saved = false
     if (isConfigured()) {

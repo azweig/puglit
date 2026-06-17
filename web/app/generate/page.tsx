@@ -53,7 +53,8 @@ function avgColor(dataURL: string): Promise<string> {
 
 export default function Generate() {
   const router = useRouter()
-  const [phase, setPhase] = useState<"name" | "chat" | "spec" | "saving">("name")
+  const [phase, setPhase] = useState<"name" | "chat" | "spec" | "designs" | "saving">("name")
+  const [designs, setDesigns] = useState<string[]>([])
   const [spec, setSpec] = useState<Record<string, any> | null>(null)
   const [pendingAnswers, setPendingAnswers] = useState<Record<string, unknown>>({})
   const [history, setHistory] = useState<{ messages: Msg[]; step: Step | null; log: Entry[] }[]>([])
@@ -136,12 +137,26 @@ export default function Generate() {
     setMessages(next); setOther(""); callInterview(next)
   }
 
-  async function finalize(answers: Record<string, unknown>) {
+  // After approving the diagnosis: generate 2 design options to choose from.
+  async function startDesigns() {
+    setPhase("designs"); setBusy(true); setErr(""); setDesigns([])
+    try {
+      const r = await fetch("/api/designs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...pendingAnswers, name: name.trim(), color: color || pendingAnswers.color, branding: spec?.branding }),
+      })
+      const d = await r.json()
+      if (r.ok && d.ok && d.designs?.length) setDesigns(d.designs)
+      else { await finalize(pendingAnswers) }
+    } catch { setErr("Error de red generando diseños.") } finally { setBusy(false) }
+  }
+
+  async function finalize(answers: Record<string, unknown>, landingHtml?: string) {
     setPhase("saving"); setBuildMsg("Assembling your config…")
     try {
       const r = await fetch("/api/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, logo, websiteImage: website, branding: spec?.branding }),
+        body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, logo, websiteImage: website, branding: spec?.branding, landingHtml }),
       })
       const d = await r.json()
       if (!d.ok || !d.saved) { setErr("Generated, but couldn’t save."); setPhase("chat"); return }
@@ -202,6 +217,34 @@ export default function Generate() {
         {result.emailed && <p className="text-emerald-400 text-sm mt-5">📬 We also emailed you the link.</p>}
         {!result.url && <p className="text-amber-400 text-sm mt-5">Code delivery to GitHub isn’t connected yet — your config is saved and the preview is live.</p>}
         <Link href="/generate" onClick={() => location.reload()} className="inline-block mt-8 text-violet-bright font-semibold">← Build another</Link>
+      </main>
+    )
+  }
+
+  if (phase === "designs") {
+    return (
+      <main className="max-w-5xl mx-auto px-5 py-12">
+        <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
+        <h1 className="text-3xl font-extrabold">Elegí tu diseño</h1>
+        <p className="text-white/60 mt-2 mb-7">Generamos 2 opciones para {name}. Elegí con cuál seguimos — después la convertimos en la app.</p>
+        {err && <p className="text-red-400 text-sm mb-4">{err}</p>}
+        {busy || designs.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-ink2 p-10 text-center text-white/60"><span className="inline-block animate-pulse">✦</span> Diseñando 2 opciones distintas… (unos segundos)</div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-6">
+            {designs.map((html, i) => (
+              <div key={i} className="rounded-2xl border border-white/10 bg-ink2 overflow-hidden flex flex-col">
+                <div className="px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-violet-bright border-b border-white/10">Opción {i + 1}</div>
+                <iframe srcDoc={html} sandbox="allow-same-origin" className="w-full h-[420px] bg-white border-0" title={`Opción ${i + 1}`} />
+                <div className="p-3 flex gap-2">
+                  <button onClick={() => finalize(pendingAnswers, html)} className="flex-1 py-2.5 rounded-lg font-bold text-white" style={{ background: "var(--violet)" }}>Elegir esta →</button>
+                  <a href={`data:text/html;charset=utf-8,${encodeURIComponent(html)}`} target="_blank" rel="noopener" className="px-3 py-2.5 rounded-lg text-sm text-white/70 border border-white/15">Ampliar</a>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={() => { setPhase("spec") }} className="mt-6 text-white/60 hover:text-white text-sm font-semibold">← Volver al diagnóstico</button>
       </main>
     )
   }
@@ -274,7 +317,7 @@ export default function Generate() {
 
         {err && <p className="text-red-400 text-sm mt-4">{err}</p>}
         <div className="flex gap-3 mt-6">
-          <button onClick={() => finalize(pendingAnswers)} className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Looks good — build it →</button>
+          <button onClick={startDesigns} className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Ver 2 opciones de diseño →</button>
           <button onClick={() => { setSpec(null); setPhase("chat") }} className="px-6 py-3 rounded-xl font-semibold text-white/70 border border-white/15">Keep refining</button>
         </div>
       </main>
