@@ -623,6 +623,31 @@ export async function GET(request: NextRequest) {
   return { tableName: mem.name, content, ddl }
 }
 
+/** Order tables so a table is emitted AFTER everything it REFERENCES (FK deps). Run as
+ *  a batch, an out-of-order CREATE (references a not-yet-created table) aborts the whole
+ *  schema — this prevents that. Spine tables (users…) already exist; self-refs ignored. */
+function sortTablesByDeps(tables: TableSpec[]): TableSpec[] {
+  const SPINE = new Set(["users", "auth_tokens", "records", "page_visits", "analytics_events", "sessions"])
+  const byName = new Map(tables.map((t) => [parseTable(t.ddl).name, t]))
+  const deps = new Map<string, Set<string>>()
+  for (const t of tables) {
+    const p = parseTable(t.ddl)
+    const d = new Set<string>()
+    for (const c of p.cols) if (c.ref && c.ref !== p.name && !SPINE.has(c.ref) && byName.has(c.ref)) d.add(c.ref)
+    deps.set(p.name, d)
+  }
+  const ordered: TableSpec[] = [], done = new Set<string>()
+  const visit = (name: string, stack: Set<string>) => {
+    if (done.has(name) || !byName.has(name)) return
+    if (stack.has(name)) return // cycle guard
+    stack.add(name)
+    for (const dep of deps.get(name) || []) visit(dep, stack)
+    stack.delete(name); done.add(name); ordered.push(byName.get(name)!)
+  }
+  for (const t of tables) visit(parseTable(t.ddl).name, new Set())
+  return ordered
+}
+
 const SEED_SKIP = new Set(["users", "auth_tokens", "records", "page_visits", "analytics_events", "sessions"])
 
 /** Data Ingestion agent: products that aggregate a CATALOG (offers, places, programs,
@@ -731,7 +756,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   const pages = blueprint.pages.filter((p) => (seenPages.has(p.file) ? false : seenPages.add(p.file)))
   blueprint.pages = pages
 
-  const schemaSql = blueprint.tables.map((t) => t.ddl).join("\n\n")
+  const schemaSql = sortTablesByDeps(blueprint.tables).map((t) => t.ddl).join("\n\n")
   // Art-direction brief (per-project visual identity) runs alongside route generation;
   // pages then follow it so every screen shares a bespoke, non-generic look.
   // Known deterministic response shapes (e.g. enriched matches) so pages consume the
