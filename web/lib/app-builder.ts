@@ -669,7 +669,8 @@ async function genCatalogSeed(config: DomainConfig, bp: Blueprint): Promise<AppF
       { role: "system", content: `You are a Data Ingestion specialist. This app aggregates a CATALOG (reference data the app curates/scrapes — NOT user-generated). Generate a REALISTIC seed so the app is usable on first run: INSERT statements for the catalog tables below, using REAL, plausible names/brands/values for THIS product's actual market and country (infer from the product). Rules:
 - Use EXPLICIT ids (1,2,3…) and insert PARENTS before CHILDREN so foreign keys resolve.
 - For geolocated rows, use REAL latitude/longitude for the product's main city/country (e.g. Lima, Perú ≈ -12.0x, -77.0x) and vary them so "near me" returns several results within a few km.
-- Generate enough rows to feel real (e.g. 8-12 programs, 12-20 merchants, 1-3 branches each, an offer per merchant tied to a program).
+- For date/time columns that represent CURRENT or live activity (matches, events, sessions happening now), use SQL expressions RELATIVE TO NOW — NOW(), CURRENT_DATE, NOW() + INTERVAL '2 hours', CURRENT_DATE - INTERVAL '1 day' — NOT fixed past literal dates. Put SEVERAL rows AT today/now (mix some finished in the past, some happening today, some upcoming) so "today/live" views are populated on first run.
+- Generate enough rows to feel real (e.g. 8-12 programs, 12-20 merchants, 1-3 branches each, an offer per merchant tied to a program; for a scores/league app: 2-3 tournaments, 10+ teams, 12+ matches with several dated today, a full standings row per team).
 - Use ONLY the exact table & column names in the DDL. Strings single-quoted, escape apostrophes by doubling.
 - Do NOT seed user/auth/membership/selection tables (users fill those).
 Return ONLY JSON {"sql":"-- seed\\nINSERT INTO ...;\\n..."}.` },
