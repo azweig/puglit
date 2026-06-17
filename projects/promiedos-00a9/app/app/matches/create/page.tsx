@@ -42,7 +42,7 @@ export default function CreateMatch() {
       setTime("");
       setLocation("");
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setIsSubmitting(false);
     }
