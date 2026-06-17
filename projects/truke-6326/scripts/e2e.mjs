@@ -63,7 +63,7 @@ if (publish && swipe && feedUrl && matchesUrl) {
     ok((await post(msgUrl, C.cookie, { [mk]: matchId, [tk]: "x" })).status === 403, "non-participant blocked (chat scoped)")
   }
 }
-for (const p of ["/app"]) ok((await get(p, A.cookie)).status === 200, "main app screen renders")
+for (const p of ["/"]) ok((await get(p, A.cookie)).status === 200, "main app screen renders")
 
 await db.end()
 console.log("\n=== " + pass + " passed, " + fail + " failed ===")

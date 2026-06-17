@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface Offer {
   offer_id: number;
@@ -16,6 +17,7 @@ interface Offer {
 }
 
 const HomePage = () => {
+  const router = useRouter();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +26,7 @@ const HomePage = () => {
     const fetchOffers = async () => {
       try {
         const response = await fetch("/api/discounts");
+        if (response.status === 401) { router.replace("/login"); return; }
         const data = await response.json();
         const list = Array.isArray(data) ? data : data.items ?? [];
         setOffers(list);
@@ -37,7 +40,7 @@ const HomePage = () => {
     fetchOffers();
     const interval = setInterval(fetchOffers, 2500);
     return () => clearInterval(interval);
-  }, []);
+  }, [router]);
 
   return (
     <div className="bg-[#581845] min-h-screen text-[#FFFFFF]">
@@ -52,14 +55,16 @@ const HomePage = () => {
         {error && <p className="text-red-500">{error}</p>}
         <div>
           {offers.map((offer) => (
-            <div key={offer.offer_id} className="bg-[#FFFFFF] p-4 rounded-lg shadow-md mb-4">
-              <h2 className="font-bold text-lg">{offer.title}</h2>
-              <p className="text-[#581845]">{offer.discount_label}</p>
-              <p className="text-sm">Merchant: {offer.merchant.name} ({offer.merchant.category})</p>
-              <p className="text-sm">Location: {offer.address}</p>
-              <p className="text-sm">Distance: {offer.distance_km.toFixed(2)} km</p>
-              <button className="bg-[#FF5733] text-[#FFFFFF] py-2 px-4 rounded-full hover:bg-[#C70039] transition-colors duration-300 mt-2">
-                View Offer
+            <div key={offer.offer_id} className="bg-[#FFFFFF] text-[#581845] p-4 rounded-lg shadow-md mb-4">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="font-bold text-lg">{offer.title}</h2>
+                <span className="shrink-0 bg-[#FFC300] text-[#581845] font-bold text-sm px-2 py-1 rounded-full">{offer.discount_label}</span>
+              </div>
+              <p className="text-sm mt-1 font-medium">{offer.merchant?.name} · <span className="text-[#900C3F]">{offer.merchant?.category}</span></p>
+              <p className="text-sm text-[#581845]/70">{offer.address}</p>
+              <p className="text-sm text-[#581845]/70">A {offer.distance_km?.toFixed(2)} km · {offer.program_name}</p>
+              <button className="bg-[#FF5733] text-[#FFFFFF] py-2 px-4 rounded-full hover:bg-[#C70039] transition-colors duration-300 mt-3">
+                Ver oferta
               </button>
             </div>
           ))}

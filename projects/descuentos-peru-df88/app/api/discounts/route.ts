@@ -20,16 +20,19 @@ export async function GET(request: NextRequest) {
   }
   const { rows } = await pool.query(
     `SELECT * FROM (
-       SELECT o.id AS offer_id, o.*, to_json(m) AS merchant, b.address, b.latitude AS latitude, b.longitude AS longitude, p.name AS program_name,
-         (6371 * acos(LEAST(1, cos(radians($1)) * cos(radians(b.latitude)) * cos(radians(b.longitude) - radians($2)) + sin(radians($1)) * sin(radians(b.latitude))))) AS distance_km
-       FROM offers o
-       JOIN branches b ON b.merchant_id = o.merchant_id
-       JOIN merchants m ON m.id = o.merchant_id
-       JOIN loyalty_programs p ON p.id = o.program_id
-       WHERE o.program_id IN (SELECT program_id FROM user_memberships WHERE user_id = $3)
-     ) t
-     WHERE t.distance_km <= $4
-     ORDER BY t.distance_km ASC
+       SELECT DISTINCT ON (t.offer_id) * FROM (
+         SELECT o.id AS offer_id, o.*, to_json(m) AS merchant, b.address, b.latitude AS latitude, b.longitude AS longitude, p.name AS program_name,
+           (6371 * acos(LEAST(1, cos(radians($1)) * cos(radians(b.latitude)) * cos(radians(b.longitude) - radians($2)) + sin(radians($1)) * sin(radians(b.latitude))))) AS distance_km
+         FROM offers o
+         JOIN branches b ON b.merchant_id = o.merchant_id
+         JOIN merchants m ON m.id = o.merchant_id
+         JOIN loyalty_programs p ON p.id = o.program_id
+         WHERE o.program_id IN (SELECT program_id FROM user_memberships WHERE user_id = $3)
+       ) t
+       WHERE t.distance_km <= $4
+       ORDER BY t.offer_id, t.distance_km ASC
+     ) d
+     ORDER BY d.distance_km ASC
      LIMIT 100`,
     [lat, lng, u.userId, radius]
   )

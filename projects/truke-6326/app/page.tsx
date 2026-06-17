@@ -1,7 +1,7 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface Item {
   id: number;
@@ -12,6 +12,7 @@ interface Item {
 }
 
 const HomePage = () => {
+  const router = useRouter();
   const [items, setItems] = useState<Item[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
 
@@ -19,6 +20,7 @@ const HomePage = () => {
     const fetchItems = async () => {
       try {
         const response = await fetch("/api/feed");
+        if (response.status === 401) { router.replace("/login"); return; }
         const data = await response.json();
         const list = Array.isArray(data) ? data : [];
         setItems(list);
@@ -28,7 +30,7 @@ const HomePage = () => {
     };
 
     fetchItems();
-  }, []);
+  }, [router]);
 
   const handleSwipe = async (liked: boolean) => {
     if (currentIndex >= items.length) return;

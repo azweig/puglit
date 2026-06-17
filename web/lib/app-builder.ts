@@ -94,11 +94,42 @@ Make tables, routes and pages mutually consistent (same table/column names every
   return {
     kind: out.kind === "public" ? "public" : "accounts",
     summary: out.summary || "",
-    tables: Array.isArray(out.tables) ? out.tables.filter((t) => t?.name && t?.ddl) : [],
+    tables: normalizeTables(Array.isArray(out.tables) ? out.tables.filter((t) => t?.name && t?.ddl) : []),
     routes: Array.isArray(out.routes) ? out.routes.filter((r) => r?.path && r?.logic) : [],
     pages: Array.isArray(out.pages) ? out.pages.filter((p) => p?.file && p?.behavior) : [],
     nav: Array.isArray(out.nav) ? out.nav : [],
   }
+}
+
+/** Schema sanitation the LLM gets wrong: (1) duplicate column names in a DDL are INVALID
+ *  SQL (Postgres: "column specified more than once") — disambiguate. (2) a mutual-match
+ *  table needs TWO distinct user FKs and TWO distinct item FKs; the LLM often collapses
+ *  them to one user_id/item_id, breaking both the DDL and the match feature. Rewrite any
+ *  detected match table to the canonical {user_a,user_b,item_a,item_b} shape so the
+ *  deterministic swipe/matches routes activate. */
+function normalizeTables(tables: TableSpec[]): TableSpec[] {
+  const hasItems = tables.some((t) => /item|product|listing|good/.test(t.name))
+  const hasSwipe = tables.some((t) => /swipe|like|vote/.test(t.name))
+  return tables.map((t) => {
+    let ddl = t.ddl
+    // Canonical mutual-match table when this is a swipe marketplace.
+    if (hasItems && hasSwipe && /match/.test(t.name)) {
+      ddl = `CREATE TABLE IF NOT EXISTS ${t.name} (\n  id BIGSERIAL PRIMARY KEY,\n  user_a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n  user_b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,\n  item_a INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,\n  item_b INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,\n  created_at TIMESTAMPTZ DEFAULT NOW()\n);`
+      return { name: t.name, ddl }
+    }
+    // Generic: drop any duplicate column line (keep first occurrence).
+    const seen = new Set<string>()
+    ddl = ddl.split("\n").filter((line) => {
+      const m = line.match(/^\s*([a-z_][a-z_0-9]*)\s+[A-Za-z]/)
+      if (!m) return true
+      const col = m[1].toLowerCase()
+      if (/^(create|primary|foreign|constraint|check|unique|references)$/i.test(col)) return true
+      if (seen.has(col)) return false
+      seen.add(col)
+      return true
+    }).join("\n")
+    return { name: t.name, ddl }
+  })
 }
 
 function tablesDoc(bp: Blueprint): string {
@@ -203,7 +234,7 @@ ${tablesDoc(bp)}
 DEFENSIVE RENDERING (critical — a contract mismatch must NEVER crash the page):
 - List GET endpoints return a BARE ARRAY. After fetch+json, normalize before mapping: \`const list = Array.isArray(data) ? data : (data.items ?? data.rows ?? [])\`. NEVER call .map on the raw response.
 - Access nested fields with optional chaining + fallbacks (\`x?.field ?? ""\`); never an unguarded \`x.a.b\`.
-- An image with no URL → a neutral placeholder, not a crash.
+- An image with no URL → a neutral placeholder, not a crash.${bp.kind === "accounts" ? "\n- AUTH GATE: this product needs a login. If ANY data fetch returns status 401, immediately `router.replace(\"/login\")` (import useRouter from next/navigation). Pages /login and /register exist." : ""}
 
 Build the FULL screen per the brief: real layout, the product's palette (Tailwind arbitrary hex values), images shown prominently, polished empty/loading/error states, product-language copy. Match the interaction to the product: like/pass + card-stack ONLY for swipe/match/dating products; a scores/standings/news/feed product gets a dense scannable list/table (no like/pass); a marketplace gets a grid. For chat, poll every 2500ms.
 
@@ -229,6 +260,14 @@ function postTsx(code: string): string {
   fixed = fixed.replace(/(\/api\/[\w/-]*(?:near|nearby|offer|discount|deal|cerca)[\w/-]*)\?lat=0(?:\.0+)?&lng=0(?:\.0+)?[^"'`]*/gi, "$1")
   // Strict TS: `catch (err) { … err.message }` errors as 'err is unknown' — type it. (#1 recurring compile bug.)
   fixed = fixed.replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {")
+  // LLM sometimes emits a stray UNQUOTED `use client;` mid-file (in addition to the real top
+  // quoted directive) → TS1434 "Unexpected keyword or identifier". Strip any standalone bare
+  // directive line; fixClientDirective re-adds the single quoted one at the top.
+  fixed = fixed.replace(/^[ \t]*use (client|server)[ \t]*;?[ \t]*$/gm, "")
+  // Pages/shells are client/server components — they must NEVER import from "next/server"
+  // (NextRequest/NextResponse are route-only). The LLM hallucinates this when a page started
+  // life as a copy of a route; the import breaks the client bundle. Drop the whole line.
+  fixed = fixed.replace(/^[ \t]*import\s*\{[^}]*\}\s*from\s*["']next\/server["'];?[ \t]*$/gm, "")
   return fixNextLinks(fixClientDirective(fixed))
 }
 
@@ -237,10 +276,15 @@ function postTsx(code: string): string {
  *  client hooks. Both break compilation; fix them here, not via the CI fixer. */
 function fixClientDirective(code: string): string {
   let c = code.replace(/^﻿/, "")
-  if (/^\s*["']use client["']\s*;?/.test(c)) return c.replace(/^\s*["']use client["']\s*;?/, '"use client";')
-  if (/^\s*use client\s*;?/.test(c)) return c.replace(/^\s*use client\s*;?/, '"use client";')
-  if (/\b(useState|useEffect|useRouter|usePathname|onClick|onChange|onSubmit)\b/.test(c)) return '"use client";\n' + c
-  return c
+  // Strip EVERY existing directive wherever it sits (top, or — the bug — misplaced after
+  // imports as a duplicate). Both quoted and bare forms. Then re-add a single one at the top
+  // if the file needs it. Next.js: the directive MUST be the very first expression.
+  const had = /(?:^|\n)[ \t]*["']use client["'][ \t]*;?/.test(c) || /(?:^|\n)[ \t]*use client[ \t]*;?[ \t]*$/m.test(c)
+  c = c.replace(/(?:^|\n)[ \t]*["']use client["'][ \t]*;?[ \t]*/g, "\n")
+  c = c.replace(/(?:^|\n)[ \t]*use client[ \t]*;?[ \t]*$/gm, "")
+  c = c.replace(/^\s+/, "")
+  const needs = had || /\b(useState|useEffect|useRouter|usePathname|onClick|onChange|onSubmit)\b/.test(c)
+  return needs ? '"use client";\n' + c : c
 }
 
 /** Minimal deterministic FALLBACK shell — only used if the bespoke generated shell
@@ -384,8 +428,19 @@ ${schemaSql}
 Return ONLY JSON {"code":"<full corrected file>"}. If nothing needs fixing, return the file unchanged.` },
       { role: "user", content: `File ${file.path}:\n${file.content}` },
     ], { model: "gpt-4o", temperature: 0.1 })) as { code?: string }
-    return out.code && out.code.length > 40 ? { path: file.path, content: String(out.code).slice(0, 30_000) } : file
-  } catch { return file }
+    const fixed = out.code && out.code.length > 40 ? String(out.code).slice(0, 30_000) : file.content
+    return { path: file.path, content: fixAuthUserFields(fixed) }
+  } catch { return { path: file.path, content: fixAuthUserFields(file.content) } }
+}
+
+/** Spine auth payload is {userId,email,plan} — the LLM sometimes writes `u.id` (TS2339:
+ *  Property 'id' does not exist on JWTPayload). Find the variable bound to getAuthUser()
+ *  and rewrite its `.id` accesses to `.userId`. Generalizable to any accounts product. */
+function fixAuthUserFields(code: string): string {
+  const m = code.match(/(?:const|let)\s+([a-zA-Z_$][\w$]*)\s*=\s*await\s+getAuthUser\s*\(/)
+  if (!m) return code
+  const v = m[1]
+  return code.replace(new RegExp(`\\b${v}\\.id\\b`, "g"), `${v}.userId`)
 }
 
 interface Col { name: string; type: string; ref?: string }
@@ -582,16 +637,19 @@ export async function GET(request: NextRequest) {
   }
   const { rows } = await pool.query(
     \`SELECT * FROM (
-       SELECT o.id AS offer_id, o.*, to_json(m) AS merchant, b.address, b.${latCol} AS latitude, b.${lngCol} AS longitude, p.name AS program_name,
-         (6371 * acos(LEAST(1, cos(radians($1)) * cos(radians(b.${latCol})) * cos(radians(b.${lngCol}) - radians($2)) + sin(radians($1)) * sin(radians(b.${latCol}))))) AS distance_km
-       FROM ${offers.name} o
-       JOIN ${branches.name} b ON b.${bMerchant} = o.${oMerchant}
-       ${merchants ? `JOIN ${merchants.name} m ON m.id = o.${oMerchant}` : ""}
-       JOIN ${programs.name} p ON p.id = o.${oProgram}
-       WHERE o.${oProgram} IN (SELECT ${mProgram} FROM ${memberships.name} WHERE ${mUser} = $3)
-     ) t
-     WHERE t.distance_km <= $4
-     ORDER BY t.distance_km ASC
+       SELECT DISTINCT ON (t.offer_id) * FROM (
+         SELECT o.id AS offer_id, o.*, to_json(m) AS merchant, b.address, b.${latCol} AS latitude, b.${lngCol} AS longitude, p.name AS program_name,
+           (6371 * acos(LEAST(1, cos(radians($1)) * cos(radians(b.${latCol})) * cos(radians(b.${lngCol}) - radians($2)) + sin(radians($1)) * sin(radians(b.${latCol}))))) AS distance_km
+         FROM ${offers.name} o
+         JOIN ${branches.name} b ON b.${bMerchant} = o.${oMerchant}
+         ${merchants ? `JOIN ${merchants.name} m ON m.id = o.${oMerchant}` : ""}
+         JOIN ${programs.name} p ON p.id = o.${oProgram}
+         WHERE o.${oProgram} IN (SELECT ${mProgram} FROM ${memberships.name} WHERE ${mUser} = $3)
+       ) t
+       WHERE t.distance_km <= $4
+       ORDER BY t.offer_id, t.distance_km ASC
+     ) d
+     ORDER BY d.distance_km ASC
      LIMIT 100\`,
     [lat, lng, u.userId, radius]
   )
@@ -809,6 +867,71 @@ function ensureHomepage(bp: Blueprint): void {
   if (!bp.nav.some((n) => n.href === "/")) bp.nav.unshift({ label: "Inicio", href: "/" })
 }
 
+/** Accounts apps need working auth UI, but the spine's login/register pages are dropped
+ *  (they depend on dropped template components and redirect to /app). Emit BESPOKE,
+ *  self-contained login + register pages — branded, posting to the spine's auth API,
+ *  redirecting to "/" (the product). Deterministic so auth always works for a real user. */
+function ensureAuthPages(config: DomainConfig, files: AppFile[]): void {
+  const id = config.identity
+  const brand = (id.brandColor || "#7C3AED").replace(/[^#\w]/g, "")
+  const name = (id.name || "App").replace(/[<>{}"]/g, "")
+  const tagline = (config.identity as any).tagline || ""
+  const field = `w-full border border-black/10 rounded-lg px-3 py-2.5 outline-none focus:border-[${brand}]`
+  const btn = `w-full text-white font-semibold py-2.5 rounded-lg transition-transform hover:scale-[1.02] disabled:opacity-60`
+  const wrap = (title: string, fields: string, submitLabel: string, footer: string, onSubmit: string) => `"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+const BRAND = "${brand}";
+
+export default function Page() {
+  const router = useRouter();
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setError(""); setLoading(true);
+    try {
+${onSubmit}
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || "Algo salió mal"); return; }
+      router.push("/");
+    } catch { setError("Error de red"); } finally { setLoading(false); }
+  }
+  return (
+    <main className="min-h-screen bg-[#F5F7FA] flex flex-col items-center justify-center px-6">
+      <div className="w-full max-w-sm">
+        <Link href="/" className="block text-center text-3xl font-extrabold mb-1" style={{ color: BRAND }}>${name}</Link>
+        <p className="text-center text-black/60 mb-6">${tagline}</p>
+        <form onSubmit={submit} className="bg-white rounded-2xl shadow-md p-6 space-y-3">
+          <h1 className="text-xl font-bold text-black/80">${title}</h1>
+${fields}
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button className="${btn}" style={{ background: BRAND }} disabled={loading}>{loading ? "…" : "${submitLabel}"}</button>
+          ${footer}
+        </form>
+      </div>
+    </main>
+  );
+}
+`
+  const inp = (k: string, ph: string, type = "text") => `          <input className="${field}" type="${type}" placeholder="${ph}" value={form.${k} || ""} onChange={set("${k}")} />`
+  const login = wrap("Iniciar sesión",
+    [inp("email", "Email", "email"), inp("password", "Contraseña", "password")].join("\n"),
+    "Entrar",
+    `<p className="text-center text-sm text-black/60">¿No tenés cuenta? <Link href="/register" className="font-semibold" style={{ color: BRAND }}>Crear una</Link></p>`,
+    `      const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email, password: form.password }) });`)
+  const register = wrap("Crear cuenta",
+    [inp("name", "Nombre"), inp("email", "Email", "email"), inp("password", "Contraseña", "password")].join("\n"),
+    "Empezar gratis",
+    `<p className="text-center text-sm text-black/60">¿Ya tenés cuenta? <Link href="/login" className="font-semibold" style={{ color: BRAND }}>Iniciar sesión</Link></p>`,
+    `      const res = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email, password: form.password, name: form.name, profile: {} }) });`)
+  if (!files.some((f) => f.path === "app/login/page.tsx")) files.push({ path: "app/login/page.tsx", content: login })
+  if (!files.some((f) => f.path === "app/register/page.tsx")) files.push({ path: "app/register/page.tsx", content: register })
+}
+
 /** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
 export async function buildBespokeApp(config: DomainConfig, contracts: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
   const blueprint = await planBlueprint(config, contracts)
@@ -890,6 +1013,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   // BESPOKE shell per product (its own structure/nav), with a minimal fallback.
   // Auth-gated /app shell only for "accounts" products; public products are open (homepage = product).
   if (blueprint.kind === "accounts") {
+    ensureAuthPages(config, files) // bespoke login/register so a real user can actually sign in
     const shell = (await genAppShell(config, brief, blueprint).catch(() => null)) || fallbackShell(blueprint)
     const si = files.findIndex((f) => f.path === shell.path)
     if (si >= 0) files[si] = shell; else files.push(shell)

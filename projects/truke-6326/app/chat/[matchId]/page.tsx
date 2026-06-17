@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
-use client;
 
 interface Message {
   id: number;
