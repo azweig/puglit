@@ -48,6 +48,8 @@ puglit/
 ├─ BLUEPRINT.md        # the constitution: architecture, modules, conventions, rules
 ├─ INTAKE.md           # the interview the generator runs
 ├─ SECURITY.md         # secure-by-default + the automated ethical-hacking gate
+├─ STANDARD.md         # the quality bar every generated project must meet (from TodoAstros)
+├─ AGENTS.md           # the multi-agent generation architecture (supervisor, swarms, control plane)
 ├─ domain.config.ts    # the DSL seam: declare entities + features + toggles
 ├─ examples/           # worked configs (recipes, betting…) proving the seam
 ├─ modules/            # module catalog (core + optional toggles) with status
