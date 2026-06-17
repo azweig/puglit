@@ -26,7 +26,7 @@ export default function MerchantsPage() {
         const data: Merchant[] = await response.json();
         setMerchants(data);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
@@ -50,7 +50,7 @@ export default function MerchantsPage() {
       setCategory("");
       setDiscount(0);
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     }
   };
 
