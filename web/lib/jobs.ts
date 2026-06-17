@@ -17,7 +17,13 @@ import { runContracts, genVerifiedEngine } from "@/lib/agents"
 import type { DomainConfig, Entity, FieldType } from "@/lib/domain-types"
 
 export type StepStatus = "pending" | "running" | "done" | "error"
-export interface Step { key: string; label: string; status: StepStatus; detail?: string }
+export interface Step { key: string; label: string; status: StepStatus; detail?: string; startedAt?: string; finishedAt?: string; attempts?: number }
+
+// Safety rails
+const CONCURRENCY = 2          // max jobs running at once (queue the rest)
+const STEP_TIMEOUT_MS = 120_000 // a "running" step older than this is considered stuck
+const MAX_ATTEMPTS = 3         // per-step retries before marking it errored
+const LEASE_MS = 100_000       // lock window while a step is being advanced
 
 // The "agents" / phases. TodoAstros-grade baseline is assembled from the spine;
 // the domain-specific parts are generated.
@@ -115,20 +121,30 @@ export function genErd(entities: Entity[]): string {
   return lines.join("\n")
 }
 
-interface JobRow { id: string; slug: string; name: string; email: string | null; status: string; answers: any; branding: any; config: DomainConfig | null; steps: Step[]; artifacts: any }
+interface JobRow { id: string; slug: string; name: string; email: string | null; status: string; answers: any; branding: any; config: DomainConfig | null; steps: Step[]; artifacts: any; completion?: number; error?: string }
 
 export async function createJob(input: { answers: IntakeAnswers; branding: any; chosenLanding?: string; creds?: any }): Promise<string> {
   const id = randomBytes(8).toString("hex")
   let slug = slugify(input.answers.name)
   const { rows } = await query(`SELECT 1 FROM puglit_projects WHERE slug=$1`, [slug]).catch(() => ({ rows: [] as any[] }))
   if (rows.length) slug = `${slug}-${randomBytes(2).toString("hex")}`
-  const steps: Step[] = PLAN.map((p) => ({ ...p, status: "pending" as StepStatus }))
+  const steps: Step[] = PLAN.map((p) => ({ ...p, status: "pending" as StepStatus, attempts: 0 }))
+  // New jobs start QUEUED — the scheduler promotes them to running under the cap.
   await query(
-    `INSERT INTO puglit_jobs (id, slug, name, email, status, answers, branding, config, steps, artifacts)
-     VALUES ($1,$2,$3,$4,'running',$5,$6,$7,$8,$9)`,
+    `INSERT INTO puglit_jobs (id, slug, name, email, status, answers, branding, config, steps, artifacts, completion)
+     VALUES ($1,$2,$3,$4,'queued',$5,$6,$7,$8,$9,0)`,
     [id, slug, input.answers.name, input.answers.email || null, JSON.stringify(input.answers), JSON.stringify(input.branding || null), null, JSON.stringify(steps), JSON.stringify({ chosenLanding: input.chosenLanding || null, creds: input.creds || null })]
   )
   return id
+}
+
+/** Promote queued jobs to running while under the global concurrency cap. */
+export async function promoteQueued(): Promise<void> {
+  const { rows } = await query(`SELECT count(*)::int AS n FROM puglit_jobs WHERE status='running'`)
+  let slots = CONCURRENCY - (rows[0]?.n || 0)
+  if (slots <= 0) return
+  const q = await query(`SELECT id FROM puglit_jobs WHERE status='queued' ORDER BY created_at ASC LIMIT $1`, [slots])
+  for (const r of q.rows) await query(`UPDATE puglit_jobs SET status='running', updated_at=NOW() WHERE id=$1 AND status='queued'`, [r.id])
 }
 
 export async function getJob(id: string): Promise<JobRow | null> {
@@ -137,18 +153,34 @@ export async function getJob(id: string): Promise<JobRow | null> {
   return rows[0] || null
 }
 
-async function persist(job: JobRow) {
-  await query(`UPDATE puglit_jobs SET status=$2, config=$3, steps=$4, artifacts=$5, updated_at=NOW() WHERE id=$1`,
-    [job.id, job.status, job.config ? JSON.stringify(job.config) : null, JSON.stringify(job.steps), JSON.stringify(job.artifacts)])
+async function persist(job: JobRow, releaseLease = false) {
+  const total = job.steps.length || 1
+  const completion = Math.round((job.steps.filter((s) => s.status === "done").length / total) * 100)
+  await query(`UPDATE puglit_jobs SET status=$2, config=$3, steps=$4, artifacts=$5, completion=$6, error=$7${releaseLease ? ", lease_until=NULL" : ""}, updated_at=NOW() WHERE id=$1`,
+    [job.id, job.status, job.config ? JSON.stringify(job.config) : null, JSON.stringify(job.steps), JSON.stringify(job.artifacts), completion, job.error || null])
+}
+
+/** Try to acquire the per-job lease (lock). Returns true if we own it. */
+async function acquireLease(id: string): Promise<boolean> {
+  const { rows } = await query(
+    `UPDATE puglit_jobs SET lease_until = NOW() + INTERVAL '${Math.round(LEASE_MS / 1000)} seconds'
+     WHERE id=$1 AND (lease_until IS NULL OR lease_until < NOW()) RETURNING id`, [id])
+  return rows.length > 0
 }
 
 export async function advanceJob(id: string): Promise<JobRow | null> {
-  const job = await getJob(id)
-  if (!job || job.status !== "running") return job
+  let job = await getJob(id)
+  if (!job) return job
+  if (job.status === "queued") { await promoteQueued(); job = await getJob(id); if (!job || job.status !== "running") return job }
+  if (job.status !== "running") return job
+  // lock: the poller and the sweeper must not advance the same job at once
+  if (!(await acquireLease(id))) return job
+  job = (await getJob(id)) as JobRow
   const step = job.steps.find((s) => s.status === "pending")
-  if (!step) { job.status = "done"; await persist(job); return job }
+  if (!step) { job.status = "done"; await persist(job, true); return job }
 
-  step.status = "running"; await persist(job)
+  step.status = "running"; step.startedAt = new Date().toISOString(); step.attempts = (step.attempts || 0) + 1
+  await persist(job)
   try {
     const A = job.answers as IntakeAnswers
     job.artifacts = job.artifacts || {}
@@ -239,16 +271,45 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         break
       }
     }
-    step.status = "done"
+    step.status = "done"; step.finishedAt = new Date().toISOString()
     if (!job.steps.some((s) => s.status === "pending")) {
       job.status = "done"
       await sendDoneEmail(job)
     }
   } catch (e) {
-    step.status = "error"; step.detail = (e as Error).message.slice(0, 120); job.status = "error"
+    const msg = (e as Error).message.slice(0, 140)
+    if ((step.attempts || 0) < MAX_ATTEMPTS) { step.status = "pending"; step.detail = `reintento ${step.attempts}/${MAX_ATTEMPTS}: ${msg}` }
+    else { step.status = "error"; step.detail = msg; job.status = "error"; job.error = `${step.key}: ${msg}` }
   }
-  await persist(job)
+  await persist(job, true) // release the lease
   return job
+}
+
+/** Watchdog: promote queued, recover stuck steps, and continue running jobs even
+ *  if nobody has the build page open. Meant to be hit by a cron every minute. */
+export async function sweep(): Promise<{ promoted: boolean; advanced: string[]; recovered: number }> {
+  await promoteQueued()
+  let recovered = 0
+  // recover stuck "running" steps (lease expired + step started too long ago)
+  const stuck = await query(
+    `SELECT id, steps FROM puglit_jobs WHERE status='running' AND (lease_until IS NULL OR lease_until < NOW())`)
+  for (const row of stuck.rows) {
+    const steps: Step[] = row.steps
+    let changed = false
+    for (const s of steps) {
+      if (s.status === "running" && s.startedAt && Date.now() - new Date(s.startedAt).getTime() > STEP_TIMEOUT_MS) {
+        if ((s.attempts || 0) < MAX_ATTEMPTS) { s.status = "pending"; s.detail = "recuperado (estaba trabado)" }
+        else { s.status = "error" }
+        changed = true; recovered++
+      }
+    }
+    if (changed) await query(`UPDATE puglit_jobs SET steps=$2, updated_at=NOW() WHERE id=$1`, [row.id, JSON.stringify(steps)])
+  }
+  // advance each running job by one step (drives jobs forward headlessly)
+  const running = await query(`SELECT id FROM puglit_jobs WHERE status='running' ORDER BY updated_at ASC LIMIT $1`, [CONCURRENCY])
+  const advanced: string[] = []
+  for (const r of running.rows) { await advanceJob(r.id); advanced.push(r.id) }
+  return { promoted: true, advanced, recovered }
 }
 
 function configToTs(config: DomainConfig): string {
