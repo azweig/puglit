@@ -203,8 +203,13 @@ function fixNextLinks(code: string): string {
   return code.replace(/<Link([^>]*?)>\s*<a([^>]*?)>([\s\S]*?)<\/a>\s*<\/Link>/g, (_m, l: string, a: string, inner: string) => `<Link${l}${a}>${inner}</Link>`)
 }
 
-/** All deterministic post-fixes applied to a generated .tsx (directive + Link). */
-function postTsx(code: string): string { return fixNextLinks(fixClientDirective(code)) }
+/** All deterministic post-fixes applied to a generated .tsx (directive + Link + App-Router import). */
+function postTsx(code: string): string {
+  // App Router: useRouter/usePathname must come from next/navigation, NOT next/router
+  // (which throws "NextRouter was not mounted"). Rewrite the import path.
+  const fixed = code.replace(/from\s+["']next\/router["']/g, 'from "next/navigation"')
+  return fixNextLinks(fixClientDirective(fixed))
+}
 
 /** Deterministically normalize the React "use client" directive. LLMs sometimes
  *  emit it WITHOUT quotes (`use client;` → TS1434) or omit it on pages that use
