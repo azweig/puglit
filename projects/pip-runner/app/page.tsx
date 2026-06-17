@@ -101,10 +101,16 @@ export default function Page() {
       ctx.fillStyle = "#08110f"; circle(px + w - 10 * DPR, py + 15 * DPR, 3.5 * DPR)
     }
     const rect = (a: typeof pip, b: { x: number; y: number; w: number; h: number }) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+    const JUMP_V = 16 * DPR
     const spawn = () => {
       const last = obstacles[obstacles.length - 1]
-      const gap = (200 + (40 - Math.min(28, world * 2 + level)) * DPR) + Math.random() * 120 * DPR
-      if (!last || (W - last.x) > gap) { const tall = Math.random() < 0.35; obstacles.push({ x: W + 20 * DPR, y: 0, w: (24 + Math.random() * 16) * DPR, h: (tall ? 64 : 38) * DPR }) }
+      const jumpSpan = speed * (2 * JUMP_V / G)
+      const tight = Math.min(0.25, (world * 2 + level) * 0.012)
+      const minGap = jumpSpan * (1.7 - tight) + 70 * DPR + Math.random() * jumpSpan * 1.3
+      if (!last || (W - last.x) > minGap) {
+        const tall = Math.random() < 0.3
+        obstacles.push({ x: W + 20 * DPR, y: 0, w: (22 + Math.random() * 12) * DPR, h: (tall ? 50 : 32) * DPR })
+      }
     }
 
     const frame = () => {
