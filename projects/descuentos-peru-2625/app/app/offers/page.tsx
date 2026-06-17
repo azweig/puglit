@@ -28,7 +28,7 @@ export default function OffersPage() {
         }
         const data = await response.json();
         setOffers(data ?? []);
-      } catch (error) {
+      } catch (error: any) {
         setError(error.message);
       } finally {
         setLoading(false);
@@ -65,7 +65,7 @@ export default function OffersPage() {
       const createdOffer = await response.json();
       setOffers((prev) => [...prev, createdOffer]);
       setNewOffer({ title: "", description: "", imageUrl: "" });
-    } catch (error) {
+    } catch (error: any) {
       setError(error.message);
     }
   };
