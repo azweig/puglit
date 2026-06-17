@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     if (program_id) {
       const { rows } = await pool.query(
         'SELECT 1 FROM user_memberships WHERE program_id = $1 AND user_id = $2',
-        [program_id, u.id]
+        [program_id, u.userId]
       );
       if (rows.length === 0) {
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
