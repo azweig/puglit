@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { fetch } from 'next/fetch';
 
 interface Standing {
   team_name: string;
@@ -25,7 +24,7 @@ export default function Standings() {
         const data = await res.json();
         setStandings(data.standings ?? []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
