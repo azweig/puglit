@@ -110,6 +110,13 @@ export interface Identity {
   languages: ("es" | "en" | string)[]
   brandColor?: string
   targetMarkets?: string[]
+  logoUrl?: string
+  logoSvg?: string
+  logoMonogram?: string
+  logoConcept?: string
+  secondaryColor?: string
+  accentColor?: string
+  palette?: { hex: string; label?: string }[]
 }
 export interface Compliance {
   notices?: string[]
