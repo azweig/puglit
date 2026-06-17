@@ -161,7 +161,7 @@ Output a concrete DESIGN BRIEF the frontend engineers will follow verbatim. Cove
 - TYPE: weight/scale personality (big bold titles? etc.).
 - COMPONENT RECIPES with concrete Tailwind classes: cards (rounded-3xl, shadow, etc.), primary & secondary buttons, chips/badges, inputs, and a bottom tab bar.
 - MOTION: subtle transitions (CSS only — no libraries).
-- PER-SCREEN layout for each screen: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}. The discovery/feed screen MUST be an IMMERSIVE experience — e.g. a full-bleed photo card stack with the title/price overlaid on a gradient scrim and large circular like/pass buttons — NOT a plain list. Listing/grid screens should feel like a real marketplace. Chat = modern bubble thread.
+- PER-SCREEN layout for each screen: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}. Design the home for the product's REAL nature: a swipe/dating/match product → an immersive full-bleed card stack with like/pass buttons; a scores/standings/news/feed product → a dense, scannable live list/table grouped sensibly (NEVER like/pass buttons — those belong only to swipe apps); a marketplace/catalog → a rich grid/list with photos. Chat = modern bubble thread. Match the interaction to the product; do NOT impose swipe/like-pass unless the product is actually about swiping/matching.
 Keep it ~450 words, all actionable. No code, just the brief.` },
       { role: "user", content: `Product: ${id.name}\nPitch: ${tagline}\nPalette: ${palette || id.brandColor}\nPrimary: ${id.brandColor}  Secondary: ${(id as any).secondaryColor || ""}  Accent: ${(id as any).accentColor || ""}\nScreens: ${bp.pages.map((p) => p.route + " — " + p.title).join("; ")}` },
     ], { model: "gpt-4o", temperature: 0.6 })
@@ -187,7 +187,7 @@ DEFENSIVE RENDERING (critical — a contract mismatch must NEVER crash the page)
 - Default arrays to [] before .map; render an empty state when there's nothing.
 - An image with no URL should fall back to a neutral placeholder, not break.
 
-Build the FULL screen per the brief: real layout, the product's palette (Tailwind arbitrary hex values), images shown prominently, polished empty/loading/error states, product-language copy. For the feed/discovery screen build the immersive card UI from the brief (full-bleed image, overlaid info, like/pass buttons), NOT a bullet list. For chat, poll every 2500ms.
+Build the FULL screen per the brief: real layout, the product's palette (Tailwind arbitrary hex values), images shown prominently, polished empty/loading/error states, product-language copy. Match the interaction to the product: like/pass + card-stack ONLY for swipe/match/dating products; a scores/standings/news/feed product gets a dense scannable list/table (no like/pass); a marketplace gets a grid. For chat, poll every 2500ms.
 
 Return ONLY JSON: {"code":"<the full contents of ${p.file}>"}` },
     { role: "user", content: `File: ${p.file}\nRoute: ${p.route}\nTitle: ${p.title}\nBehavior to implement EXACTLY:\n${p.behavior}\n\nProduct: ${config.identity.name}. Nav between screens: ${bp.nav.map((n) => `${n.label}→${n.href}`).join(", ")}.` },
