@@ -45,7 +45,7 @@ export default function LocationPage() {
 
         setError(null);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
