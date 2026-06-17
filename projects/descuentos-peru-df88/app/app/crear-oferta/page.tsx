@@ -2,6 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+
+interface Merchant {
+  id: string;
+  name: string;
+}
+
+interface Program {
+  id: string;
+  name: string;
+}
 
 export default function CrearOferta() {
   const router = useRouter();
@@ -9,8 +20,8 @@ export default function CrearOferta() {
   const [discountLabel, setDiscountLabel] = useState("");
   const [merchantId, setMerchantId] = useState("");
   const [programId, setProgramId] = useState("");
-  const [merchants, setMerchants] = useState([]);
-  const [programs, setPrograms] = useState([]);
+  const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
