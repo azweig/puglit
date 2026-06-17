@@ -55,6 +55,8 @@ export async function planBlueprint(config: DomainConfig, contracts: string): Pr
 
 Think hard about the real user journeys. Examples of inference:
 - A Tinder-style used-goods marketplace ⇒ tables: items (owner, title, description, photo TEXT for data-url, city, status), swipes (user_id, item_id, liked), matches (user_a, user_b, item_a, item_b), messages (match_id, sender_id, body). Operations: publish item, get a swipe feed (others' items not yet swiped), record a swipe and DETECT a mutual match (when the owner of the liked item has also liked one of my items → create a match referencing both items), list my matches, send/list messages scoped to a match. Pages: feed/swipe (home), publish, matches list, chat per match. Anonymous: never expose email between users; show only first name/alias.
+- A LOCATION + MEMBERSHIP aggregator (e.g. "which nearby places give me a discount with the loyalty programs / cards I own") ⇒ this is a CATALOG the app curates/ingests, NOT user-generated content. Tables: programs (the global catalog of loyalty programs/cards, e.g. id, name, provider, category), user_memberships (user_id, program_id — which programs THIS user owns), merchants (id, name, category), branches (id, merchant_id, address, latitude DOUBLE PRECISION, longitude DOUBLE PRECISION — a merchant has many geolocated branches), offers (id, merchant_id, title, discount_label, program_id — an offer is tied to the program that unlocks it; use an offer_programs join if an offer accepts several programs). Operations: list the catalog of programs; add/remove a program from MY memberships; save my location; the CORE route → "nearby offers for MY programs": given my lat/lng + a radius (km), return branches within the radius whose offer's program is in my memberships, with the distance and the program name, ORDERED BY distance (Haversine in SQL). Pages: home = nearby results (after location), my programs (pick from the catalog), set location. The catalog (programs + merchants + branches + offers) is SEEDED/INGESTED by the app, not created by end users.
+GENERAL RULE: distinguish CATALOG/reference data (curated or ingested from external sources — seed it, refresh via cron, users only READ/filter it) from USER-GENERATED content (users create it). Model both correctly. For any "near me"/location feature, geolocated rows MUST store latitude & longitude as DOUBLE PRECISION and the core query uses the Haversine formula ordered by distance.
 
 Return ONLY JSON:
 {
@@ -345,6 +347,7 @@ async function hardenRoute(file: AppFile, schemaSql: string): Promise<AppFile> {
 2. SCOPING: if the route reads OR writes rows belonging to a conversation/match/thread between users, it MUST first verify the caller is a participant (e.g. SELECT 1 FROM matches WHERE id=$1 AND (user_a=$2 OR user_b=$2)) and return 403 if not — for BOTH GET and POST.
 3. FEED/DISCOVERY: a list meant to show OTHER users' content must exclude the caller's own rows (… AND owner_id <> $1) and rows already acted on.
 4. MUTUAL-MATCH CORRECTNESS: if this route records a like/swipe and creates a "match" when the interest is mutual, the ONLY correct logic is: when the caller U likes item I (owned by O), a mutual match exists iff O has ALREADY liked some item owned by U. The detection query MUST be of the form: SELECT … FROM swipes WHERE item_id IN (SELECT id FROM items WHERE owner_id = <U>) AND user_id = (SELECT owner_id FROM items WHERE id = <I>) AND liked = true. Reject any query that checks the item's owner against their own item, or that omits the "items owned by U" subquery — rewrite it to the correct form, inserting the match with both users and both items.
+5. GEO / "NEAR ME": if this route returns nearby/closest results, distance MUST be computed with the Haversine formula over the latitude/longitude columns (read $lat/$lng from query params), e.g. (6371 * acos(cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) + sin(radians($1)) * sin(radians(latitude)))) AS distance_km — then filter by a radius (km) param and ORDER BY distance_km ASC. NEVER match location by string/text. If results must be limited to what the user owns/selected (e.g. their loyalty programs/memberships), filter through the membership/join table (… WHERE program_id IN (SELECT program_id FROM user_memberships WHERE user_id = $n)).
 
 THE SCHEMA (authoritative — these are the only tables/columns that exist):
 ${schemaSql}
@@ -468,6 +471,71 @@ export async function GET(request: NextRequest) {
   return { file: { path, content }, shape }
 }
 
+const SEED_SKIP = new Set(["users", "auth_tokens", "records", "page_visits", "analytics_events", "sessions"])
+
+/** Data Ingestion agent: products that aggregate a CATALOG (offers, places, programs,
+ *  listings curated/scraped from external sources) are useless empty. Generate a
+ *  REALISTIC seed (real, plausible data for the product's market) for the catalog
+ *  tables — NOT user/auth or user-owned tables. Generalizable to any aggregator. */
+async function genCatalogSeed(config: DomainConfig, bp: Blueprint): Promise<AppFile | null> {
+  const catalog = bp.tables.filter((t) => {
+    if (SEED_SKIP.has(t.name)) return false
+    const p = parseTable(t.ddl)
+    const userOwned = p.cols.some((c) => c.ref === "users" || /^(user_id|owner_id)$/.test(c.name))
+    return !userOwned // catalog/reference data, not user-owned selections
+  })
+  const hasGeo = catalog.some((t) => /latitude|longitude|\blat\b|\blng\b/i.test(t.ddl))
+  if (!catalog.length || (catalog.length < 2 && !hasGeo)) return null
+  const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are a Data Ingestion specialist. This app aggregates a CATALOG (reference data the app curates/scrapes — NOT user-generated). Generate a REALISTIC seed so the app is usable on first run: INSERT statements for the catalog tables below, using REAL, plausible names/brands/values for THIS product's actual market and country (infer from the product). Rules:
+- Use EXPLICIT ids (1,2,3…) and insert PARENTS before CHILDREN so foreign keys resolve.
+- For geolocated rows, use REAL latitude/longitude for the product's main city/country (e.g. Lima, Perú ≈ -12.0x, -77.0x) and vary them so "near me" returns several results within a few km.
+- Generate enough rows to feel real (e.g. 8-12 programs, 12-20 merchants, 1-3 branches each, an offer per merchant tied to a program).
+- Use ONLY the exact table & column names in the DDL. Strings single-quoted, escape apostrophes by doubling.
+- Do NOT seed user/auth/membership/selection tables (users fill those).
+Return ONLY JSON {"sql":"-- seed\\nINSERT INTO ...;\\n..."}.` },
+      { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\n\nCATALOG TABLES (seed exactly these):\n${catalog.map((t) => t.ddl).join("\n\n")}` },
+    ], { model: "gpt-4o", temperature: 0.4 })) as { sql?: string }
+    return out.sql && out.sql.length > 30 ? { path: "sql/seed.sql", content: `-- ${config.identity.name} — catalog seed (generated by Puglit's Data Ingestion agent).\n-- Real-world reference data so the app works on first run; refresh via app/api/cron/refresh.\n\n${out.sql}\n` } : null
+  } catch { return null }
+}
+
+/** Refresh cron scaffold: the place ingestion/scrapers run on a schedule (fire-and-forget). */
+function refreshCron(config: DomainConfig): AppFile {
+  return {
+    path: "app/api/cron/refresh/route.ts",
+    content: `import { NextRequest, NextResponse } from "next/server"
+import { after } from "next/server"
+import { pool } from "@/lib/db"
+
+// Scheduled catalog refresh (ingestion / scrapers). Fire-and-forget: responds
+// immediately and does the work in after() (external cron callers cap at ~30s).
+// Auth: ?key= or x-cron-secret must equal CRON_SECRET. Schedule every few hours.
+// Plug one ingestSource() per external source (each upserts into the catalog tables).
+export const maxDuration = 300
+
+async function refreshCatalog() {
+  // TODO(per-source): for each external source the catalog comes from, fetch it and
+  // UPSERT into the catalog tables (parameterized). Keep each source isolated so one
+  // failing source never blocks the others. The schema + a working seed already exist.
+  await pool.query("SELECT 1") // placeholder so the file is valid and DB-reachable
+}
+
+export async function GET(request: NextRequest) {
+  const secret = process.env.CRON_SECRET
+  if (secret) {
+    const provided = request.headers.get("x-cron-secret") || request.nextUrl.searchParams.get("key")
+    if (provided !== secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+  }
+  after(async () => { try { await refreshCatalog() } catch { /* best-effort; next tick retries */ } })
+  return NextResponse.json({ ok: true, scheduled: true })
+}
+`,
+  }
+}
+
 /** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
 export async function buildBespokeApp(config: DomainConfig, contracts: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
   const blueprint = await planBlueprint(config, contracts)
@@ -494,6 +562,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   const matchesDet = deterministicMatchesRoute(blueprint.tables, [])
   const shapes = [matchesDet?.shape].filter(Boolean).join("\n")
   const briefPromise = genDesignBrief(config, blueprint).catch(() => "")
+  const seedPromise = genCatalogSeed(config, blueprint).catch(() => null)
   const routePromise = Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).then((f) => (f ? hardenRoute(f, schemaSql) : null)).catch(() => null)))
   const brief = await briefPromise
   const pagePromise = Promise.all(pages.map((p) => genPage(config, blueprint, p, brief, shapes).catch(() => null)))
@@ -517,6 +586,11 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
     const i = files.findIndex((f) => f.path === matchesOverride.file.path)
     if (i >= 0) files[i] = matchesOverride.file; else files.push(matchesOverride.file)
   }
+
+  // Data Ingestion: a realistic catalog seed (overrides the generic seed via path
+  // dedup) + a refresh cron scaffold — only for aggregator/catalog products.
+  const seed = await seedPromise
+  if (seed) { files.push(seed); files.push(refreshCron(config)) }
 
   files.push(navComponent(blueprint))
   files.push(appShell(config))

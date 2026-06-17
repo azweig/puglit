@@ -40,7 +40,7 @@ const cfg = process.env.DATABASE_URL
   ? { connectionString: process.env.DATABASE_URL, ssl: process.env.POSTGRES_SSL === "disable" ? undefined : { rejectUnauthorized: false } }
   : { host: process.env.POSTGRES_HOST || "localhost", port: +(process.env.POSTGRES_PORT || 5432), user: process.env.POSTGRES_USER || "postgres", password: process.env.POSTGRES_PASSWORD || "postgres", database: process.env.POSTGRES_DB || "appdb", ssl: process.env.POSTGRES_SSL === "disable" ? undefined : { rejectUnauthorized: false } }
 
-const order = ["001_core.sql", "002_auth.sql", "003_records.sql", "app.sql"]
+const order = ["001_core.sql", "002_auth.sql", "003_records.sql", "app.sql", "seed.sql"]
 const c = new pg.Client(cfg)
 await c.connect()
 for (const f of order) {
