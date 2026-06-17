@@ -198,10 +198,12 @@ ${bp.kind === "public" && p.file === "app/page.tsx" ? "\nThis is the PUBLIC HOME
 AVAILABLE APIs (call these with fetch):
 ${routeList}
 ${shapes ? `\nAPI RESPONSE SHAPES — the data you will receive (consume these EXACT field names):\n${shapes}\n` : ""}
+DATA BINDING — the rows you render come from these DB tables; read each row's fields by their EXACT snake_case column names below (e.g. \`m.home_team\`, \`m.score_home\`, \`m.match_date\`). Do NOT invent camelCase fields:
+${tablesDoc(bp)}
 DEFENSIVE RENDERING (critical — a contract mismatch must NEVER crash the page):
-- Type the fetched data and access nested fields with optional chaining + fallbacks: e.g. \`m.item?.image_url ?? ""\`, \`m.item?.title ?? "Sin título"\`. NEVER write \`x.item.image\` unguarded.
-- Default arrays to [] before .map; render an empty state when there's nothing.
-- An image with no URL should fall back to a neutral placeholder, not break.
+- List GET endpoints return a BARE ARRAY. After fetch+json, normalize before mapping: \`const list = Array.isArray(data) ? data : (data.items ?? data.rows ?? [])\`. NEVER call .map on the raw response.
+- Access nested fields with optional chaining + fallbacks (\`x?.field ?? ""\`); never an unguarded \`x.a.b\`.
+- An image with no URL → a neutral placeholder, not a crash.
 
 Build the FULL screen per the brief: real layout, the product's palette (Tailwind arbitrary hex values), images shown prominently, polished empty/loading/error states, product-language copy. Match the interaction to the product: like/pass + card-stack ONLY for swipe/match/dating products; a scores/standings/news/feed product gets a dense scannable list/table (no like/pass); a marketplace gets a grid. For chat, poll every 2500ms.
 
@@ -374,6 +376,7 @@ async function hardenRoute(file: AppFile, schemaSql: string): Promise<AppFile> {
 4. MUTUAL-MATCH CORRECTNESS: if this route records a like/swipe and creates a "match" when the interest is mutual, the ONLY correct logic is: when the caller U likes item I (owned by O), a mutual match exists iff O has ALREADY liked some item owned by U. The detection query MUST be of the form: SELECT … FROM swipes WHERE item_id IN (SELECT id FROM items WHERE owner_id = <U>) AND user_id = (SELECT owner_id FROM items WHERE id = <I>) AND liked = true. Reject any query that checks the item's owner against their own item, or that omits the "items owned by U" subquery — rewrite it to the correct form, inserting the match with both users and both items.
 5. GEO / "NEAR ME": if this route returns nearby/closest results, distance MUST be computed with the Haversine formula over the latitude/longitude columns (read $lat/$lng from query params), e.g. (6371 * acos(cos(radians($1)) * cos(radians(latitude)) * cos(radians(longitude) - radians($2)) + sin(radians($1)) * sin(radians(latitude)))) AS distance_km — then filter by a radius (km) param and ORDER BY distance_km ASC. NEVER match location by string/text. If results must be limited to what the user owns/selected (e.g. their loyalty programs/memberships), filter through the membership/join table (… WHERE program_id IN (SELECT program_id FROM user_memberships WHERE user_id = $n)).
 6. IMPORTS (no external deps): import ONLY from "next/server", "react", "@/lib/*" and "@/domain.config". If the file imports ANY other npm package (jsonwebtoken, jose, bcrypt(js), axios, cheerio, uuid, zod, etc.), REMOVE that import and use the spine instead — auth via \`import { getAuthUser } from "@/lib/auth"\` then \`const u = await getAuthUser(request)\` (NEVER manual JWT verify/sign), DB via \`import { pool } from "@/lib/db"\`, email via "@/lib/mailer". Rewrite all usages so no non-spine package remains.
+7. LIST RESPONSE SHAPE: a GET returning a list/collection MUST return the BARE ARRAY (return NextResponse.json(rows)), never wrapped like { matches: rows } or { data: rows }. Keep each row's exact snake_case DB column names. (Wrapping is the #1 cause of "x.map is not a function" on the page.)
 
 THE SCHEMA (authoritative — these are the only tables/columns that exist):
 ${schemaSql}
