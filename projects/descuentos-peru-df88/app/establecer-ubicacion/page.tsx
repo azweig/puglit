@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { NextPage } from "next";
+import Link from "next/link";
 
 const EstablecerUbicacion: NextPage = () => {
   const [latitude, setLatitude] = useState<string>("");
