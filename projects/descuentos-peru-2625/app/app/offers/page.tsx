@@ -28,8 +28,12 @@ export default function OffersPage() {
         }
         const data = await response.json();
         setOffers(data ?? []);
-      } catch (error: any) {
-        setError(error.message);
+      } catch (error) {
+        if (error instanceof Error) {
+          setError(error.message);
+        } else {
+          setError("An unknown error occurred");
+        }
       } finally {
         setLoading(false);
       }
@@ -65,8 +69,12 @@ export default function OffersPage() {
       const createdOffer = await response.json();
       setOffers((prev) => [...prev, createdOffer]);
       setNewOffer({ title: "", description: "", imageUrl: "" });
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error) {
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError("An unknown error occurred");
+      }
     }
   };
 
