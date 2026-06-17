@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
+import { JWTPayload } from "jsonwebtoken"; // Assuming this is the correct import for JWTPayload
 
 export async function POST(request: NextRequest) {
   const u = await getAuthUser(request);
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     // Verify the user is a participant in the program
     const { rowCount } = await pool.query(
       'SELECT 1 FROM user_memberships WHERE program_id = $1 AND user_id = $2',
-      [program_id, u.id]
+      [program_id, (u as JWTPayload).id] // Type assertion to access 'id'
     );
     if (rowCount === 0) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
