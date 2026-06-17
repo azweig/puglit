@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     // Verify that the user is a participant in the loyalty program
     const { rowCount } = await pool.query(
       "SELECT 1 FROM user_memberships WHERE user_id = $1 AND program_id = $2",
-      [u.id, program_id]
+      [u.userId, program_id]
     );
 
     if (rowCount === 0) {
