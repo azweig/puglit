@@ -23,7 +23,11 @@ export default function Descubrir() {
         const data = await response.json();
         setItems(data);
       } catch (err) {
-        setError(err.message);
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("An unknown error occurred.");
+        }
       } finally {
         setLoading(false);
       }
