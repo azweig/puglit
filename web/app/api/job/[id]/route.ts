@@ -16,6 +16,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     contracts: job.artifacts?.contracts || null,
     engine: job.artifacts?.engine || null,
     findings: job.artifacts?.findings || [],
+    ciGreen: job.artifacts?.ciGreen ?? null,
+    ciErrors: job.artifacts?.ciErrors || [],
     githubUrl: job.artifacts?.githubUrl || null,
     previewUrl: job.artifacts?.previewUrl || null,
   })

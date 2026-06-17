@@ -1,9 +1,8 @@
 name: verify-generated
 
-# Real verification substrate for generated projects: compiles each generated
-# project under projects/<slug>/ with the actual TypeScript compiler. This is the
-# ground truth the codegen agents repair against (no LLM-only review). Runs on
-# push to projects/** and can be triggered manually for one project.
+# Real verification substrate. Compiles each generated project with tsc and emits
+# each error as a GitHub annotation (file+line+message) so the Puglit build job can
+# read them via the Checks API and drive the Fixer → re-push → re-verify loop.
 
 on:
   push:
@@ -37,18 +36,22 @@ jobs:
             if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then base="HEAD~1"; fi
             dirs=$(git diff --name-only "$base" "${{ github.sha }}" 2>/dev/null | grep '^projects/' | cut -d/ -f1-2 | sort -u || true)
           fi
-          echo "dirs<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$dirs" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "dirs<<EOF" >> "$GITHUB_OUTPUT"; echo "$dirs" >> "$GITHUB_OUTPUT"; echo "EOF" >> "$GITHUB_OUTPUT"
           echo "Targets: $dirs"
-      - name: Install + typecheck each project
+      - name: Install + typecheck (emit annotations)
         run: |
-          set -e
+          set +e
           fail=0
           for d in ${{ steps.detect.outputs.dirs }}; do
             [ -f "$d/package.json" ] || { echo "skip $d (no package.json)"; continue; }
             echo "::group::$d"
-            ( cd "$d" && npm install --no-audit --no-fund --silent && npx tsc --noEmit ) || { echo "::error::typecheck failed in $d"; fail=1; }
+            ( cd "$d" && npm install --no-audit --no-fund --silent )
+            out=$(cd "$d" && npx tsc --noEmit 2>&1); rc=$?
+            echo "$out"
+            if [ $rc -ne 0 ]; then
+              fail=1
+              printf '%s\n' "$out" | awk -v d="$d" -F'[(,]' '/error TS[0-9]+/ { msg=$0; sub(/^[^:]*: /,"",msg); printf "::error file=%s/%s,line=%s::%s\n", d, $1, $2, msg }'
+            fi
             echo "::endgroup::"
           done
           exit $fail

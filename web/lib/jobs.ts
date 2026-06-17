@@ -15,6 +15,7 @@ import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts, genVerifiedEngine } from "@/lib/agents"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
+import { dispatchCi, latestRun, getRun, runErrors, fixFiles, type CiError } from "@/lib/ci"
 import type { DomainConfig, Entity, FieldType } from "@/lib/domain-types"
 
 export type StepStatus = "pending" | "running" | "done" | "error"
@@ -53,7 +54,9 @@ const PLAN: { key: string; label: string }[] = [
   { key: "docs-biz", label: "Business Strategist · FODA, Lean, pitch deck (YC)" },
   { key: "env", label: "DevOps · .env + integraciones" },
   { key: "deliver", label: "DevOps · push del repo a GitHub" },
+  { key: "ci-verify", label: "QA · compilación real (CI) + auto-reparación" },
 ]
+const MAX_CI = 3 // CI fix→re-verify cycles before shipping with a report
 
 function genEnvExample(creds: any): string {
   const c = creds || {}
@@ -179,8 +182,17 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
   // lock: the poller and the sweeper must not advance the same job at once
   if (!(await acquireLease(id))) return job
   job = (await getJob(id)) as JobRow
-  const step = job.steps.find((s) => s.status === "pending")
+  const reentrant = job.steps.find((s) => s.status === "running" && s.key === "ci-verify")
+  const step = reentrant || job.steps.find((s) => s.status === "pending")
   if (!step) { job.status = "done"; await persist(job, true); return job }
+
+  // ci-verify is RE-ENTRANT: it polls the real CI across calls (no retry burn).
+  if (step.key === "ci-verify") {
+    try { await handleCiVerify(job, step) } catch (e) { step.status = "done"; step.detail = "CI omitido: " + (e as Error).message.slice(0, 80) }
+    if (job.status === "running" && !job.steps.some((s) => s.status === "pending" || (s.status === "running" && s.key === "ci-verify"))) { job.status = "done"; await sendDoneEmail(job) }
+    await persist(job, true)
+    return job
+  }
 
   step.status = "running"; step.startedAt = new Date().toISOString(); step.attempts = (step.attempts || 0) + 1
   await persist(job)
@@ -327,6 +339,33 @@ export async function sweep(): Promise<{ promoted: boolean; advanced: string[]; 
   const advanced: string[] = []
   for (const r of running.rows) { await advanceJob(r.id); advanced.push(r.id) }
   return { promoted: true, advanced, recovered }
+}
+
+// Re-entrant CI verify+repair: one short action per call (dispatch / poll / fix).
+async function handleCiVerify(job: JobRow, step: Step): Promise<void> {
+  const ci = (job.artifacts.ci ||= { attempt: 0, runId: null, waitingSince: null })
+  if (!githubConfigured()) { step.status = "done"; step.detail = "sin GITHUB_TOKEN — CI omitido"; return }
+  if (step.status === "pending") {
+    step.status = "running"; step.startedAt = new Date().toISOString()
+    await dispatchCi(job.slug); ci.runId = null; ci.waitingSince = new Date().toISOString()
+    step.detail = "compilando en CI…"; return
+  }
+  if (!ci.runId) {
+    const r = await latestRun()
+    if (r && (!ci.waitingSince || new Date(r.created_at).getTime() >= new Date(ci.waitingSince).getTime() - 8000)) ci.runId = r.id
+    step.detail = ci.runId ? "CI en cola…" : "esperando CI…"; return
+  }
+  const run = await getRun(ci.runId)
+  if (!run) { step.detail = "CI: run no encontrado"; return }
+  if (run.status !== "completed") { step.detail = `CI compilando (${run.status})`; return }
+  if (run.conclusion === "success") { step.status = "done"; step.detail = `✅ compila (intentos: ${ci.attempt})`; job.artifacts.ciGreen = true; return }
+  if (ci.attempt >= MAX_CI) { step.status = "done"; step.detail = `verde no alcanzado en ${MAX_CI} intentos`; job.artifacts.ciGreen = false; return }
+  const errors: CiError[] = await runErrors(run.head_sha)
+  job.artifacts.ciErrors = errors.slice(0, 20)
+  if (!errors.length) { step.status = "done"; step.detail = "CI falló sin errores legibles"; return }
+  await fixFiles(errors) // pushes fixes → triggers a fresh CI run
+  ci.attempt++; ci.runId = null; ci.waitingSince = new Date().toISOString()
+  step.detail = `reparando (intento ${ci.attempt}/${MAX_CI}): ${errors.length} errores tsc reales`
 }
 
 function configToTs(config: DomainConfig): string {
