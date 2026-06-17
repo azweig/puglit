@@ -26,7 +26,7 @@ export default function LiveMatchesPage() {
         const data: LiveMatchesResponse = await response.json();
         setData(data);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       }
     };
 
