@@ -14,7 +14,7 @@
  *  - Images = data: URLs or external URLs stored in TEXT (no object storage).
  *  - Postgres via pool.query(text, params) — parameterized only.
  */
-import { chatJSON } from "@/lib/openai"
+import { chatJSON, chatText } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
 
 export interface AppFile { path: string; content: string }
@@ -142,22 +142,49 @@ Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
   return out.code ? { path: rf.path, content: String(out.code).slice(0, 30_000) } : null
 }
 
-/** Frontend swarm: one agent per surface → a real Next page. */
-async function genPage(config: DomainConfig, bp: Blueprint, p: PageSpec): Promise<AppFile | null> {
+/** Art Director: a DISTINCTIVE, product-specific visual identity for the app screens
+ *  (not a generic dashboard). Derived from the idea + brand palette + archetype, so
+ *  it differs per project. The frontend swarm follows this brief verbatim. */
+async function genDesignBrief(config: DomainConfig, bp: Blueprint): Promise<string> {
+  const id = config.identity
+  const palette = (id.palette || []).map((c: any) => `${c.hex}${c.label ? ` (${c.label})` : ""}`).join(", ")
+  const tagline = typeof id.tagline === "string" ? id.tagline : JSON.stringify(id.tagline)
+  try {
+    return await chatText([
+      { role: "system", content: `You are a Senior Art Director + Product Designer. Design a DISTINCTIVE visual identity for THIS product's in-app screens — opinionated and specific, NOT a generic admin/CRUD look. Draw on the aesthetics of the product's category (e.g. a swipe-style used-goods marketplace → Tinder card-stack immersion + OLX/eBay marketplace warmth and trust). The result must feel bespoke to this product and not interchangeable with other apps.
+
+Output a concrete DESIGN BRIEF the frontend engineers will follow verbatim. Cover, concisely:
+- MOOD + 1-2 references for this exact product.
+- COLOR ROLES: assign the given palette hexes to background, surface/cards, primary CTA, accent, text, muted. Use these EXACT hexes (Tailwind arbitrary values like bg-[#xxxxxx]).
+- TYPE: weight/scale personality (big bold titles? etc.).
+- COMPONENT RECIPES with concrete Tailwind classes: cards (rounded-3xl, shadow, etc.), primary & secondary buttons, chips/badges, inputs, and a bottom tab bar.
+- MOTION: subtle transitions (CSS only — no libraries).
+- PER-SCREEN layout for each screen: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}. The discovery/feed screen MUST be an IMMERSIVE experience — e.g. a full-bleed photo card stack with the title/price overlaid on a gradient scrim and large circular like/pass buttons — NOT a plain list. Listing/grid screens should feel like a real marketplace. Chat = modern bubble thread.
+Keep it ~450 words, all actionable. No code, just the brief.` },
+      { role: "user", content: `Product: ${id.name}\nPitch: ${tagline}\nPalette: ${palette || id.brandColor}\nPrimary: ${id.brandColor}  Secondary: ${(id as any).secondaryColor || ""}  Accent: ${(id as any).accentColor || ""}\nScreens: ${bp.pages.map((p) => p.route + " — " + p.title).join("; ")}` },
+    ], { model: "gpt-4o", temperature: 0.6 })
+  } catch { return "" }
+}
+
+/** Frontend swarm: one agent per surface → a real Next page, following the design brief. */
+async function genPage(config: DomainConfig, bp: Blueprint, p: PageSpec, brief: string): Promise<AppFile | null> {
   const routeList = groupRoutes(bp.routes).map((rf) => `${[...rf.methods].join("/")} ${rf.path.replace(/^app/, "").replace(/\/route\.ts$/, "")} — ${rf.specs.map((s) => s.purpose).join("; ")}`).join("\n")
   const out = (await chatJSON([
-    { role: "system", content: `You are a Frontend Engineer. Write ONE Next.js 16 page (App Router) implementing this surface with REAL interactivity (no placeholder copy, no TODOs). It must compile under tsc --noEmit and work against the listed APIs.
+    { role: "system", content: `You are a senior Frontend Engineer + Designer. Write ONE Next.js 16 page (App Router) that is REAL, interactive (no placeholders/TODOs) AND visually polished. It must compile under tsc --noEmit and work against the listed APIs.
 
 ${RULES}
+
+DESIGN BRIEF — follow this EXACTLY so every screen shares one bespoke identity (do NOT produce a generic CRUD page):
+${brief || "Bold, modern, mobile-first. Use the brand palette. Make the feed an immersive photo-card experience, not a list."}
 
 AVAILABLE APIs (call these with fetch):
 ${routeList}
 
-UI: clean, mobile-first, Tailwind. Use the brand color var(--brand) where useful. Product language for all copy. Handle loading/empty/error states. For lists, fetch on mount with useEffect. For chat, poll every 2500ms.
+Build the FULL screen per the brief: real layout, the product's palette (Tailwind arbitrary hex values), images shown prominently, polished empty/loading/error states, product-language copy. For the feed/discovery screen build the immersive card UI from the brief (full-bleed image, overlaid info, like/pass buttons), NOT a bullet list. For chat, poll every 2500ms.
 
 Return ONLY JSON: {"code":"<the full contents of ${p.file}>"}` },
     { role: "user", content: `File: ${p.file}\nRoute: ${p.route}\nTitle: ${p.title}\nBehavior to implement EXACTLY:\n${p.behavior}\n\nProduct: ${config.identity.name}. Nav between screens: ${bp.nav.map((n) => `${n.label}→${n.href}`).join(", ")}.` },
-  ], { model: "gpt-4o", temperature: 0.3 })) as { code?: string }
+  ], { model: "gpt-4o", temperature: 0.45 })) as { code?: string }
   return out.code ? { path: p.file, content: fixClientDirective(String(out.code).slice(0, 30_000)) } : null
 }
 
@@ -415,14 +442,17 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   blueprint.pages = pages
 
   const schemaSql = blueprint.tables.map((t) => t.ddl).join("\n\n")
-  const [routeOut, pageOut] = await Promise.all([
-    // generate each route, then HARDEN it against schema-drift/scoping/feed bugs
-    Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).then((f) => (f ? hardenRoute(f, schemaSql) : null)).catch(() => null))),
-    Promise.all(pages.map((p) => genPage(config, blueprint, p).catch(() => null))),
-  ])
+  // Art-direction brief (per-project visual identity) runs alongside route generation;
+  // pages then follow it so every screen shares a bespoke, non-generic look.
+  const briefPromise = genDesignBrief(config, blueprint).catch(() => "")
+  const routePromise = Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).then((f) => (f ? hardenRoute(f, schemaSql) : null)).catch(() => null)))
+  const brief = await briefPromise
+  const pagePromise = Promise.all(pages.map((p) => genPage(config, blueprint, p, brief).catch(() => null)))
+  const [routeOut, pageOut] = await Promise.all([routePromise, pagePromise])
 
   const files: AppFile[] = []
   if (schemaSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${schemaSql}\n` })
+  if (brief) files.push({ path: "docs/DESIGN.md", content: `# Design brief — ${config.identity.name}\n\n${brief}\n` })
   for (const f of [...routeOut, ...pageOut]) if (f) files.push(f)
 
   // DETERMINISTIC swipe/match override: the mutual-match parameter binding is the
