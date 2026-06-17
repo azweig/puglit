@@ -158,7 +158,18 @@ UI: clean, mobile-first, Tailwind. Use the brand color var(--brand) where useful
 Return ONLY JSON: {"code":"<the full contents of ${p.file}>"}` },
     { role: "user", content: `File: ${p.file}\nRoute: ${p.route}\nTitle: ${p.title}\nBehavior to implement EXACTLY:\n${p.behavior}\n\nProduct: ${config.identity.name}. Nav between screens: ${bp.nav.map((n) => `${n.label}→${n.href}`).join(", ")}.` },
   ], { model: "gpt-4o", temperature: 0.3 })) as { code?: string }
-  return out.code ? { path: p.file, content: String(out.code).slice(0, 30_000) } : null
+  return out.code ? { path: p.file, content: fixClientDirective(String(out.code).slice(0, 30_000)) } : null
+}
+
+/** Deterministically normalize the React "use client" directive. LLMs sometimes
+ *  emit it WITHOUT quotes (`use client;` → TS1434) or omit it on pages that use
+ *  client hooks. Both break compilation; fix them here, not via the CI fixer. */
+function fixClientDirective(code: string): string {
+  let c = code.replace(/^﻿/, "")
+  if (/^\s*["']use client["']\s*;?/.test(c)) return c.replace(/^\s*["']use client["']\s*;?/, '"use client";')
+  if (/^\s*use client\s*;?/.test(c)) return c.replace(/^\s*use client\s*;?/, '"use client";')
+  if (/\b(useState|useEffect|useRouter|usePathname|onClick|onChange|onSubmit)\b/.test(c)) return '"use client";\n' + c
+  return c
 }
 
 /** Shared nav component so generated pages can link between surfaces. */
