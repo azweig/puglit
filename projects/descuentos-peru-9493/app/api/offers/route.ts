@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     // Verify the user has a membership in the program
     const membershipCheck = await pool.query(
       "SELECT 1 FROM user_memberships WHERE user_id = $1 AND program_id = $2",
-      [u.id, program_id]
+      [u.userId, program_id]
     );
 
     if (membershipCheck.rowCount === 0) {
