@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     await pool.query(
       "INSERT INTO user_memberships (user_id, program_id, membership_number, expiration_date) VALUES ($1, $2, $3, $4)",
-      [u.id, program_id, membership_number, expiration_date]
+      [u.userId, program_id, membership_number, expiration_date]
     );
     return NextResponse.json({ success: true });
   } catch (error) {
