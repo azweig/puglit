@@ -288,6 +288,30 @@ function ensureContentCreation(bp: Blueprint): void {
   }
 }
 
+/** Reliability pass: harden ONE generated route against the THREE runtime bugs the
+ *  compiler can't catch — (1) SQL referencing columns/tables not in the schema
+ *  (hallucinated is_active/sent_at/status; wrong ORDER BY column), (2) reads/writes
+ *  of another user's conversation not scoped to participants, (3) feeds not
+ *  excluding the caller's own rows. Returns the corrected file (or the original). */
+async function hardenRoute(file: AppFile, schemaSql: string): Promise<AppFile> {
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are a Reliability Engineer reviewing ONE Next.js route file for RUNTIME-fatal bugs the TypeScript compiler does NOT catch. Fix ONLY these, minimally; keep everything else identical:
+
+1. SCHEMA CONFORMANCE: every table and column the SQL references MUST exist in the schema below. If a column is invented (e.g. is_active, status, updated_at, sent_at vs created_at), map it to the REAL column or remove that clause. ORDER BY must use a column that exists (use the table's actual timestamp column). This is the #1 bug — check every SELECT/INSERT/UPDATE/WHERE/ORDER BY against the schema.
+2. SCOPING: if the route reads OR writes rows belonging to a conversation/match/thread between users, it MUST first verify the caller is a participant (e.g. SELECT 1 FROM matches WHERE id=$1 AND (user_a=$2 OR user_b=$2)) and return 403 if not — for BOTH GET and POST.
+3. FEED/DISCOVERY: a list meant to show OTHER users' content must exclude the caller's own rows (… AND owner_id <> $1) and rows already acted on.
+
+THE SCHEMA (authoritative — these are the only tables/columns that exist):
+${schemaSql}
+
+Return ONLY JSON {"code":"<full corrected file>"}. If nothing needs fixing, return the file unchanged.` },
+      { role: "user", content: `File ${file.path}:\n${file.content}` },
+    ], { model: "gpt-4o", temperature: 0.1 })) as { code?: string }
+    return out.code && out.code.length > 40 ? { path: file.path, content: String(out.code).slice(0, 30_000) } : file
+  } catch { return file }
+}
+
 /** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
 export async function buildBespokeApp(config: DomainConfig, contracts: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
   const blueprint = await planBlueprint(config, contracts)
@@ -306,14 +330,15 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   const pages = blueprint.pages.filter((p) => (seenPages.has(p.file) ? false : seenPages.add(p.file)))
   blueprint.pages = pages
 
+  const schemaSql = blueprint.tables.map((t) => t.ddl).join("\n\n")
   const [routeOut, pageOut] = await Promise.all([
-    Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).catch(() => null))),
+    // generate each route, then HARDEN it against schema-drift/scoping/feed bugs
+    Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).then((f) => (f ? hardenRoute(f, schemaSql) : null)).catch(() => null))),
     Promise.all(pages.map((p) => genPage(config, blueprint, p).catch(() => null))),
   ])
 
   const files: AppFile[] = []
-  const appSql = blueprint.tables.map((t) => t.ddl).join("\n\n")
-  if (appSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${appSql}\n` })
+  if (schemaSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${schemaSql}\n` })
   for (const f of [...routeOut, ...pageOut]) if (f) files.push(f)
   files.push(navComponent(blueprint))
   files.push(appShell(config))
