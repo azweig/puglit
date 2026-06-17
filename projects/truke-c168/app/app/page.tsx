@@ -1,0 +1,93 @@
+"use client";
+
+import { useEffect, useState } from 'react';
+
+interface Item {
+  id: string;
+  image_url: string;
+  title: string;
+  description: string;
+}
+
+export default function Descubrir() {
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      try {
+        const response = await fetch('/api/feed');
+        if (!response.ok) {
+          throw new Error('Failed to fetch items');
+        }
+        const data = await response.json();
+        setItems(data);
+      } catch (error) {
+        setError(error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchItems();
+  }, []);
+
+  const handleSwipe = async (itemId: string, liked: boolean) => {
+    try {
+      const response = await fetch('/api/swipes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ item_id: itemId, liked }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to record swipe');
+      }
+
+      setItems((prevItems) => prevItems.filter((item) => item.id !== itemId));
+    } catch (error) {
+      console.error('Error swiping item:', error);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center text-gray-500">Loading...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center text-red-500">{error}</div>;
+  }
+
+  if (items.length === 0) {
+    return <div className="text-center text-gray-500">No more items to discover.</div>;
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      {items.map((item) => (
+        <div key={item.id} className="border rounded-lg p-4 shadow-md">
+          <img src={item.image_url} alt={item.title} className="w-full h-48 object-cover rounded-md" />
+          <h2 className="text-lg font-bold mt-2">{item.title}</h2>
+          <p className="text-gray-700 mt-1">{item.description}</p>
+          <div className="flex justify-between mt-4">
+            <button
+              className="bg-green-500 text-white px-4 py-2 rounded-md"
+              onClick={() => handleSwipe(item.id, true)}
+            >
+              Me gusta
+            </button>
+            <button
+              className="bg-red-500 text-white px-4 py-2 rounded-md"
+              onClick={() => handleSwipe(item.id, false)}
+            >
+              No me gusta
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
