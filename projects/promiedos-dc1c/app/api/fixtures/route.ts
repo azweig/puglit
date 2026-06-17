@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     // Verify the match_id exists and the user is a participant in the match
     const matchCheck = await pool.query(
       "SELECT 1 FROM matches WHERE id = $1 AND (team_home = $2 OR team_away = $2)",
-      [match_id, u.username] // Assuming `u.username` is the user's team
+      [match_id, u.userId] // Assuming `u.userId` is the user's team
     );
 
     if (matchCheck.rowCount === 0) {
