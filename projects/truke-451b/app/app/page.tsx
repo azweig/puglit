@@ -24,7 +24,11 @@ function Descubrir() {
         const data = await response.json();
         setItems(data);
       } catch (error) {
-        setError(error.message);
+        if (error instanceof Error) {
+          setError(error.message);
+        } else {
+          setError('An unknown error occurred');
+        }
       } finally {
         setLoading(false);
       }
@@ -52,7 +56,11 @@ function Descubrir() {
         setItems((prevItems) => prevItems.filter((item) => item.id !== itemId));
       }
     } catch (error) {
-      console.error(error.message);
+      if (error instanceof Error) {
+        console.error(error.message);
+      } else {
+        console.error('An unknown error occurred');
+      }
     }
   };
 
