@@ -767,6 +767,34 @@ function reconcilePageRoutes(files: AppFile[]): void {
   }
 }
 
+/** THE INTEGRATOR (the "queen bee"): after the swarm generates pages + routes
+ *  independently, this single pass enforces global coherence — every API path a PAGE
+ *  fetches MUST resolve to a real generated route. When a page calls a path that has no
+ *  route (e.g. /api/live-football while the route is /api/live-football-data), rewrite
+ *  the page's fetch to the closest real route path. Deterministic; fixes the #1 swarm
+ *  failure (independent agents inventing mismatched paths). */
+function integratePageRoutes(files: AppFile[]): void {
+  const routePaths = files
+    .filter((f) => /\/route\.ts$/.test(f.path))
+    .map((f) => "/" + f.path.replace(/^app\//, "").replace(/\/route\.ts$/, "")
+      .replace(/\/\[[^\]]+\]/g, "")) // collapse dynamic segments for matching
+  const realPaths = files.filter((f) => /\/route\.ts$/.test(f.path)).map((f) => "/" + f.path.replace(/^app\//, "").replace(/\/route\.ts$/, ""))
+  const realSet = new Set(realPaths)
+  const commonPrefix = (a: string, b: string) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return i }
+  for (const pg of files.filter((f) => /\.tsx$/.test(f.path))) {
+    pg.content = pg.content.replace(/(["'`])(\/api\/[\w/-]+)/g, (m, q: string, path: string) => {
+      if (realSet.has(path)) return m // already resolves
+      // dynamic-route call (e.g. /api/x/123) — match against collapsed paths
+      const collapsed = path.replace(/\/\d+(?=\/|$)/g, "")
+      if (routePaths.includes(collapsed)) return m
+      let best = "", score = 0
+      for (const rp of realPaths) { const s = commonPrefix(path, rp); if (s > score) { score = s; best = rp } }
+      // require a real overlap beyond "/api/" (5 chars) so we don't snap to an unrelated route
+      return best && score >= 8 ? q + best : m
+    })
+  }
+}
+
 /** Guarantee a bespoke homepage at "/" (app/page.tsx) — the product itself, since the
  *  spine landing is no longer copied. Adds it if the architect didn't include it. */
 function ensureHomepage(bp: Blueprint): void {
@@ -858,6 +886,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   if (seed) { files.push(seed); files.push(refreshCron(config)) }
 
   reconcilePageRoutes(files) // mirror deterministic routes to the paths the pages call
+  integratePageRoutes(files) // QUEEN: rewrite every page fetch to a real route path (global coherence)
   // BESPOKE shell per product (its own structure/nav), with a minimal fallback.
   // Auth-gated /app shell only for "accounts" products; public products are open (homepage = product).
   if (blueprint.kind === "accounts") {
