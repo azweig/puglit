@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     // Verify the user is a participant in the program
     const { rowCount } = await pool.query(
       'SELECT 1 FROM user_memberships WHERE program_id = $1 AND user_id = $2',
-      [program_id, (u as JWTPayload).id] // Type assertion to access 'id'
+      [program_id, (u as JWTPayload).sub] // Type assertion to access 'sub' as 'id'
     );
     if (rowCount === 0) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
