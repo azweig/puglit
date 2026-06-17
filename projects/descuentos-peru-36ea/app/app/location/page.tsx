@@ -52,7 +52,7 @@ export default function LocationPage() {
             const data: Offer[] = await offersResponse.json();
             setOffers(data);
           } catch (err) {
-            setError(err.message);
+            setError((err as Error).message);
           } finally {
             setLoading(false);
           }
