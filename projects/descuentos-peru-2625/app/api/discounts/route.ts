@@ -15,7 +15,7 @@ interface AuthUser {
 }
 
 export async function GET(request: NextRequest) {
-  const u = await getAuthUser(request) as AuthUser;
+  const u = await getAuthUser(request) as unknown as AuthUser;
   if (!u) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const { latitude, longitude } = u.profile.location;
