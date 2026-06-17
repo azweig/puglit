@@ -44,7 +44,8 @@ const RULES = `HARD RULES:
 - Realtime/chat = poll with setInterval(fetch, 2500) + clearInterval on unmount. No websockets.
 - Image upload = <input type="file"> → FileReader.readAsDataURL → send the data: URL string; store in a TEXT column. No S3/blob storage.
 - Every route handler: export async function GET/POST/etc(request: NextRequest). import { NextRequest, NextResponse } from "next/server".
-- Never reference a variable/import that you do not define. Code must compile with \`tsc --noEmit\`.`
+- Never reference a variable/import that you do not define. Code must compile with \`tsc --noEmit\`.
+- Next 16 navigation: use \`<Link href="/x">label</Link>\` directly. NEVER nest an <a> inside <Link> (runtime crash).`
 
 /** Domain Architect: infer the product's functional blueprint from the idea+config. */
 export async function planBlueprint(config: DomainConfig, contracts: string): Promise<Blueprint> {
@@ -193,8 +194,17 @@ Build the FULL screen per the brief: real layout, the product's palette (Tailwin
 Return ONLY JSON: {"code":"<the full contents of ${p.file}>"}` },
     { role: "user", content: `File: ${p.file}\nRoute: ${p.route}\nTitle: ${p.title}\nBehavior to implement EXACTLY:\n${p.behavior}\n\nProduct: ${config.identity.name}. Nav between screens: ${bp.nav.map((n) => `${n.label}→${n.href}`).join(", ")}.` },
   ], { model: "gpt-4o", temperature: 0.45 })) as { code?: string }
-  return out.code ? { path: p.file, content: fixClientDirective(String(out.code).slice(0, 30_000)) } : null
+  return out.code ? { path: p.file, content: postTsx(String(out.code).slice(0, 30_000)) } : null
 }
+
+/** Next 13+ forbids a nested <a> inside <Link> (runtime crash). LLMs still emit the old
+ *  `<Link href=x><a className=y>z</a></Link>`. Merge the <a> attrs onto <Link>. Deterministic. */
+function fixNextLinks(code: string): string {
+  return code.replace(/<Link([^>]*?)>\s*<a([^>]*?)>([\s\S]*?)<\/a>\s*<\/Link>/g, (_m, l: string, a: string, inner: string) => `<Link${l}${a}>${inner}</Link>`)
+}
+
+/** All deterministic post-fixes applied to a generated .tsx (directive + Link). */
+function postTsx(code: string): string { return fixNextLinks(fixClientDirective(code)) }
 
 /** Deterministically normalize the React "use client" directive. LLMs sometimes
  *  emit it WITHOUT quotes (`use client;` → TS1434) or omit it on pages that use
@@ -257,7 +267,7 @@ Return ONLY JSON {"code":"<full contents of app/app/layout.tsx>"}` },
       { role: "user", content: `Product: ${config.identity.name} — ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}\nScreens: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}` },
     ], { model: "gpt-4o", temperature: 0.5 })) as { code?: string }
     if (!out.code || !/auth\/me/.test(out.code) || out.code.length < 200) return null
-    return { path: "app/app/layout.tsx", content: fixClientDirective(String(out.code).slice(0, 16_000)) }
+    return { path: "app/app/layout.tsx", content: postTsx(String(out.code).slice(0, 16_000)) }
   } catch { return null }
 }
 

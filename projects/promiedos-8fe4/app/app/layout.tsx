@@ -30,15 +30,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 bg-[#1E90FF] text-[#FFFFFF] shadow-md">
         <nav className="flex justify-around py-4">
           {navItems.map((item) => (
-            <Link key={item.path} href={item.path}>
-              <a
+            <Link key={item.path} href={item.path}
                 className={`$text-lg font-bold transition-all duration-200 ease-in-out hover:text-[#104E8B] ${
                   pathname === item.path ? "text-[#FF4500]" : ""
                 }`}
               >
                 {item.name}
-              </a>
-            </Link>
+              </Link>
           ))}
         </nav>
       </header>
