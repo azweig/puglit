@@ -21,7 +21,7 @@ export default function MyPrograms() {
         const data = await response.json();
         setPrograms(data || []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       }
     }
 
@@ -43,7 +43,7 @@ export default function MyPrograms() {
       setPrograms((prev) => [...prev, newProgramData]);
       setNewProgram("");
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     }
   };
 
