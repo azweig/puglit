@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     // Verify the user is a participant in the tournament
     const { rowCount: participantCount } = await pool.query(
       "SELECT 1 FROM tournaments WHERE id = $1 AND (SELECT COUNT(*) FROM matches WHERE tournament_id = $1 AND (team_home = $2 OR team_away = $2)) > 0",
-      [tournament_id, u.username]
+      [tournament_id, u.userId]
     );
 
     if (participantCount === 0) {
