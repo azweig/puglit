@@ -1,0 +1,39 @@
+CREATE TABLE IF NOT EXISTS matches (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date_time TIMESTAMPTZ NOT NULL,
+  team_home TEXT NOT NULL,
+  team_away TEXT NOT NULL,
+  score_home INTEGER NOT NULL,
+  score_away INTEGER NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tournaments (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  current_round INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS standings (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tournament_id INTEGER NOT NULL,
+  team_name TEXT NOT NULL,
+  points INTEGER NOT NULL,
+  matches_played INTEGER NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS goalscorers (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  match_id INTEGER NOT NULL,
+  player_name TEXT NOT NULL,
+  goals INTEGER NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
