@@ -30,7 +30,11 @@ export default function CreateStandings() {
 
       router.push("/app/standings");
     } catch (err) {
-      setError(err.message ?? "Unexpected error occurred");
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Unexpected error occurred");
+      }
     } finally {
       setLoading(false);
     }
