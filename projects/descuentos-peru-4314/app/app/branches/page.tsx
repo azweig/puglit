@@ -24,7 +24,7 @@ export default function Branches() {
         const data = await response.json();
         setBranches(data ?? []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
@@ -49,7 +49,7 @@ export default function Branches() {
       setBranchName('');
       setBranchAddress('');
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     }
   };
 
