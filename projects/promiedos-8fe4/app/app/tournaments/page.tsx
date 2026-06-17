@@ -21,7 +21,7 @@ export default function Tournaments() {
         const data = await res.json();
         setTournaments(data.tournaments ?? []);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
