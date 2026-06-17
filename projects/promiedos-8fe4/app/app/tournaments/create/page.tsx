@@ -35,7 +35,7 @@ export default function CreateTournament() {
 
       setSuccess("Tournament created successfully!");
     } catch (err) {
-      setError(err.message ?? "An unexpected error occurred.");
+      setError((err as Error).message ?? "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }
