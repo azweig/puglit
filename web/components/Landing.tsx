@@ -25,7 +25,8 @@ export function Landing({ config }: { config: DomainConfig }) {
   const brand = identity.brandColor || "#7C3AED"
   const accent = identity.accentColor || brand
   const Logo = ({ size }: { size: number }) =>
-    identity.logoUrl ? <img src={identity.logoUrl} alt={identity.name} style={{ height: size }} className="w-auto" />
+    identity.logoSvg ? <span className="inline-block shrink-0 [&>svg]:w-full [&>svg]:h-full" style={{ width: size, height: size }} dangerouslySetInnerHTML={{ __html: identity.logoSvg }} />
+      : identity.logoUrl ? <img src={identity.logoUrl} alt={identity.name} style={{ height: size }} className="w-auto" />
       : identity.logoMonogram ? <span className="rounded-lg inline-flex items-center justify-center font-extrabold text-white shrink-0" style={{ width: size, height: size, background: brand, fontSize: Math.round(size * 0.46) }}>{identity.logoMonogram}</span>
       : <Mark size={size} />
 

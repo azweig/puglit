@@ -12,6 +12,7 @@ import { saveProject, slugExists, isConfigured } from "@/lib/db"
 import { designEntities } from "@/lib/entitygen"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { applyBranding } from "@/lib/branding"
+import { generateLogoSvg } from "@/lib/logo-gen"
 
 // The AI may return human labels ("English", "Both", "Subscription") — normalize.
 function normLang(v: string): IntakeAnswers["languages"] {
@@ -54,6 +55,11 @@ export async function POST(request: NextRequest) {
 
     // Apply the branding the diagnosis produced (logo monogram + full palette).
     applyBranding(config, (a as Record<string, any>).branding)
+    // Real vector logo mark (reuse the one from the diagnosis if present).
+    if (!config.identity.logoSvg) {
+      const logoSvg = await generateLogoSvg(config)
+      if (logoSvg) config.identity.logoSvg = logoSvg
+    }
 
     // Design the REAL data model with the LLM (replaces the generic "Item").
     const ents = await designEntities({ name: answers.name, what: answers.what, benefits: answers.benefits })

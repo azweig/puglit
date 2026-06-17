@@ -267,6 +267,7 @@ export default function Generate() {
           {/* generated identity: logo lockup + palette */}
           {(() => {
             const primary = spec.branding?.primaryColor || color || "#7C3AED"
+            const logoSvg: string | undefined = spec.branding?.logoSvg
             const mono = (spec.branding?.logo?.monogram || name.trim().slice(0, 2)).toUpperCase()
             const palette: { hex: string; label?: string }[] = Array.isArray(spec.branding?.palette) && spec.branding.palette.length
               ? spec.branding.palette : [{ hex: primary, label: "Primary" }]
@@ -274,7 +275,9 @@ export default function Generate() {
               <div className="mb-6 pb-6 border-b border-white/10">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-violet-bright mb-3">Identidad (preview generado)</h3>
                 <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-extrabold text-xl shrink-0" style={{ background: primary }}>{mono}</div>
+                  {logoSvg
+                    ? <div className="w-14 h-14 shrink-0 rounded-2xl bg-white p-1.5 [&>svg]:w-full [&>svg]:h-full" dangerouslySetInnerHTML={{ __html: logoSvg }} />
+                    : <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-extrabold text-xl shrink-0" style={{ background: primary }}>{mono}</div>}
                   <div>
                     <div className="text-2xl font-extrabold" style={{ color: primary }}>{name}</div>
                     {spec.branding?.tagline && <div className="text-sm text-white/55">{spec.branding.tagline}</div>}

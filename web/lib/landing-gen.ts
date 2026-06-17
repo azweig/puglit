@@ -14,11 +14,15 @@ function tr(v: Localized | undefined, lang: string): string {
   return v[lang] ?? v.en ?? Object.values(v)[0] ?? ""
 }
 
-const SYSTEM = `You are an award-winning brand & web designer. Produce a COMPLETE, single-file, responsive landing page as ONE HTML document (with a <style> block of inline CSS; you MAY use a Google Fonts <link>; NO JavaScript, NO external images except inline SVG).
+const SYSTEM = `You are an award-winning brand & web designer. Produce a COMPLETE, single-file, responsive landing page as ONE HTML document (a <style> block of inline CSS; you MAY use a Google Fonts <link>; NO JavaScript, NO external images).
 
-CRITICAL — make it look DISTINCT and tailored to THIS specific product and sector. Do NOT use a generic SaaS template. Vary the layout, hero composition, section structure, shapes and typography so two different products never look alike. Use the EXACT palette provided (primary, secondary, accent, background, text). Render the brand as the logo monogram in a tasteful mark. Be modern, polished, mobile-first, accessible contrast.
+LANGUAGE — ABSOLUTELY CRITICAL: write EVERY single word in the target language given in the brief. Buttons, section titles, nav, footer — all of it. If the language is Spanish, there must be ZERO English (no "Get started", no "Why Choose Us", no "Free to use"). Translate everything.
 
-Include: a header with the logo+name, a hero (headline + subhead + a primary CTA button labeled with the given CTA), the value propositions as a well-designed section, a simple pricing or "free" mention if relevant, and a footer. Use the product's real copy. Keep it self-contained and production-looking.
+LOGO: if an SVG logo is provided in the brief, embed THAT EXACT <svg> markup as the brand logo in the header (sized ~34px) — do NOT replace it with letters or text.
+
+QUALITY & VARIETY — make it look DISTINCT and tailored to THIS specific product and sector; do NOT use a generic SaaS template. Vary layout, hero composition, sections, shapes and typography. Use the EXACT palette provided. Be modern, polished, mobile-first, with real visual richness — this should look like a real, complete, designed product page, not a sparse skeleton.
+
+Include a substantial page: header (logo+name+nav), a strong hero (headline + subhead + primary CTA with the given label), a value-props/features section using the product's REAL copy, a "how it works" or relevant secondary section, pricing or a free mention if relevant, an FAQ or social-proof touch, and a footer. Self-contained and production-looking.
 
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
 
@@ -44,7 +48,8 @@ export async function generateLandingHtml(config: DomainConfig, styleDirection?:
     const palette = (id.palette || []).map((c) => `${c.label || "color"}: ${c.hex}`).join(", ")
     const vps = (L?.valueProps || []).map((v) => `- ${tr(v.title, lang)}: ${tr(v.body, lang)}`).join("\n")
     const brief = `PRODUCT: ${id.name}
-LANGUAGE: write ALL copy in "${lang}".
+LANGUAGE (write EVERYTHING in this language, zero other languages): "${lang}"
+${id.logoSvg ? `LOGO SVG (embed this EXACT markup as the header logo, ~34px, do not use letters instead):\n${id.logoSvg}` : ""}
 TAGLINE: ${tr(id.tagline, lang)}
 HERO HEADLINE: ${tr(L?.hero?.headline, lang) || id.name}
 HERO SUBHEAD: ${tr(L?.hero?.subheadline, lang)}

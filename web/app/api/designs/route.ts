@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { generateConfig, type IntakeAnswers } from "@/lib/generate"
 import { applyBranding } from "@/lib/branding"
 import { generateLandingVariants } from "@/lib/landing-gen"
+import { generateLogoSvg } from "@/lib/logo-gen"
 import { aiConfigured } from "@/lib/openai"
 
 export const maxDuration = 60
@@ -29,6 +30,10 @@ export async function POST(request: NextRequest) {
       email: "",
     }
     const config = applyBranding(generateConfig(answers), a.branding)
+    if (!config.identity.logoSvg) {
+      const logoSvg = await generateLogoSvg(config)
+      if (logoSvg) config.identity.logoSvg = logoSvg
+    }
     const designs = await generateLandingVariants(config, 2)
     if (!designs.length) return NextResponse.json({ error: "no_designs" }, { status: 500 })
     return NextResponse.json({ ok: true, designs })
