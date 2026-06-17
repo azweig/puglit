@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
-import { JWTPayload } from "jsonwebtoken"; // Assuming this is the correct import for JWTPayload
+import type { JWTPayload } from "jsonwebtoken"; // Assuming this is the correct import for JWTPayload
 
 export async function POST(request: NextRequest) {
   const u = await getAuthUser(request);
