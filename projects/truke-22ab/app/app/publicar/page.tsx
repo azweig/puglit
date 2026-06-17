@@ -46,7 +46,7 @@ export default function Publicar() {
       setImageDataUrl('');
       setLocation('');
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
