@@ -495,7 +495,8 @@ function deterministicGeo(tables: TableSpec[], existingPaths: string[]): { files
 
   const extraSql = `CREATE TABLE IF NOT EXISTS user_locations (\n  user_id BIGINT PRIMARY KEY REFERENCES users(id),\n  latitude DOUBLE PRECISION NOT NULL,\n  longitude DOUBLE PRECISION NOT NULL,\n  address TEXT,\n  updated_at TIMESTAMPTZ DEFAULT NOW()\n);`
 
-  const locPath = existingPaths.find((p) => /\/location\/route\.ts$/.test(p)) || "app/api/location/route.ts"
+  // Match whatever the UI named the location route (set-location, location, ubicacion, my-location…)
+  const locPath = existingPaths.find((p) => /(location|ubicaci|geoloc)/i.test(p) && /route\.ts$/.test(p) && !/(nearby|near-me|cercan)/i.test(p)) || "app/api/location/route.ts"
   const locFile: AppFile = {
     path: locPath,
     content: `import { NextRequest, NextResponse } from "next/server"
@@ -525,7 +526,10 @@ export async function GET(request: NextRequest) {
 `,
   }
 
-  const nearbyPath = existingPaths.find((p) => /\/(offers|nearby|discounts|deals)\/route\.ts$/.test(p)) || `app/api/${offers.name}/route.ts`
+  // Prefer a route the UI calls a "nearby"/near-me endpoint; else a generic offers/deals list.
+  const nearbyPath = existingPaths.find((p) => /(nearby|near-me|near_me|cercan|proxim)/i.test(p) && /route\.ts$/.test(p))
+    || existingPaths.find((p) => /\/(offers|discounts|deals|benefits)\/route\.ts$/.test(p))
+    || `app/api/nearby/route.ts`
   const nearbyFile: AppFile = {
     path: nearbyPath,
     content: `import { NextRequest, NextResponse } from "next/server"
