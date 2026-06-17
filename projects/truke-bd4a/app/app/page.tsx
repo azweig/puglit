@@ -15,7 +15,8 @@ export default function Descubrir() {
   useEffect(() => {
     fetch("/api/feed")
       .then((res) => res.json())
-      .then((data) => setItems(data));
+      .then((data) => setItems(data))
+      .catch((error) => console.error('Error fetching data:', error));
   }, []);
 
   const swipe = (itemId: number, liked: boolean) => {
