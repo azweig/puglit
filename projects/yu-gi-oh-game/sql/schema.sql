@@ -1,0 +1,39 @@
+CREATE TABLE IF NOT EXISTS decks (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  archetype TEXT,
+  format TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS simulations (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  scenario_type TEXT NOT NULL,
+  starting_state JSONB NOT NULL,
+  difficulty TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS attempts (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  result TEXT NOT NULL,
+  turns_taken INTEGER NOT NULL,
+  decision_log TEXT,
+  completed_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS packs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  season TEXT NOT NULL,
+  is_licensed BOOLEAN NOT NULL,
+  release_date DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
