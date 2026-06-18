@@ -1086,96 +1086,101 @@ ${fields}
   if (!files.some((f) => f.path === "app/register/page.tsx")) files.push({ path: "app/register/page.tsx", content: register })
 }
 
-/** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
+/** Resumable build state — JSON-serializable so a long build survives across many
+ *  serverless invocations (Vercel caps a single request, the full build takes minutes). */
+export interface EngineState {
+  phase: "plan" | "routes" | "pages" | "finalize" | "done"
+  blueprint: Blueprint | null
+  brief: string
+  ri: number
+  pi: number
+  files: AppFile[]
+}
+export function initEngineState(): EngineState {
+  return { phase: "plan", blueprint: null, brief: "", ri: 0, pi: 0, files: [] }
+}
+
+/** Advance the build by ONE bounded unit (plan / one route / one page / finalize) so each
+ *  step fits a serverless time budget. Returns the updated state; done=true when finished. */
+export async function buildAdvance(config: DomainConfig, contracts: string, research: string, reference: string, state: EngineState): Promise<{ state: EngineState; done: boolean; detail: string }> {
+  const s = state
+  if (s.phase === "plan") {
+    const blueprint = await planBlueprint(config, contracts, reference)
+    if (!blueprint.routes.length && !blueprint.pages.length) { s.blueprint = blueprint; s.phase = "done"; return { state: s, done: true, detail: "blueprint vacío" } }
+    const gaps = await critiqueBlueprint(config, blueprint)
+    blueprint.routes.push(...gaps.addRoutes); blueprint.pages.push(...gaps.addPages)
+    if (blueprint.kind !== "public") ensureContentCreation(blueprint)
+    ensureHomepage(blueprint)
+    const seenPages = new Set<string>()
+    blueprint.pages = blueprint.pages.filter((p) => (seenPages.has(p.file) ? false : seenPages.add(p.file)))
+    const brief = await genDesignBrief(config, blueprint).catch(() => "")
+    const schemaSql = sortTablesByDeps(blueprint.tables).map((t) => t.ddl).join("\n\n")
+    const files: AppFile[] = []
+    if (schemaSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${schemaSql}\n` })
+    if (brief) files.push({ path: "docs/DESIGN.md", content: `# Design brief — ${config.identity.name}\n\n${brief}\n` })
+    s.blueprint = blueprint; s.brief = brief; s.files = files; s.ri = 0; s.pi = 0; s.phase = "routes"
+    return { state: s, done: false, detail: `blueprint: ${blueprint.tables.length} tablas · ${groupRoutes(blueprint.routes).length} rutas · ${blueprint.pages.length} páginas` }
+  }
+  const bp = s.blueprint!
+  const schemaSql = sortTablesByDeps(bp.tables).map((t) => t.ddl).join("\n\n")
+  if (s.phase === "routes") {
+    const routeFiles = groupRoutes(bp.routes)
+    if (s.ri >= routeFiles.length) { s.phase = "pages"; return { state: s, done: false, detail: "rutas listas → páginas" } }
+    const rf = routeFiles[s.ri]
+    const f = await genRouteFile(config, bp, rf).then((x) => (x ? hardenRoute(x, schemaSql) : null)).catch(() => null)
+    if (f) s.files.push(f)
+    s.ri++
+    return { state: s, done: false, detail: `ruta ${s.ri}/${routeFiles.length}: ${rf.path.replace(/^app\/api\//, "").replace(/\/route\.ts$/, "")}` }
+  }
+  if (s.phase === "pages") {
+    if (s.pi >= bp.pages.length) { s.phase = "finalize"; return { state: s, done: false, detail: "páginas listas → ensamblaje" } }
+    const matchesDet = deterministicMatchesRoute(bp.tables, [])
+    const geoDet = deterministicGeo(bp.tables, [])
+    const shapes = [matchesDet?.shape, geoDet?.shape].filter(Boolean).join("\n")
+    const p = bp.pages[s.pi]
+    const f = await genPolishedPage(config, bp, p, s.brief, shapes).catch(() => null)
+    if (f) s.files.push(f)
+    s.pi++
+    return { state: s, done: false, detail: `página ${s.pi}/${bp.pages.length}: ${p.route}` }
+  }
+  if (s.phase === "finalize") {
+    const files = s.files
+    const swipeFile = deterministicSwipeRoute(bp.tables, files.map((f) => f.path))
+    if (swipeFile) { const i = files.findIndex((f) => f.path === swipeFile.path); if (i >= 0) files[i] = swipeFile; else files.push(swipeFile) }
+    const matchesOverride = deterministicMatchesRoute(bp.tables, files.map((f) => f.path))
+    if (matchesOverride) { const i = files.findIndex((f) => f.path === matchesOverride.file.path); if (i >= 0) files[i] = matchesOverride.file; else files.push(matchesOverride.file) }
+    const geo = deterministicGeo(bp.tables, files.map((f) => f.path))
+    if (geo) {
+      const sqlF = files.find((f) => f.path === "sql/app.sql")
+      if (sqlF && !/user_locations/.test(sqlF.content)) sqlF.content += `\n\n-- user location store (Puglit geo capability)\n${geo.extraSql}\n`
+      for (const gf of geo.files) { const i = files.findIndex((f) => f.path === gf.path); if (i >= 0) files[i] = gf; else files.push(gf) }
+    }
+    const mem = deterministicMembershipContent(bp.tables)
+    if (mem) {
+      const idx = files.findIndex((f) => /route\.ts$/.test(f.path) && new RegExp(`(insert\\s+into|from|delete\\s+from)\\s+${mem.tableName}\\b`, "i").test(f.content) && !/acos|distance_km/i.test(f.content))
+      if (idx >= 0) files[idx] = { path: files[idx].path, content: mem.content }
+      const sqlF = files.find((f) => f.path === "sql/app.sql")
+      if (sqlF) sqlF.content = sqlF.content.replace(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)?\\s+${mem.tableName}\\s*\\([\\s\\S]*?\\);`, "i"), mem.ddl)
+    }
+    const seed = await genCatalogSeed(config, bp, research).catch(() => null)
+    if (seed) { files.push(seed); const ingest = research ? await genIngestionCron(config, bp, research).catch(() => null) : null; files.push(ingest || refreshCron(config)) }
+    reconcilePageRoutes(files)
+    integratePageRoutes(files)
+    if (bp.kind === "accounts") {
+      ensureAuthPages(config, files)
+      const shell = (await genAppShell(config, s.brief, bp).catch(() => null)) || fallbackShell(bp)
+      const si = files.findIndex((f) => f.path === shell.path)
+      if (si >= 0) files[si] = shell; else files.push(shell)
+    }
+    s.phase = "done"
+    return { state: s, done: true, detail: `${files.length} archivos generados` }
+  }
+  return { state: s, done: true, detail: "done" }
+}
+
+/** One-shot build (local/CLI): loop buildAdvance until done. Serverless uses buildAdvance directly. */
 export async function buildBespokeApp(config: DomainConfig, contracts: string, research?: string, reference?: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
-  const blueprint = await planBlueprint(config, contracts, reference)
-  if (!blueprint.routes.length && !blueprint.pages.length) return { files: [], blueprint }
-
-  // Completeness: LLM critic + DETERMINISTIC backstop (the critic alone is unreliable;
-  // the backstop GUARANTEES every user-published content table is creatable).
-  const gaps = await critiqueBlueprint(config, blueprint)
-  blueprint.routes.push(...gaps.addRoutes)
-  blueprint.pages.push(...gaps.addPages)
-  if (blueprint.kind !== "public") ensureContentCreation(blueprint) // public catalogs are ingested, not user-created
-  ensureHomepage(blueprint) // the product's homepage (app/page.tsx) is generated bespoke — no spine landing
-
-  const routeFiles = groupRoutes(blueprint.routes)
-  // dedupe pages by file (keep first)
-  const seenPages = new Set<string>()
-  const pages = blueprint.pages.filter((p) => (seenPages.has(p.file) ? false : seenPages.add(p.file)))
-  blueprint.pages = pages
-
-  const schemaSql = sortTablesByDeps(blueprint.tables).map((t) => t.ddl).join("\n\n")
-  // Art-direction brief (per-project visual identity) runs alongside route generation;
-  // pages then follow it so every screen shares a bespoke, non-generic look.
-  // Known deterministic response shapes (e.g. enriched matches) so pages consume the
-  // exact field names instead of guessing (prevents client-side render crashes).
-  const matchesDet = deterministicMatchesRoute(blueprint.tables, [])
-  const geoDet = deterministicGeo(blueprint.tables, [])
-  const shapes = [matchesDet?.shape, geoDet?.shape].filter(Boolean).join("\n")
-  const briefPromise = genDesignBrief(config, blueprint).catch(() => "")
-  const seedPromise = genCatalogSeed(config, blueprint, research).catch(() => null)
-  const routePromise = Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).then((f) => (f ? hardenRoute(f, schemaSql) : null)).catch(() => null)))
-  const brief = await briefPromise
-  const pagePromise = Promise.all(pages.map((p) => genPolishedPage(config, blueprint, p, brief, shapes).catch(() => null)))
-  const [routeOut, pageOut] = await Promise.all([routePromise, pagePromise])
-
-  const files: AppFile[] = []
-  if (schemaSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${schemaSql}\n` })
-  if (brief) files.push({ path: "docs/DESIGN.md", content: `# Design brief — ${config.identity.name}\n\n${brief}\n` })
-  for (const f of [...routeOut, ...pageOut]) if (f) files.push(f)
-
-  // DETERMINISTIC swipe/match override: the mutual-match parameter binding is the
-  // single most LLM-flaky piece — generate it from the schema, no LLM, when present.
-  const swipeFile = deterministicSwipeRoute(blueprint.tables, files.map((f) => f.path))
-  if (swipeFile) {
-    const i = files.findIndex((f) => f.path === swipeFile.path)
-    if (i >= 0) files[i] = swipeFile; else files.push(swipeFile)
-  }
-  // DETERMINISTIC render-ready matches route (page consumes a known shape → no crash).
-  const matchesOverride = deterministicMatchesRoute(blueprint.tables, files.map((f) => f.path))
-  if (matchesOverride) {
-    const i = files.findIndex((f) => f.path === matchesOverride.file.path)
-    if (i >= 0) files[i] = matchesOverride.file; else files.push(matchesOverride.file)
-  }
-
-  // DETERMINISTIC geo: location store + save route + Haversine near-me route.
-  const geo = deterministicGeo(blueprint.tables, files.map((f) => f.path))
-  if (geo) {
-    const sqlF = files.find((f) => f.path === "sql/app.sql")
-    if (sqlF && !/user_locations/.test(sqlF.content)) sqlF.content += `\n\n-- user location store (Puglit geo capability)\n${geo.extraSql}\n`
-    for (const gf of geo.files) { const i = files.findIndex((f) => f.path === gf.path); if (i >= 0) files[i] = gf; else files.push(gf) }
-  }
-
-  // DETERMINISTIC membership toggle: override whatever route writes the membership table.
-  const mem = deterministicMembershipContent(blueprint.tables)
-  if (mem) {
-    const idx = files.findIndex((f) => /route\.ts$/.test(f.path) && new RegExp(`(insert\\s+into|from|delete\\s+from)\\s+${mem.tableName}\\b`, "i").test(f.content) && !/acos|distance_km/i.test(f.content))
-    if (idx >= 0) files[idx] = { path: files[idx].path, content: mem.content }
-    // replace the membership table DDL with the clean minimal join (drop NOT NULL extras)
-    const sqlF = files.find((f) => f.path === "sql/app.sql")
-    if (sqlF) sqlF.content = sqlF.content.replace(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)?\\s+${mem.tableName}\\s*\\([\\s\\S]*?\\);`, "i"), mem.ddl)
-  }
-
-  // Data Ingestion: a realistic catalog seed (overrides the generic seed via path
-  // dedup) + a refresh cron scaffold — only for aggregator/catalog products.
-  const seed = await seedPromise
-  if (seed) {
-    files.push(seed)
-    // Data Engineer writes a REAL ingestion cron from the research plan; else the stub scaffold.
-    const ingest = research ? await genIngestionCron(config, blueprint, research).catch(() => null) : null
-    files.push(ingest || refreshCron(config))
-  }
-
-  reconcilePageRoutes(files) // mirror deterministic routes to the paths the pages call
-  integratePageRoutes(files) // QUEEN: rewrite every page fetch to a real route path (global coherence)
-  // BESPOKE shell per product (its own structure/nav), with a minimal fallback.
-  // Auth-gated /app shell only for "accounts" products; public products are open (homepage = product).
-  if (blueprint.kind === "accounts") {
-    ensureAuthPages(config, files) // bespoke login/register so a real user can actually sign in
-    const shell = (await genAppShell(config, brief, blueprint).catch(() => null)) || fallbackShell(blueprint)
-    const si = files.findIndex((f) => f.path === shell.path)
-    if (si >= 0) files[si] = shell; else files.push(shell)
-  }
-  return { files, blueprint }
+  let st = initEngineState()
+  for (let i = 0; i < 300; i++) { const r = await buildAdvance(config, contracts, research || "", reference || "", st); st = r.state; if (r.done) break }
+  return { files: st.files, blueprint: st.blueprint || { kind: "public", tables: [], routes: [], pages: [], nav: [], summary: "" } }
 }

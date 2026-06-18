@@ -14,7 +14,7 @@ import { generateLogoSvg } from "@/lib/logo-gen"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
-import { buildBespokeApp, researchProduct, studyReference } from "@/lib/app-builder"
+import { buildAdvance, initEngineState, researchProduct, studyReference } from "@/lib/app-builder"
 import { stakeholderReview } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
@@ -191,7 +191,7 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
   // lock: the poller and the sweeper must not advance the same job at once
   if (!(await acquireLease(id))) return job
   job = (await getJob(id)) as JobRow
-  const reentrant = job.steps.find((s) => s.status === "running" && s.key === "ci-verify")
+  const reentrant = job.steps.find((s) => s.status === "running" && (s.key === "ci-verify" || s.key === "engine"))
   const step = reentrant || job.steps.find((s) => s.status === "pending")
   if (!step) { job.status = "done"; await persist(job, true); return job }
 
@@ -199,6 +199,31 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
   if (step.key === "ci-verify") {
     try { await handleCiVerify(job, step) } catch (e) { step.status = "done"; step.detail = "CI omitido: " + (e as Error).message.slice(0, 80) }
     if (job.status === "running" && !job.steps.some((s) => s.status === "pending" || (s.status === "running" && s.key === "ci-verify"))) { job.status = "done"; await sendDoneEmail(job) }
+    await persist(job, true)
+    return job
+  }
+
+  // engine is RE-ENTRANT: the full app build is long, so we advance ONE bounded unit
+  // (plan / one route / one page / finalize) per call and resume from persisted state —
+  // this is what makes a real (multi-minute) build COMPLETE on serverless instead of
+  // timing out and shipping an empty spine.
+  if (step.key === "engine") {
+    step.status = "running"; step.startedAt = new Date().toISOString(); job.artifacts = job.artifacts || {}
+    try {
+      const config = job.config || applyBranding(generateConfig(job.answers as IntakeAnswers), job.branding)
+      const state = job.artifacts.engineState || initEngineState()
+      const r = await buildAdvance(config, job.artifacts.contracts || "", job.artifacts.research || "", job.artifacts.reference || "", state)
+      job.artifacts.engineState = r.state
+      step.detail = r.detail
+      if (r.done) {
+        job.artifacts.appFiles = r.state.files
+        job.artifacts.blueprint = r.state.blueprint
+        const main = r.state.files.find((f) => /route\.ts$/.test(f.path)) || r.state.files[0]
+        if (main) job.artifacts.engine = { path: main.path, code: main.content }
+        step.status = "done"
+        step.detail = `${r.state.files.length} archivos · ${r.state.blueprint?.tables.length || 0} tablas · ${r.state.files.filter((f) => /route\.ts$/.test(f.path)).length} rutas · ${r.state.files.filter((f) => /page\.tsx$/.test(f.path)).length} páginas`
+      }
+    } catch (e) { step.detail = "engine (reintenta): " + (e as Error).message.slice(0, 80) } // stays running → next call resumes
     await persist(job, true)
     return job
   }
@@ -268,22 +293,7 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         step.detail = job.artifacts.contracts ? "tipos + contrato de API definidos" : "—"
         break
       }
-      case "engine": {
-        // Bespoke-app generation swarm: Domain Architect → blueprint → Backend +
-        // Frontend swarms emit the REAL pages and API routes for the product's core
-        // journeys. Compilation is verified later by the real CI loop (ci-verify).
-        if (job.config) {
-          const r = await buildBespokeApp(job.config, job.artifacts.contracts || "", job.artifacts.research || "", job.artifacts.reference || "")
-          job.artifacts.appFiles = r.files
-          job.artifacts.blueprint = r.blueprint
-          const main = r.files.find((f) => /route\.ts$/.test(f.path)) || r.files[0]
-          if (main) job.artifacts.engine = { path: main.path, code: main.content }
-          const routes = r.files.filter((f) => /route\.ts$/.test(f.path)).length
-          const pages = r.files.filter((f) => /page\.tsx$/.test(f.path)).length
-          step.detail = `${r.files.length} archivos · ${routes} rutas API · ${pages} pantallas · ${r.blueprint.tables.length} tablas`
-        }
-        break
-      }
+      // "engine" is handled re-entrantly BEFORE the switch (resumable buildAdvance) — never here.
       case "stakeholder": {
         // Governance above the queen bee: the stakeholder routes the finished project to
         // 4 senior specialists (growth/SEO, architecture/security, design/UX, business),
@@ -369,7 +379,7 @@ export async function sweep(): Promise<{ promoted: boolean; advanced: string[]; 
     let changed = false
     for (const s of steps) {
       // ci-verify is re-entrant and legitimately polls real CI for minutes — give it a far longer leash.
-      const timeout = s.key === "ci-verify" ? CI_STEP_TIMEOUT_MS : STEP_TIMEOUT_MS
+      const timeout = (s.key === "ci-verify" || s.key === "engine") ? CI_STEP_TIMEOUT_MS : STEP_TIMEOUT_MS
       if (s.status === "running" && s.startedAt && Date.now() - new Date(s.startedAt).getTime() > timeout) {
         if ((s.attempts || 0) < MAX_ATTEMPTS) { s.status = "pending"; s.detail = "recuperado (estaba trabado)" }
         else { s.status = "error" }
