@@ -495,4 +495,135 @@ export default function Page() {
         setPayload(parsed);
         setResolvedSlug(readText(parsed.statusPage, 'slug', candidate));
         setShowError(true);
-        setLoading(fal
+        setLoading(false);
+        return;
+      } catch (caught: any) {
+        lastMessage = caught instanceof Error ? caught.message : 'The status page API did not return a usable response.';
+      }
+    }
+    setPayload(null);
+    setError(lastMessage);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load(true);
+  }, [load]);
+
+  const data = useMemo(() => payload ?? { statusPage: null, groups: [], components: [], endpoints: [], uptimeDays: [], incidents: [], maintenances: [] }, [payload]);
+  const timezone = readText(data.statusPage, 'timezone', 'UTC');
+  const title = readText(data.statusPage, 'title', 'Status');
+  const logoText = readText(data.statusPage, 'title', 'S').slice(0, 1).toUpperCase() || 'S';
+  const global = deriveGlobalState(data.components, data.endpoints, data.incidents, data.maintenances);
+  const groupedIncidents = groupByDay(data.incidents, timezone);
+  const groupedMaintenances = groupByDay(data.maintenances, timezone);
+
+  if (loading) return <LoadingState />;
+
+  return (
+    <>
+      <Header title={title} logoText={logoText} global={global} onSubscribe={() => setSubscribeOpen(true)} />
+      <SubscribeModal open={subscribeOpen} onClose={() => setSubscribeOpen(false)} slug={resolvedSlug} title={title} components={data.components} />
+      <main className={'mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8'}>
+        {error && showError ? <div className={'mb-6'}><ErrorBanner message={error} onRetry={() => void load(true)} onDismiss={() => setShowError(false)} /></div> : null}
+
+        {!payload || data.components.length === 0 ? (
+          <EmptyState onSubscribe={() => setSubscribeOpen(true)} />
+        ) : (
+          <div className={'space-y-6'}>
+            <section className={'rounded-3xl border border-[#D8E0EE] bg-[#FFFFFF] p-6 shadow-sm sm:p-8'}>
+              <div className={'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'}>
+                <div>
+                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${globalCopy(global).badge}`}><span className={`h-2 w-2 rounded-full ${globalCopy(global).dot}`} />{globalCopy(global).title}</span>
+                  <h1 className={'mt-4 text-3xl font-extrabold tracking-tight text-[#0B1220] sm:text-4xl'}>{title}</h1>
+                  <p className={'mt-3 max-w-3xl text-sm leading-6 text-[#526071] sm:text-base'}>{globalCopy(global).detail}</p>
+                </div>
+                <div className={'rounded-2xl border border-[#D8E0EE] bg-[#F9FBFF] px-4 py-3 text-sm font-medium text-[#526071]'}>
+                  Updated {formatDateTime(new Date().toISOString(), timezone)}
+                </div>
+              </div>
+            </section>
+
+            <section className={'grid gap-4 md:grid-cols-2'}>
+              {data.components.map((component) => (
+                <ComponentCard key={String(component.id ?? readText(component, 'name'))} component={component} endpoints={data.endpoints} uptimeDays={data.uptimeDays} />
+              ))}
+            </section>
+
+            {groupedIncidents.length > 0 ? (
+              <section className={'rounded-3xl border border-[#D8E0EE] bg-[#FFFFFF] p-6 shadow-sm sm:p-8'}>
+                <h2 className={'text-xl font-extrabold tracking-tight text-[#0B1220]'}>Incidents</h2>
+                <div className={'mt-5 space-y-6'}>
+                  {groupedIncidents.map((group) => (
+                    <div key={group.key}>
+                      <h3 className={'text-sm font-bold uppercase tracking-wide text-[#7A8799]'}>{group.key}</h3>
+                      <div className={'mt-3 space-y-3'}>
+                        {group.rows.map((incident) => {
+                          const id = String(incident.id ?? readText(incident, 'name'));
+                          const update = latestUpdate(incident);
+                          const isCollapsed = collapsed[id] ?? true;
+                          return (
+                            <article key={id} className={'rounded-2xl border border-[#D8E0EE] bg-[#F9FBFF] p-4'}>
+                              <div className={'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'}>
+                                <div>
+                                  <div className={'flex flex-wrap items-center gap-2'}>
+                                    <h4 className={'text-base font-bold text-[#0B1220]'}>{readText(incident, 'title', 'Incident')}</h4>
+                                    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${statusChipClass(readText(incident, 'status', 'investigating'))}`}>{statusLabel(readText(incident, 'status', 'investigating'))}</span>
+                                  </div>
+                                  <p className={'mt-1 text-xs font-medium text-[#7A8799]'}>{formatDateTime(readText(incident, 'started_at', readText(incident, 'created_at')), timezone)} · {durationLabel(readText(incident, 'started_at', readText(incident, 'created_at')), readText(incident, 'resolved_at') || undefined)}</p>
+                                </div>
+                                <button onClick={() => setCollapsed((prev) => ({ ...prev, [id]: !isCollapsed }))} className={'min-h-11 rounded-full border border-[#D8E0EE] bg-[#FFFFFF] px-4 text-sm font-semibold text-[#0B1220]'}>{isCollapsed ? 'Expand' : 'Collapse'}</button>
+                              </div>
+                              {!isCollapsed ? (
+                                <div className={'mt-4 space-y-3'}>
+                                  {readText(incident, 'body') ? <p className={'text-sm leading-6 text-[#526071]'}>{readText(incident, 'body')}</p> : null}
+                                  {update ? (
+                                    <div className={'rounded-2xl border border-[#D8E0EE] bg-[#FFFFFF] p-4'}>
+                                      <p className={'text-xs font-bold uppercase tracking-wide text-[#7A8799]'}>Latest update</p>
+                                      <p className={'mt-2 text-sm font-semibold text-[#0B1220]'}>{readText(update, 'status', readText(incident, 'status', 'investigating'))}</p>
+                                      <p className={'mt-1 text-sm leading-6 text-[#526071]'}>{readText(update, 'body', readText(update, 'message'))}</p>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {groupedMaintenances.length > 0 ? (
+              <section className={'rounded-3xl border border-[#D8E0EE] bg-[#FFFFFF] p-6 shadow-sm sm:p-8'}>
+                <h2 className={'text-xl font-extrabold tracking-tight text-[#0B1220]'}>Scheduled maintenance</h2>
+                <div className={'mt-5 space-y-6'}>
+                  {groupedMaintenances.map((group) => (
+                    <div key={group.key}>
+                      <h3 className={'text-sm font-bold uppercase tracking-wide text-[#7A8799]'}>{group.key}</h3>
+                      <div className={'mt-3 space-y-3'}>
+                        {group.rows.map((maintenance) => (
+                          <article key={String(maintenance.id ?? readText(maintenance, 'title'))} className={'rounded-2xl border border-[#D8E0EE] bg-[#F9FBFF] p-4'}>
+                            <div className={'flex flex-wrap items-center gap-2'}>
+                              <h4 className={'text-base font-bold text-[#0B1220]'}>{readText(maintenance, 'title', 'Maintenance')}</h4>
+                              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${statusChipClass(readText(maintenance, 'status', 'scheduled'))}`}>{statusLabel(readText(maintenance, 'status', 'scheduled'))}</span>
+                            </div>
+                            <p className={'mt-1 text-xs font-medium text-[#7A8799]'}>{formatDateTime(readText(maintenance, 'scheduled_start'), timezone)}</p>
+                            {readText(maintenance, 'body') ? <p className={'mt-3 text-sm leading-6 text-[#526071]'}>{readText(maintenance, 'body')}</p> : null}
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        )}
+      </main>
+    </>
+  );
+}
+"
