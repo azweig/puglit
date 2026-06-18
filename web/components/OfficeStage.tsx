@@ -256,61 +256,24 @@ function Confetti() {
   </div>
 }
 
-/* ---- CSS furniture (isometric-ish) ---- */
-const F = "absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+/* ---- furniture (generated pixel-art sprites) ---- */
 const z = (y: number) => Math.round(y) + 10
-function ItDesk({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y + 14, zIndex: z(y) }}>
-    <div className="w-[64px] h-[30px] rounded-[6px] bg-gradient-to-b from-[#7a5c3f] to-[#4a3727] border border-black/40 relative shadow-lg">
-      <div className="absolute left-1/2 -translate-x-1/2 -top-7 w-8 h-6 rounded-[3px] bg-[#0c1322] border border-white/20 overflow-hidden">
-        <div className="mt-1 ml-1 space-y-0.5"><div className="h-0.5 w-4 bg-emerald-400/70" /><div className="h-0.5 w-5 bg-sky-400/60" /><div className="h-0.5 w-3 bg-violet-400/70" /></div>
-      </div>
-      <div className="absolute left-1/2 -translate-x-1/2 top-1 w-7 h-1.5 rounded-sm bg-black/30" />
-    </div>
-  </div>
+function Prop({ src, x, y, w, zi }: { src: string; x: number; y: number; w: number; zi?: number }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={`/sprites/props/${src}.png`} alt="" draggable={false} className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none object-contain" style={{ left: x, top: y, width: w, zIndex: zi ?? z(y) }} />
 }
-function Cubicle({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y + 12, zIndex: z(y) }}>
-    <div className="relative w-[70px] h-[36px]">
-      <div className="absolute inset-x-0 bottom-0 h-[22px] rounded-[5px] bg-gradient-to-b from-[#5a6072] to-[#3a3f4d] border border-black/40" />
-      <div className="absolute left-0 bottom-2 w-2 h-7 rounded-sm bg-[#6b7280]/70" />
-      <div className="absolute right-0 bottom-2 w-2 h-7 rounded-sm bg-[#6b7280]/70" />
-      <div className="absolute left-1/2 -translate-x-1/2 bottom-4 w-7 h-5 rounded-[2px] bg-[#0c1322] border border-white/20" />
-    </div>
-  </div>
-}
-function Easel({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y, zIndex: z(y) }}>
-    <div className="relative w-[52px] h-[58px]">
-      <div className="absolute left-1/2 -translate-x-1/2 top-0 w-9 h-12 rounded-[3px] bg-white border-2 border-[#caa56a] overflow-hidden">
-        <div className="absolute inset-1 bg-gradient-to-br from-rose-400 via-violet-400 to-sky-400 rounded-sm opacity-80" />
-      </div>
-      <div className="absolute left-2 bottom-0 w-1 h-6 bg-[#8a6a3a] rotate-12" />
-      <div className="absolute right-2 bottom-0 w-1 h-6 bg-[#8a6a3a] -rotate-12" />
-    </div>
-  </div>
-}
-function BoardTable({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y, zIndex: 6 }}>
-    <div className="w-[230px] h-[90px] rounded-[18px] bg-gradient-to-b from-[#5a4332] to-[#3a2c20] border border-black/40 shadow-xl" />
-  </div>
-}
+function ItDesk({ x, y }: { x: number; y: number }) { return <Prop src="it-desk" x={x} y={y + 6} w={78} /> }
+function Cubicle({ x, y }: { x: number; y: number }) { return <Prop src="cubicle" x={x} y={y + 4} w={84} /> }
+function Easel({ x, y }: { x: number; y: number }) { return <Prop src="easel" x={x} y={y} w={72} /> }
+function BoardTable({ x, y }: { x: number; y: number }) { return <Prop src="boardroom-table" x={x} y={y} w={248} zi={6} /> }
 function Screen({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y, zIndex: 4 }}>
-    <div className="w-[200px] h-[74px] rounded-md bg-[#0e1322] border border-white/20 grid place-items-center">
-      <span className="text-[10px] font-extrabold tracking-widest text-white/55">STAKEHOLDER ROADMAP</span>
-    </div>
+  return <div className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none" style={{ left: x, top: y, width: 150, zIndex: 4 }}>
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img src="/sprites/props/projector-screen.png" alt="" draggable={false} className="w-full object-contain" />
+    <span className="absolute left-1/2 top-[2px] -translate-x-1/2 text-[8px] font-extrabold tracking-widest text-white/60 whitespace-nowrap">STAKEHOLDER ROADMAP</span>
   </div>
 }
-function Chair({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y + 12, zIndex: z(y) }}><div className="w-7 h-4 rounded-md bg-[#2b3142] border border-black/40" /></div>
-}
-function Sofa({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y, zIndex: z(y) }}><div className="w-[84px] h-[30px] rounded-xl bg-gradient-to-b from-[#7a5a3a] to-[#54402a] border border-black/40 shadow-lg" /></div>
-}
-function Coffee({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y, zIndex: z(y) }}><div className="w-9 h-9 rounded-lg bg-[#2a2f3c] border border-black/40 grid place-items-center text-base">☕</div></div>
-}
-function Plant({ x, y }: { x: number; y: number }) {
-  return <div className={F} style={{ left: x, top: y, zIndex: z(y) }}><div className="text-2xl">🪴</div></div>
-}
+function Chair({ x, y }: { x: number; y: number }) { return <Prop src="chair" x={x} y={y + 4} w={34} /> }
+function Sofa({ x, y }: { x: number; y: number }) { return <Prop src="sofa" x={x} y={y} w={96} /> }
+function Coffee({ x, y }: { x: number; y: number }) { return <Prop src="coffee-station" x={x} y={y} w={54} /> }
+function Plant({ x, y }: { x: number; y: number }) { return <Prop src="plant" x={x} y={y} w={46} /> }
