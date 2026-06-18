@@ -65,9 +65,14 @@ export async function saveProject(input: {
   answers: Record<string, unknown>; config: DomainConfig; landingHtml?: string | null
 }): Promise<void> {
   await ensureSchema()
+  // Idempotent: deliver can re-run (re-entrant pipeline) and a slug may already exist —
+  // upsert instead of crashing the whole build on a duplicate-key violation.
   await pool().query(
     `INSERT INTO puglit_projects (slug, email, name, answers, config, landing_html)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (slug) DO UPDATE SET
+       email = EXCLUDED.email, name = EXCLUDED.name, answers = EXCLUDED.answers,
+       config = EXCLUDED.config, landing_html = EXCLUDED.landing_html`,
     [input.slug, input.email, input.name, JSON.stringify(input.answers), JSON.stringify(input.config), input.landingHtml || null]
   )
 }
