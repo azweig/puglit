@@ -1,0 +1,170 @@
+/**
+ * Puglit web — stakeholder.ts
+ * The governance layer ABOVE the queen bee (the assembler). When the swarm finishes a
+ * project, the STAKEHOLDER takes the whole thing and routes it to four senior specialists,
+ * each reviewing the flows that concern them with honest, constructive, realistic feedback:
+ *   1. Growth — SEO & Analytics
+ *   2. Architecture — Security & Engineering
+ *   3. Design — Brand & UX/UI
+ *   4. Business — Pricing & Finance
+ * The stakeholder aggregates their findings, hands them back to the queen (a fixer that
+ * rewrites the flagged files), and repeats. A project must survive THREE supervision rounds
+ * (or until the panel has no actionable findings left) before it can reach the user.
+ *
+ * Model-agnostic: every call goes through the provider-agnostic client (lib/openai), so the
+ * "brain" behind each specialist is swappable (OpenAI today, self-hosted Gemma/DeepSeek next).
+ */
+import { chatJSON, MODELS } from "@/lib/openai"
+import type { AppFile, Blueprint } from "@/lib/app-builder"
+import type { DomainConfig } from "@/lib/domain-types"
+
+export interface Finding {
+  severity: "BLOCKING" | "IMPROVE"
+  area: string
+  file: string | null
+  issue: string
+  fix: string
+}
+export interface SpecialistReport { specialist: string; summary: string; findings: Finding[] }
+export interface RoundReport { round: number; reports: SpecialistReport[]; filesFixed: string[] }
+export interface StakeholderReport { rounds: RoundReport[]; passed: boolean }
+
+const SPECIALISTS: { id: string; role: string; brief: string }[] = [
+  {
+    id: "growth",
+    role: "Growth, SEO & Analytics Lead",
+    brief: `Judge the product for ORGANIC GROWTH and MEASURABILITY. Check: page <title>/meta description are specific & keyword-rich and match what the product ACTUALLY is (no stale/wrong scope); semantic HTML (one h1, real headings) & crawlable content; internal linking between key surfaces; shareable/OG basics; the funnel is instrumented (key events tracked); copy speaks to the real audience & search intent; loading is not blocked behind JS for the core content. Flag stale/misleading metadata, thin pages, dead-end navigation, untracked funnels.`,
+  },
+  {
+    id: "architecture",
+    role: "Architecture, Security & Engineering Lead",
+    brief: `Judge CORRECTNESS, SECURITY and DATA INTEGRITY. Check: every API query references columns that exist; per-user/private data is auth-scoped (no cross-user leakage) and public data is intentionally public; parameterized SQL only; multi-row mutations are atomic (transactions); list endpoints return bare arrays the UI expects; the data model supports the real feature set (foreign keys, the right dimensions — e.g. a "scores" app needs league/country linkage, not orphan tables); no secrets in client code; sane status codes; pagination on growable lists. Flag missing scoping, schema/route mismatches, non-atomic writes, broken joins, model gaps that make a core feature impossible.`,
+  },
+  {
+    id: "design",
+    role: "Design, Brand & UX/UI Lead",
+    brief: `Judge VISUAL QUALITY and UX like a top product studio. Check: AA contrast everywhere (no text on a same/near color — the classic invisible-text bug); the brand palette is actually applied (not random hardcoded hexes that clash); a clear type hierarchy & spacing rhythm; loading/empty/error/populated states all designed; interactive elements have hover/active/focus states; responsive on mobile AND desktop; the layout fits the product (not a generic centered admin column); navigation is obvious and consistent across screens. Flag clashing/off-brand colors, low contrast, generic layouts, missing states, inconsistent chrome.`,
+  },
+  {
+    id: "business",
+    role: "Business, Pricing & Finance Lead",
+    brief: `Judge VIABILITY and the MONEY PATH. Check: the monetization model is coherent and actually wired where it should be (gating/paywall/ads placement/checkout) or, if free, that the value & retention loop is clear; pricing/plans are legible to the user; trust signals (who's behind it, terms) exist where money or accounts are involved; the core value is reachable fast (low friction to the "aha"); the product matches the stated audience & market. Flag a missing/contradictory money path, friction before value, absent trust/legal basics, audience mismatch.`,
+  },
+]
+
+/** Build a bounded project digest the specialists review: the file tree + the content of
+ *  the surfaces that matter (pages, routes, schema, config), each truncated. */
+function digest(files: AppFile[], blueprint: Blueprint, config: DomainConfig): string {
+  const tree = files.map((f) => f.path).sort().join("\n")
+  const pick = (re: RegExp, cap: number, max: number) =>
+    files.filter((f) => re.test(f.path)).slice(0, max)
+      .map((f) => `\n----- ${f.path} -----\n${f.content.slice(0, cap)}`).join("\n")
+  const pages = pick(/\/page\.tsx$|layout\.tsx$/, 2600, 8)
+  const routes = pick(/\/route\.ts$/, 1600, 8)
+  const sql = pick(/\.sql$/, 1800, 3)
+  const cfg = files.filter((f) => /domain\.config/.test(f.path)).map((f) => `\n----- ${f.path} -----\n${f.content.slice(0, 1200)}`).join("")
+  return `PRODUCT: ${config.identity.name} — ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}
+KIND: ${blueprint.kind} | brand: ${config.identity.brandColor}
+SUMMARY: ${blueprint.summary}
+
+FILE TREE:
+${tree}
+
+KEY FILES (truncated):
+${cfg}${sql}${routes}${pages}`
+}
+
+async function specialistReview(spec: { id: string; role: string; brief: string }, dig: string): Promise<SpecialistReport> {
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are the ${spec.role} on a product review board. A multi-agent swarm just built this project; the stakeholder is asking you for an HONEST, CONSTRUCTIVE, REALISTIC review of the flows you own — not flattery, not nitpicks. ${spec.brief}
+
+Be concrete and actionable: each finding must name the real file (from the tree) and a precise fix the engineer can apply. Mark severity BLOCKING (the product is wrong/broken/embarrassing without it) vs IMPROVE (clearly better with it). Only report what genuinely matters; an excellent area gets few or no findings. Do NOT invent files that aren't in the tree.
+
+Return ONLY JSON: {"summary":"one-line verdict","findings":[{"severity":"BLOCKING"|"IMPROVE","area":"${spec.id}","file":"path or null","issue":"what's wrong","fix":"exact change"}]}` },
+      { role: "user", content: dig },
+    ], { model: MODELS.premium, temperature: 0.2 })) as { summary?: string; findings?: Finding[] }
+    const findings = (Array.isArray(out.findings) ? out.findings : [])
+      .filter((f) => f?.issue && f?.fix)
+      .map((f) => ({ severity: f.severity === "BLOCKING" ? "BLOCKING" : "IMPROVE", area: spec.id, file: f.file ?? null, issue: String(f.issue), fix: String(f.fix) } as Finding))
+    return { specialist: spec.role, summary: String(out.summary || ""), findings }
+  } catch {
+    return { specialist: spec.role, summary: "(review unavailable)", findings: [] }
+  }
+}
+
+/** Queen/fixer: rewrite ONE file applying the panel's findings for it, preserving behavior
+ *  and compilation. Light TSX sanitation keeps the App-Router invariants intact. */
+async function applyFindings(file: AppFile, findings: Finding[]): Promise<AppFile> {
+  const isTsx = file.path.endsWith(".tsx")
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are the Integrator (the queen bee) applying a review board's findings to ONE file. Apply EVERY listed fix precisely, WITHOUT changing unrelated behavior, data wiring or imports, and WITHOUT breaking \`tsc --noEmit\`. Keep the same framework conventions (Next.js 16 App Router, Tailwind, the spine's @/lib/* — no new npm deps).${isTsx ? ' If it is a client component keep "use client" as the very first line; read dynamic params with useParams(); never nest <a> in <Link>.' : ""}
+Return ONLY JSON {"code":"<full corrected contents of ${file.path}>"}.` },
+      { role: "user", content: `FINDINGS FOR ${file.path}:\n${findings.map((f) => `- [${f.severity}] ${f.issue} → ${f.fix}`).join("\n")}\n\nCURRENT FILE:\n${file.content}` },
+    ], { model: MODELS.premium, temperature: 0.2 })) as { code?: string }
+    let code = out.code && out.code.length > 80 ? String(out.code).slice(0, 30_000) : file.content
+    if (isTsx) {
+      // keep the App-Router invariants the deterministic backstops enforce
+      code = code.replace(/from\s+["']next\/router["']/g, 'from "next/navigation"')
+        .replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {")
+        .replace(/^[ \t]*use (client|server)[ \t]*;?[ \t]*$/gm, "")
+      const hadDirective = /(?:^|\n)[ \t]*["']use client["']/.test(out.code || "") || /\b(useState|useEffect|useRouter|usePathname)\b/.test(code)
+      code = code.replace(/(?:^|\n)[ \t]*["']use client["'][ \t]*;?[ \t]*/g, "\n").replace(/^\s+/, "")
+      if (hadDirective) code = '"use client";\n' + code
+    }
+    return { path: file.path, content: code }
+  } catch {
+    return file
+  }
+}
+
+/** Run the full stakeholder review: up to `rounds` supervision passes by the 4-specialist
+ *  panel, applying the queen's fixes each round, stopping early when the panel is satisfied. */
+export async function stakeholderReview(
+  files: AppFile[],
+  config: DomainConfig,
+  blueprint: Blueprint,
+  opts?: { rounds?: number; onProgress?: (msg: string) => void },
+): Promise<{ files: AppFile[]; report: StakeholderReport }> {
+  const rounds = opts?.rounds ?? 3
+  const log = opts?.onProgress ?? (() => {})
+  const report: StakeholderReport = { rounds: [], passed: false }
+  let current = files
+
+  for (let round = 1; round <= rounds; round++) {
+    const dig = digest(current, blueprint, config)
+    log(`stakeholder ronda ${round}/${rounds}: revisando con 4 especialistas…`)
+    const reports = await Promise.all(SPECIALISTS.map((s) => specialistReview(s, dig)))
+    const all = reports.flatMap((r) => r.findings)
+    // Act on every BLOCKING + a bounded set of IMPROVEs, grouped per real file.
+    const actionable = all.filter((f) => f.file && current.some((cf) => cf.path === f.file))
+    const blocking = actionable.filter((f) => f.severity === "BLOCKING")
+    const improves = actionable.filter((f) => f.severity === "IMPROVE")
+    const toFix = [...blocking, ...improves.slice(0, Math.max(0, 12 - blocking.length))]
+
+    if (toFix.length === 0) {
+      report.rounds.push({ round, reports, filesFixed: [] })
+      report.passed = true
+      log(`stakeholder ronda ${round}: sin hallazgos accionables — aprobado`)
+      break
+    }
+
+    const byFile = new Map<string, Finding[]>()
+    for (const f of toFix) (byFile.get(f.file!) ?? byFile.set(f.file!, []).get(f.file!)!).push(f)
+    const fixedPaths: string[] = []
+    const updates = await Promise.all(
+      Array.from(byFile.entries()).map(async ([path, fs]) => {
+        const cf = current.find((c) => c.path === path)!
+        const nf = await applyFindings(cf, fs)
+        if (nf.content !== cf.content) fixedPaths.push(path)
+        return nf
+      }),
+    )
+    current = current.map((c) => updates.find((u) => u.path === c.path) || c)
+    report.rounds.push({ round, reports, filesFixed: fixedPaths })
+    log(`stakeholder ronda ${round}: ${blocking.length} blocking + ${improves.length} mejoras → ${fixedPaths.length} archivos corregidos`)
+  }
+
+  return { files: current, report }
+}

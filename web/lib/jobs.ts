@@ -15,6 +15,7 @@ import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
 import { buildBespokeApp } from "@/lib/app-builder"
+import { stakeholderReview } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
 import { dispatchCi, latestRun, getRun, runErrors, fixFiles, type CiError } from "@/lib/ci"
@@ -54,6 +55,7 @@ const PLAN: { key: string; label: string }[] = [
   { key: "seo", label: "SEO · metadata + sitemap (scaffold)" },
   { key: "security", label: "Seguridad · RLS, rate-limit, headers (spine)" },
   { key: "engine", label: "Engine · lógica única del producto (plan)" },
+  { key: "stakeholder", label: "Stakeholder · 4 especialistas × 3 supervisiones" },
   { key: "docs-tech", label: "Technical Writer · docs técnica + UML" },
   { key: "docs-biz", label: "Business Strategist · FODA, Lean, pitch deck (YC)" },
   { key: "env", label: "DevOps · .env + integraciones" },
@@ -266,6 +268,24 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
           const routes = r.files.filter((f) => /route\.ts$/.test(f.path)).length
           const pages = r.files.filter((f) => /page\.tsx$/.test(f.path)).length
           step.detail = `${r.files.length} archivos · ${routes} rutas API · ${pages} pantallas · ${r.blueprint.tables.length} tablas`
+        }
+        break
+      }
+      case "stakeholder": {
+        // Governance above the queen bee: the stakeholder routes the finished project to
+        // 4 senior specialists (growth/SEO, architecture/security, design/UX, business),
+        // collects honest feedback, and the queen applies fixes — for up to 3 supervisions.
+        if (job.config && job.artifacts.appFiles && job.artifacts.blueprint) {
+          const { files, report } = await stakeholderReview(
+            job.artifacts.appFiles, job.config, job.artifacts.blueprint,
+            { rounds: 3, onProgress: (m) => { step.detail = m } },
+          )
+          job.artifacts.appFiles = files
+          job.artifacts.stakeholderReport = report
+          const fixed = report.rounds.reduce((n, r) => n + r.filesFixed.length, 0)
+          step.detail = `${report.rounds.length} supervisiones · ${fixed} archivos mejorados${report.passed ? " · aprobado" : ""}`
+        } else {
+          step.detail = "—"
         }
         break
       }

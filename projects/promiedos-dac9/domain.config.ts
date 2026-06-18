@@ -23,7 +23,7 @@ const config: DomainConfig = {
     "hero": {
       "headline": "Partidos de hoy y en vivo por torneo",
       "ctaPrimary": "Empezar gratis",
-      "subheadline": "Clon de Promiedos: fútbol argentino en vivo — partidos del día minuto a minuto, fixtures por fecha, tablas de posiciones por torneo, goleadores y resultados históricos. Datos scrapeados y actualizados por cron.",
+      "subheadline": "Resultados de fútbol en vivo de las grandes ligas — Argentina, Brasil, Inglaterra, España, Italia y la Copa Libertadores — minuto a minuto, con tablas y goleadores por torneo.",
       "ctaSecondary": "Ver precios"
     },
     "finalCta": {
@@ -193,7 +193,7 @@ const config: DomainConfig = {
         "label": "success"
       }
     ],
-    "tagline": "Clon de Promiedos: fútbol argentino en vivo — partidos del día minuto a minuto, fixtures por fecha, tablas de posiciones por torneo, goleadores y resultados históricos. Datos scrapeados y actualizados por cron.",
+    "tagline": "Resultados de fútbol en vivo — Argentina, Brasil, Inglaterra, España, Italia y Copa Libertadores. Partidos minuto a minuto, fixtures, tablas de posiciones y goleadores por torneo, actualizados al instante.",
     "languages": [
       "es"
     ],

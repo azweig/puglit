@@ -2,9 +2,10 @@
   "$comment": "Puglit's agent network. 'wired' = actually runs in the current build pipeline (true) vs declared-but-not-yet-connected (false). 'model' = the tier each agent uses (premium=deep reasoning/design/code, balanced=standard structured gen, cheap=mechanical). Tiers resolve in lib/openai.ts (MODELS) and are env-overridable (PUGLIT_MODEL_PREMIUM/BALANCED/CHEAP). New agents are appended here at runtime when a capability is missing, then committed so future builds inherit them; build feedback updates an agent's prompt/qualityNotes over time.",
   "version": 2,
   "models": {
-    "premium": "gpt-4.1 — architecture, visual design, page/route code, discovery",
-    "balanced": "gpt-4o — specs, critics, seeds, fixers",
-    "cheap": "gpt-4.1-mini — extraction, normalization"
+    "$note": "Provider-agnostic (lib/openai routes through OPENAI_BASE_URL — OpenAI today, self-hosted Gemma/DeepSeek next). Defaults track OpenAI's current frontier; GPT-4 family is legacy.",
+    "premium": "gpt-5.5 — architecture, visual design, page/route code, discovery, stakeholder review",
+    "balanced": "gpt-5.4 — specs, critics, seeds, fixers",
+    "cheap": "gpt-5.4-mini — extraction, normalization"
   },
   "agents": [
     {
@@ -134,6 +135,51 @@
       "model": "balanced",
       "location": "lib/ci.ts",
       "purpose": "Reads real tsc errors from GitHub Actions and applies minimal surgical fixes (no external deps; spine equivalents; App-Router params)."
+    },
+    {
+      "id": "stakeholder",
+      "role": "Stakeholder (governance, above the queen bee)",
+      "phase": "review",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/stakeholder.ts · stakeholderReview (step 'stakeholder' in jobs.ts)",
+      "purpose": "After the queen bee assembles the project, routes it to the 4 specialists, aggregates their honest feedback, hands fixes to the queen, and repeats for up to 3 supervision rounds before the project can reach the user."
+    },
+    {
+      "id": "specialist-growth",
+      "role": "Growth, SEO & Analytics Lead",
+      "phase": "review",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/stakeholder.ts · SPECIALISTS[growth]",
+      "purpose": "Reviews organic-growth + measurability flows: title/meta accuracy & keywords, semantic HTML, internal linking, OG, funnel instrumentation, search-intent copy."
+    },
+    {
+      "id": "specialist-architecture",
+      "role": "Architecture, Security & Engineering Lead",
+      "phase": "review",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/stakeholder.ts · SPECIALISTS[architecture]",
+      "purpose": "Reviews correctness/security/data-integrity: auth scoping, parameterized + atomic SQL, schema↔route conformance, model gaps that make a feature impossible, status codes, pagination."
+    },
+    {
+      "id": "specialist-design",
+      "role": "Design, Brand & UX/UI Lead",
+      "phase": "review",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/stakeholder.ts · SPECIALISTS[design]",
+      "purpose": "Reviews visual quality/UX: AA contrast, brand palette actually applied (no clashing hardcoded hexes), type/spacing hierarchy, all view-states, hover/focus, responsive, layout fit, consistent chrome."
+    },
+    {
+      "id": "specialist-business",
+      "role": "Business, Pricing & Finance Lead",
+      "phase": "review",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/stakeholder.ts · SPECIALISTS[business]",
+      "purpose": "Reviews viability + money path: monetization coherence & wiring (gating/checkout/ads) or value/retention loop if free, legible pricing, trust/legal basics, low friction to value, audience-market fit."
     },
     {
       "id": "researcher",
