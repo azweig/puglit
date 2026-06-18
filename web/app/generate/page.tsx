@@ -53,8 +53,9 @@ function avgColor(dataURL: string): Promise<string> {
 
 export default function Generate() {
   const router = useRouter()
-  const [phase, setPhase] = useState<"name" | "chat" | "spec" | "designs" | "saving">("name")
+  const [phase, setPhase] = useState<"name" | "chat" | "analyzing" | "spec" | "designs" | "saving">("name")
   const [designs, setDesigns] = useState<string[]>([])
+  const [analyze, setAnalyze] = useState<{ label: string; status: "pending" | "running" | "done" }[]>([])
   const [spec, setSpec] = useState<Record<string, any> | null>(null)
   const [pendingAnswers, setPendingAnswers] = useState<Record<string, unknown>>({})
   const [history, setHistory] = useState<{ messages: Msg[]; step: Step | null; log: Entry[] }[]>([])
@@ -93,14 +94,27 @@ export default function Generate() {
     } catch { setErr("Network error.") } finally { setBusy(false) }
   }
 
-  // After the interview (or "finish now"): produce the diagnosis, don't build yet.
+  // After the interview (or "finish now"): run the ANALYSIS (spec + identity + 2 designs)
+  // with a visible checklist, then show the full diagnosis. Nothing is built yet.
+  const ANALYZE_LABELS = ["Analizando tus respuestas", "Definiendo identidad (logo + paleta)", "Diseñando 2 propuestas visuales"]
   async function produceSpec(answers: Record<string, unknown>, msgs: Msg[]) {
     setPendingAnswers(answers)
+    setPhase("analyzing")
+    const upd = (states: ("pending" | "running" | "done")[]) => setAnalyze(ANALYZE_LABELS.map((l, i) => ({ label: l, status: states[i] })))
+    upd(["running", "pending", "pending"])
     try {
       const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: name }) })
       const sd = await sr.json()
-      if (sr.ok && sd.ok) { setSpec(sd.spec); setPhase("spec") }
-      else { await finalize(answers) }
+      if (!(sr.ok && sd.ok)) { await finalize(answers); return }
+      setSpec(sd.spec)
+      upd(["done", "done", "running"])
+      try {
+        const dr = await fetch("/api/designs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, branding: sd.spec?.branding }) })
+        const dd = await dr.json()
+        if (dr.ok && dd.ok && dd.designs?.length) setDesigns(dd.designs)
+      } catch { /* designs optional — spec still shows */ }
+      upd(["done", "done", "done"])
+      setPhase("spec")
     } catch { await finalize(answers) }
   }
 
@@ -236,6 +250,28 @@ export default function Generate() {
     )
   }
 
+  if (phase === "analyzing") {
+    return (
+      <main className="max-w-md mx-auto px-5 py-24">
+        <Link href="/" className="flex items-center gap-2 text-violet-bright mb-10 justify-center"><Mark size={26} /><span className="font-extrabold text-white">Puglit</span></Link>
+        <div className="text-center mb-8">
+          <div className="inline-grid place-items-center w-14 h-14 rounded-2xl bg-violet/20 border border-violet/30 mb-4 ag-working"><Mark size={30} /></div>
+          <h1 className="text-2xl font-extrabold">Analizando {name}…</h1>
+          <p className="text-white/55 mt-2 text-sm">Estoy estudiando tus respuestas y preparando el diagnóstico + 2 diseños.</p>
+        </div>
+        <div className="space-y-2.5">
+          {analyze.map((a, i) => (
+            <div key={i} className={`flex items-center gap-3 rounded-xl border p-3.5 transition-colors ${a.status === "running" ? "border-violet/50 bg-violet/10" : a.status === "done" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10 bg-ink2"}`}>
+              <span className="w-5 text-center">{a.status === "done" ? "✅" : a.status === "running" ? <span className="inline-block animate-spin">◌</span> : <span className="text-white/25">○</span>}</span>
+              <span className={`text-sm font-semibold ${a.status === "pending" ? "text-white/40" : "text-white"}`}>{a.label}</span>
+            </div>
+          ))}
+        </div>
+        {err && <p className="text-red-400 text-sm mt-4 text-center">{err}</p>}
+      </main>
+    )
+  }
+
   if (phase === "designs") {
     return (
       <main className="max-w-5xl mx-auto px-5 py-12">
@@ -342,10 +378,27 @@ export default function Generate() {
           {spec.openQuestions?.length ? <Sec title="Open questions"><List items={spec.openQuestions} /></Sec> : null}
         </div>
 
+        {/* the 2 design proposals, generated during the analysis */}
+        {designs.length > 0 && (
+          <div className="mt-7">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-violet-bright mb-1">2 propuestas de diseño</h3>
+            <p className="text-white/55 text-sm mb-3">Elegí con cuál desarrollamos — la convertimos en la app completa.</p>
+            <div className="grid md:grid-cols-2 gap-4">
+              {designs.map((html, i) => (
+                <div key={i} className="rounded-2xl border border-white/10 bg-ink2 overflow-hidden flex flex-col">
+                  <div className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-violet-bright border-b border-white/10">Opción {i + 1}</div>
+                  <iframe srcDoc={html} sandbox="allow-same-origin" className="w-full h-[360px] bg-white border-0" title={`Opción ${i + 1}`} />
+                  <button onClick={() => startBuild(html)} className="m-3 py-2.5 rounded-lg font-bold text-white" style={{ background: "var(--violet)" }}>Desarrollar con esta →</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {err && <p className="text-red-400 text-sm mt-4">{err}</p>}
-        <div className="flex gap-3 mt-6">
-          <button onClick={startDesigns} className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Ver 2 opciones de diseño →</button>
-          <button onClick={() => { setSpec(null); setPhase("chat") }} className="px-6 py-3 rounded-xl font-semibold text-white/70 border border-white/15">Keep refining</button>
+        <div className="flex flex-wrap gap-3 mt-7">
+          {designs.length === 0 && <button onClick={() => startBuild()} className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Empezar a desarrollar →</button>}
+          <button onClick={() => { setPhase("chat") }} className="px-6 py-3 rounded-xl font-semibold text-white/70 border border-white/15">Agregar más info</button>
         </div>
       </main>
     )

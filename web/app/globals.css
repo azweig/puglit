@@ -24,3 +24,19 @@ body { background: var(--ink); color: #EDEAF6; -webkit-font-smoothing: antialias
     linear-gradient(to bottom, rgba(124,58,237,.06) 1px, transparent 1px);
   background-size: 46px 46px;
 }
+
+/* --- swarm visualization animations --- */
+@keyframes swarm-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+@keyframes swarm-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(124,58,237,.55); }
+  70% { box-shadow: 0 0 0 10px rgba(124,58,237,0); }
+  100% { box-shadow: 0 0 0 0 rgba(124,58,237,0); }
+}
+@keyframes swarm-glow { 0%,100% { opacity: .5 } 50% { opacity: 1 } }
+@keyframes swarm-dash { to { stroke-dashoffset: -16; } }
+@keyframes swarm-pop { 0% { transform: scale(.6); opacity: 0 } 60% { transform: scale(1.12) } 100% { transform: scale(1); opacity: 1 } }
+.ag-working { animation: swarm-float 2.2s ease-in-out infinite; }
+.ag-working .ag-dot { animation: swarm-pulse-ring 1.4s infinite; }
+.ag-pop { animation: swarm-pop .35s ease-out both; }
+.glow-bar { animation: swarm-glow 1.6s ease-in-out infinite; }
+.dash-line { stroke-dasharray: 4 4; animation: swarm-dash .6s linear infinite; }
