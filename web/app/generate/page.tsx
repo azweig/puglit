@@ -208,6 +208,9 @@ export default function Generate() {
   // Kick off the multi-agent build job and go to the live progress URL.
   async function startBuild(landingHtml?: string) {
     setErr("")
+    // demo flow: don't create a real job (the heavy pipeline) — go to the simulated build
+    // so the office/flow screens can be reviewed end-to-end.
+    if (demoFired.current) { router.push("/build/demo?demo=1"); return }
     try {
       const r = await fetch("/api/job/create", {
         method: "POST", headers: { "Content-Type": "application/json" },

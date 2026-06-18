@@ -22,7 +22,32 @@ export default function BuildPage() {
   const [err, setErr] = useState("")
   const running = useRef(false)
 
+  const demo = typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("demo") === "1" || id === "demo")
+
+  // DEMO: simulate the whole pipeline on a timer so the office/flow animate end-to-end
+  // (no real job, no OpenAI cost) — for reviewing the screens after the questionnaire.
   useEffect(() => {
+    if (!demo) return
+    let cancelled = false
+    const KEYS = ["data-model", "research", "contracts", "brand", "design", "schema", "seed", "erd", "auth", "payments", "email", "crons", "admin", "dashboard", "analytics", "seo", "security", "engine", "stakeholder", "docs-tech", "docs-biz", "env", "deliver", "ci-verify"]
+    const LABELS: Record<string, string> = { "data-model": "Arquitecto · modelo de datos", research: "Researcher · fuentes de datos reales", contracts: "Contracts · tipos + contrato de API", brand: "Marca · logo + paleta", design: "Diseño · landing", schema: "DBA · esquema SQL", seed: "DBA · datos de ejemplo", erd: "Arquitecto · diagrama ER", auth: "Auth · cuentas + JWT", payments: "Pagos · Stripe + gating", email: "Email · Resend", crons: "Crons · fire-and-forget", admin: "Admin · panel", dashboard: "Frontend · dashboard", analytics: "Analytics · funnels", seo: "SEO · metadata", security: "Seguridad · RLS + headers", engine: "Engine · lógica única del producto", stakeholder: "Stakeholder · 4 especialistas ×3", "docs-tech": "Technical Writer · docs", "docs-biz": "Business · FODA + pitch", env: "DevOps · .env", deliver: "DevOps · push a GitHub", "ci-verify": "QA · compilación real (CI)" }
+    const det = (k: string) => ({ "data-model": "diseñando entidades y relaciones…", research: "buscando fuentes/API reales…", engine: "escribiendo la lógica única…", "ci-verify": "compilando con tsc en CI…" } as Record<string, string>)[k] || "trabajando…"
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    const base: Step[] = KEYS.map((k) => ({ key: k, label: LABELS[k], status: "pending" }))
+    setJob({ status: "running", name: "Mesa (demo)", steps: base })
+    ;(async () => {
+      for (let i = 0; i < KEYS.length && !cancelled; i++) {
+        setJob((j) => j && ({ ...j, status: "running", steps: j.steps.map((s, idx) => ({ ...s, status: idx < i ? "done" : idx === i ? "running" : "pending", detail: idx === i ? det(s.key) : s.detail })) }))
+        if (KEYS[i] === "stakeholder") { for (const r of [1, 2, 3]) { await sleep(1500); if (cancelled) return; setJob((j) => j && ({ ...j, steps: j.steps.map((s) => s.key === "stakeholder" ? { ...s, detail: `ronda ${r}/3 · 5 especialistas revisando` } : s) })) } }
+        else await sleep(1200)
+      }
+      if (!cancelled) setJob((j) => j && ({ ...j, status: "done", steps: j.steps.map((s) => ({ ...s, status: "done" })) }))
+    })()
+    return () => { cancelled = true }
+  }, [id, demo])
+
+  useEffect(() => {
+    if (demo) return
     let stop = false
     async function tick() {
       if (running.current) return
@@ -37,13 +62,14 @@ export default function BuildPage() {
     }
     tick()
     return () => { stop = true }
-  }, [id])
+  }, [id, demo])
 
   useEffect(() => {
+    if (demo) return
     if (job?.status === "done" && !art) {
       fetch(`/api/job/${id}`).then((r) => r.json()).then((d) => d.ok && setArt({ sql: d.sql, erd: d.erd, engine: d.engine, findings: d.findings, ciGreen: d.ciGreen, ciErrors: d.ciErrors })).catch(() => {})
     }
-  }, [job?.status, art, id])
+  }, [job?.status, art, id, demo])
 
   const done = job?.status === "done"
   const b64 = (s: string) => { try { return btoa(unescape(encodeURIComponent(s))) } catch { return "" } }

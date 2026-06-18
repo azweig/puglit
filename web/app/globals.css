@@ -48,3 +48,12 @@ body { background: var(--ink); color: #EDEAF6; -webkit-font-smoothing: antialias
   background-size: 8px 100%;
   animation: dash-flow-move .5s linear infinite;
 }
+
+/* office idle life + furniture */
+@keyframes idle-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-2px) } }
+.ag-idle { animation: idle-bob 3.2s ease-in-out infinite; }
+.iso-floor {
+  background-image:
+    repeating-linear-gradient(60deg, rgba(255,255,255,.035) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(-60deg, rgba(255,255,255,.035) 0 1px, transparent 1px 26px);
+}
