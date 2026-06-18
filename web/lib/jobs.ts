@@ -15,7 +15,7 @@ import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
 import { buildAdvance, initEngineState, researchProduct, studyReference } from "@/lib/app-builder"
-import { stakeholderReview } from "@/lib/stakeholder"
+import { stakeholderAdvance, initStakeholderState } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
 import { dispatchCi, latestRun, getRun, runErrors, fixFiles, type CiError } from "@/lib/ci"
@@ -191,7 +191,7 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
   // lock: the poller and the sweeper must not advance the same job at once
   if (!(await acquireLease(id))) return job
   job = (await getJob(id)) as JobRow
-  const reentrant = job.steps.find((s) => s.status === "running" && (s.key === "ci-verify" || s.key === "engine"))
+  const reentrant = job.steps.find((s) => s.status === "running" && (s.key === "ci-verify" || s.key === "engine" || s.key === "stakeholder"))
   const step = reentrant || job.steps.find((s) => s.status === "pending")
   if (!step) { job.status = "done"; await persist(job, true); return job }
 
@@ -224,6 +224,31 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         step.detail = `${r.state.files.length} archivos · ${r.state.blueprint?.tables.length || 0} tablas · ${r.state.files.filter((f) => /route\.ts$/.test(f.path)).length} rutas · ${r.state.files.filter((f) => /page\.tsx$/.test(f.path)).length} páginas`
       }
     } catch (e) { step.detail = "engine (reintenta): " + (e as Error).message.slice(0, 80) } // stays running → next call resumes
+    await persist(job, true)
+    return job
+  }
+
+  // stakeholder is RE-ENTRANT for the same reason: the governance layer (3 supervisions ×
+  // 5 specialists + the queen's fixers) is multi-minute, so we advance ONE bounded wave
+  // (one review batch OR one fix batch) per call and resume from persisted state. This is
+  // what makes the 3-iteration review actually COMPLETE on serverless instead of timing out.
+  if (step.key === "stakeholder") {
+    step.status = "running"; step.startedAt = new Date().toISOString(); job.artifacts = job.artifacts || {}
+    try {
+      if (job.config && job.artifacts.appFiles && job.artifacts.blueprint) {
+        const state = job.artifacts.stakeholderState || initStakeholderState(3)
+        const r = await stakeholderAdvance(job.artifacts.appFiles, job.config, job.artifacts.blueprint, state)
+        job.artifacts.appFiles = r.files
+        job.artifacts.stakeholderState = r.state
+        step.detail = r.detail
+        if (r.done) {
+          const fixed = r.state.reports.reduce((n, rr) => n + rr.filesFixed.length, 0)
+          job.artifacts.stakeholderReport = { rounds: r.state.reports, passed: r.state.passed }
+          step.detail = `${r.state.reports.length} supervisiones · ${fixed} archivos mejorados${r.state.passed ? " · aprobado" : ""}`
+          step.status = "done"
+        }
+      } else { step.detail = "—"; step.status = "done" }
+    } catch (e) { step.detail = "stakeholder (reintenta): " + (e as Error).message.slice(0, 80) } // stays running → next call resumes
     await persist(job, true)
     return job
   }
@@ -293,25 +318,8 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         step.detail = job.artifacts.contracts ? "tipos + contrato de API definidos" : "—"
         break
       }
-      // "engine" is handled re-entrantly BEFORE the switch (resumable buildAdvance) — never here.
-      case "stakeholder": {
-        // Governance above the queen bee: the stakeholder routes the finished project to
-        // 4 senior specialists (growth/SEO, architecture/security, design/UX, business),
-        // collects honest feedback, and the queen applies fixes — for up to 3 supervisions.
-        if (job.config && job.artifacts.appFiles && job.artifacts.blueprint) {
-          const { files, report } = await stakeholderReview(
-            job.artifacts.appFiles, job.config, job.artifacts.blueprint,
-            { rounds: 3, onProgress: (m) => { step.detail = m } },
-          )
-          job.artifacts.appFiles = files
-          job.artifacts.stakeholderReport = report
-          const fixed = report.rounds.reduce((n, r) => n + r.filesFixed.length, 0)
-          step.detail = `${report.rounds.length} supervisiones · ${fixed} archivos mejorados${report.passed ? " · aprobado" : ""}`
-        } else {
-          step.detail = "—"
-        }
-        break
-      }
+      // "engine" and "stakeholder" are handled re-entrantly BEFORE the switch (resumable
+      // buildAdvance / stakeholderAdvance) — never here.
       case "docs-tech": {
         if (job.config) job.artifacts.techDocs = await genTechnicalDocs(job.config, job.artifacts.contracts || "", job.artifacts.erd || "")
         step.detail = `${(job.artifacts.techDocs || []).length} docs técnicos`
@@ -378,8 +386,8 @@ export async function sweep(): Promise<{ promoted: boolean; advanced: string[]; 
     const steps: Step[] = row.steps
     let changed = false
     for (const s of steps) {
-      // ci-verify is re-entrant and legitimately polls real CI for minutes — give it a far longer leash.
-      const timeout = (s.key === "ci-verify" || s.key === "engine") ? CI_STEP_TIMEOUT_MS : STEP_TIMEOUT_MS
+      // ci-verify/engine/stakeholder are re-entrant and run multi-minute waves — give them a far longer leash.
+      const timeout = (s.key === "ci-verify" || s.key === "engine" || s.key === "stakeholder") ? CI_STEP_TIMEOUT_MS : STEP_TIMEOUT_MS
       if (s.status === "running" && s.startedAt && Date.now() - new Date(s.startedAt).getTime() > timeout) {
         if ((s.attempts || 0) < MAX_ATTEMPTS) { s.status = "pending"; s.detail = "recuperado (estaba trabado)" }
         else { s.status = "error" }

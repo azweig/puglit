@@ -124,52 +124,108 @@ Return ONLY JSON {"code":"<full corrected contents of ${file.path}>"}.` },
   }
 }
 
-/** Run the full stakeholder review: up to `rounds` supervision passes by the 4-specialist
- *  panel, applying the queen's fixes each round, stopping early when the panel is satisfied. */
+// ── Resumable state machine ────────────────────────────────────────────────
+// Like the engine, the full review (3 rounds × 5 specialists + fixers) is far too long
+// for one serverless invocation (~300s) → it would time out and loop. So we split it into
+// bounded units: each `stakeholderAdvance` call runs EITHER one "review" batch (5 specialists
+// in parallel) OR one "fix" batch (≤12 file fixers in parallel) — each ≈ one wave of parallel
+// LLM calls, comfortably under the limit — and resumes from persisted state across calls.
+export interface StakeholderState {
+  phase: "review" | "fix" | "done"
+  round: number          // 1-based current supervision round
+  rounds: number         // total supervisions to run (3 by default, adjustable later)
+  reports: RoundReport[] // accumulated per-round record
+  passed: boolean        // true if the most recent completed round had no actionable findings
+  pending: { path: string; findings: Finding[] }[] // set by review, consumed by the next fix
+  pendingReports: SpecialistReport[]               // the in-flight round's specialist reports
+}
+
+export function initStakeholderState(rounds = 3): StakeholderState {
+  return { phase: "review", round: 1, rounds, reports: [], passed: false, pending: [], pendingReports: [] }
+}
+
+/** Advance the stakeholder governance ONE bounded unit. Always runs the FULL `rounds`
+ *  supervision passes (the project must survive all 3 — a clean round still proceeds to the
+ *  next, it just applies no fixes), so the 3-iteration gate is honored end-to-end on serverless. */
+export async function stakeholderAdvance(
+  files: AppFile[],
+  config: DomainConfig,
+  blueprint: Blueprint,
+  state: StakeholderState,
+): Promise<{ files: AppFile[]; state: StakeholderState; done: boolean; detail: string }> {
+  if (state.phase === "done") return { files, state, done: true, detail: "aprobado" }
+
+  if (state.phase === "review") {
+    const dig = digest(files, blueprint, config)
+    const reports = await Promise.all(SPECIALISTS.map((s) => specialistReview(s, dig)))
+    const all = reports.flatMap((r) => r.findings)
+    // Act on every BLOCKING + a bounded set of IMPROVEs, grouped per real file.
+    const actionable = all.filter((f) => f.file && files.some((cf) => cf.path === f.file))
+    const blocking = actionable.filter((f) => f.severity === "BLOCKING")
+    const improves = actionable.filter((f) => f.severity === "IMPROVE")
+    const toFix = [...blocking, ...improves.slice(0, Math.max(0, 12 - blocking.length))]
+
+    if (toFix.length === 0) {
+      state.reports.push({ round: state.round, reports, filesFixed: [] })
+      state.passed = true
+      if (state.round >= state.rounds) {
+        state.phase = "done"
+        return { files, state, done: true, detail: `ronda ${state.round}/${state.rounds}: sin hallazgos — aprobado (${state.rounds} supervisiones)` }
+      }
+      state.round += 1 // clean round → still proceed to the next supervision
+      return { files, state, done: false, detail: `ronda ${state.round - 1}/${state.rounds}: sin hallazgos → siguiente supervisión` }
+    }
+
+    const byFile = new Map<string, Finding[]>()
+    for (const f of toFix) (byFile.get(f.file!) ?? byFile.set(f.file!, []).get(f.file!)!).push(f)
+    state.pending = Array.from(byFile.entries()).map(([path, findings]) => ({ path, findings }))
+    state.pendingReports = reports
+    state.phase = "fix"
+    return { files, state, done: false, detail: `ronda ${state.round}/${state.rounds}: ${blocking.length} blocking + ${improves.length} mejoras → corrigiendo ${state.pending.length} archivos` }
+  }
+
+  // phase === "fix": apply this round's findings, one wave of parallel fixers.
+  const fixedPaths: string[] = []
+  const updates = await Promise.all(
+    state.pending.map(async ({ path, findings }) => {
+      const cf = files.find((c) => c.path === path)
+      if (!cf) return null
+      const nf = await applyFindings(cf, findings)
+      if (nf.content !== cf.content) fixedPaths.push(path)
+      return nf
+    }),
+  )
+  const next = files.map((c) => updates.find((u) => u && u.path === c.path) || c)
+  state.reports.push({ round: state.round, reports: state.pendingReports, filesFixed: fixedPaths })
+  state.passed = false
+  state.pending = []
+  state.pendingReports = []
+  const detail = `ronda ${state.round}/${state.rounds}: ${fixedPaths.length} archivos corregidos`
+  if (state.round >= state.rounds) {
+    state.phase = "done"
+    return { files: next, state, done: true, detail: `${detail} · ${state.rounds} supervisiones completas` }
+  }
+  state.round += 1
+  state.phase = "review"
+  return { files: next, state, done: false, detail }
+}
+
+/** Local one-shot convenience: loop the advance to completion. Production (serverless) drives
+ *  `stakeholderAdvance` one unit per call instead — see lib/jobs.ts. */
 export async function stakeholderReview(
   files: AppFile[],
   config: DomainConfig,
   blueprint: Blueprint,
   opts?: { rounds?: number; onProgress?: (msg: string) => void },
 ): Promise<{ files: AppFile[]; report: StakeholderReport }> {
-  const rounds = opts?.rounds ?? 3
   const log = opts?.onProgress ?? (() => {})
-  const report: StakeholderReport = { rounds: [], passed: false }
+  let state = initStakeholderState(opts?.rounds ?? 3)
   let current = files
-
-  for (let round = 1; round <= rounds; round++) {
-    const dig = digest(current, blueprint, config)
-    log(`stakeholder ronda ${round}/${rounds}: revisando con 4 especialistas…`)
-    const reports = await Promise.all(SPECIALISTS.map((s) => specialistReview(s, dig)))
-    const all = reports.flatMap((r) => r.findings)
-    // Act on every BLOCKING + a bounded set of IMPROVEs, grouped per real file.
-    const actionable = all.filter((f) => f.file && current.some((cf) => cf.path === f.file))
-    const blocking = actionable.filter((f) => f.severity === "BLOCKING")
-    const improves = actionable.filter((f) => f.severity === "IMPROVE")
-    const toFix = [...blocking, ...improves.slice(0, Math.max(0, 12 - blocking.length))]
-
-    if (toFix.length === 0) {
-      report.rounds.push({ round, reports, filesFixed: [] })
-      report.passed = true
-      log(`stakeholder ronda ${round}: sin hallazgos accionables — aprobado`)
-      break
-    }
-
-    const byFile = new Map<string, Finding[]>()
-    for (const f of toFix) (byFile.get(f.file!) ?? byFile.set(f.file!, []).get(f.file!)!).push(f)
-    const fixedPaths: string[] = []
-    const updates = await Promise.all(
-      Array.from(byFile.entries()).map(async ([path, fs]) => {
-        const cf = current.find((c) => c.path === path)!
-        const nf = await applyFindings(cf, fs)
-        if (nf.content !== cf.content) fixedPaths.push(path)
-        return nf
-      }),
-    )
-    current = current.map((c) => updates.find((u) => u.path === c.path) || c)
-    report.rounds.push({ round, reports, filesFixed: fixedPaths })
-    log(`stakeholder ronda ${round}: ${blocking.length} blocking + ${improves.length} mejoras → ${fixedPaths.length} archivos corregidos`)
+  for (let guard = 0; guard < 2 * state.rounds + 2 && state.phase !== "done"; guard++) {
+    const r = await stakeholderAdvance(current, config, blueprint, state)
+    current = r.files; state = r.state
+    log(`stakeholder ${r.detail}`)
+    if (r.done) break
   }
-
-  return { files: current, report }
+  return { files: current, report: { rounds: state.reports, passed: state.passed } }
 }
