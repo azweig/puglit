@@ -155,7 +155,7 @@ function incidentFromUnknown(value: unknown, fallbackIndex: number): PublicIncid
   const updateSources = [value.updates, value.incident_updates, value.timeline];
   const updates = updateSources
     .flatMap((source) => (Array.isArray(source) ? source : []))
-    .map(updateFromUnknown)
+    .map((update, index) => updateFromUnknown(update, index))
     .filter((update): update is IncidentUpdate => update !== null)
     .sort((a, b) => new Date(a.published_at).getTime() - new Date(b.published_at).getTime());
 
@@ -491,7 +491,7 @@ export default function IncidentHistoryPage(): JSX.Element {
 
       const data: unknown = await response.json();
       const normalized = incidentCandidatesFromResponse(data)
-        .map(incidentFromUnknown)
+        .map((incident, index) => incidentFromUnknown(incident, index))
         .filter((incident): incident is PublicIncident => incident !== null);
 
       setIncidents(normalized);
@@ -624,4 +624,62 @@ export default function IncidentHistoryPage(): JSX.Element {
                 <div className="rounded-2xl border border-[#D8E0EE] bg-[#FFFFFF] p-4 text-[#0B1220] shadow-sm">
                   <p className="text-xs font-medium text-[#7A8799]">Resolved</p>
                   <p className="mt-2 text-2xl font-extrabold tracking-tight text-[#0B1220]">{resolvedIncidents}</p>
-                  <p classN
+                  <p className="mt-1 text-xs font-medium text-[#526071]">Closed this month</p>
+                </div>
+                <div className="rounded-2xl border border-[#D8E0EE] bg-[#FFFFFF] p-4 text-[#0B1220] shadow-sm">
+                  <p className="text-xs font-medium text-[#7A8799]">Major impact</p>
+                  <p className="mt-2 text-2xl font-extrabold tracking-tight text-[#0B1220]">{majorIncidents}</p>
+                  <p className="mt-1 text-xs font-medium text-[#526071]">Major or critical incidents</p>
+                </div>
+                <div className="rounded-2xl border border-[#D8E0EE] bg-[#FFFFFF] p-4 text-[#0B1220] shadow-sm">
+                  <p className="text-xs font-medium text-[#7A8799]">Quiet days</p>
+                  <p className="mt-2 text-2xl font-extrabold tracking-tight text-[#0B1220]">{quietDays}</p>
+                  <p className="mt-1 text-xs font-medium text-[#526071]">Days without incidents</p>
+                </div>
+              </div>
+            </section>
+
+            {error && errorVisible ? (
+              <ErrorBanner message={error} onRetry={() => void fetchIncidents(monthKey)} onDismiss={() => setErrorVisible(false)} />
+            ) : null}
+
+            {totalIncidents === 0 ? (
+              <EmptyState monthLabel={monthLabel} />
+            ) : (
+              <div className="space-y-6">
+                {dayGroups.map((group) => (
+                  <section key={group.day_key} className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-sm font-bold uppercase tracking-wide text-[#526071]">{formatDay(group.day_key)}</h2>
+                      <span className="rounded-full border border-[#D8E0EE] bg-[#FFFFFF] px-3 py-1 text-xs font-semibold text-[#7A8799]">
+                        {group.incidents.length} {group.incidents.length === 1 ? "incident" : "incidents"}
+                      </span>
+                    </div>
+
+                    {group.incidents.length > 0 ? (
+                      <div className="grid gap-4">
+                        {group.incidents.map((incident) => (
+                          <IncidentCard
+                            key={incident.id}
+                            incident={incident}
+                            expanded={expandedIncidents.has(incident.id)}
+                            onToggle={() => toggleIncident(incident.id)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-[#D8E0EE] bg-[#FFFFFF] p-4 text-sm text-[#7A8799] shadow-sm">
+                        No public incidents recorded.
+                      </div>
+                    )}
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+"}
