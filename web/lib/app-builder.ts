@@ -1089,7 +1089,7 @@ ${fields}
 /** Resumable build state — JSON-serializable so a long build survives across many
  *  serverless invocations (Vercel caps a single request, the full build takes minutes). */
 export interface EngineState {
-  phase: "plan" | "routes" | "pages" | "finalize" | "done"
+  phase: "plan" | "critique" | "brief" | "routes" | "pages" | "finalize" | "done"
   blueprint: Blueprint | null
   brief: string
   ri: number
@@ -1100,29 +1100,37 @@ export function initEngineState(): EngineState {
   return { phase: "plan", blueprint: null, brief: "", ri: 0, pi: 0, files: [] }
 }
 
-/** Advance the build by ONE bounded unit (plan / one route / one page / finalize) so each
- *  step fits a serverless time budget. Returns the updated state; done=true when finished. */
+/** Advance the build by ONE bounded unit so each fits a serverless time budget. The plan is
+ *  split (blueprint / critique / brief) and routes+pages are one-at-a-time because a single
+ *  multi-LLM-call unit can exceed Vercel's request limit and silently restart forever. */
 export async function buildAdvance(config: DomainConfig, contracts: string, research: string, reference: string, state: EngineState): Promise<{ state: EngineState; done: boolean; detail: string }> {
   const s = state
   if (s.phase === "plan") {
     const blueprint = await planBlueprint(config, contracts, reference)
     if (!blueprint.routes.length && !blueprint.pages.length) { s.blueprint = blueprint; s.phase = "done"; return { state: s, done: true, detail: "blueprint vacío" } }
-    const gaps = await critiqueBlueprint(config, blueprint)
-    blueprint.routes.push(...gaps.addRoutes); blueprint.pages.push(...gaps.addPages)
-    if (blueprint.kind !== "public") ensureContentCreation(blueprint)
-    ensureHomepage(blueprint)
-    const seenPages = new Set<string>()
-    blueprint.pages = blueprint.pages.filter((p) => (seenPages.has(p.file) ? false : seenPages.add(p.file)))
-    const brief = await genDesignBrief(config, blueprint).catch(() => "")
-    const schemaSql = sortTablesByDeps(blueprint.tables).map((t) => t.ddl).join("\n\n")
-    const files: AppFile[] = []
-    if (schemaSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${schemaSql}\n` })
-    if (brief) files.push({ path: "docs/DESIGN.md", content: `# Design brief — ${config.identity.name}\n\n${brief}\n` })
-    s.blueprint = blueprint; s.brief = brief; s.files = files; s.ri = 0; s.pi = 0; s.phase = "routes"
+    s.blueprint = blueprint; s.phase = "critique"
     return { state: s, done: false, detail: `blueprint: ${blueprint.tables.length} tablas · ${groupRoutes(blueprint.routes).length} rutas · ${blueprint.pages.length} páginas` }
   }
   const bp = s.blueprint!
+  if (s.phase === "critique") {
+    const gaps = await critiqueBlueprint(config, bp)
+    bp.routes.push(...gaps.addRoutes); bp.pages.push(...gaps.addPages)
+    if (bp.kind !== "public") ensureContentCreation(bp)
+    ensureHomepage(bp)
+    const seen = new Set<string>()
+    bp.pages = bp.pages.filter((p) => (seen.has(p.file) ? false : seen.add(p.file)))
+    s.phase = "brief"
+    return { state: s, done: false, detail: `completitud: ${groupRoutes(bp.routes).length} rutas · ${bp.pages.length} páginas` }
+  }
   const schemaSql = sortTablesByDeps(bp.tables).map((t) => t.ddl).join("\n\n")
+  if (s.phase === "brief") {
+    const brief = await genDesignBrief(config, bp).catch(() => "")
+    const files: AppFile[] = []
+    if (schemaSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${schemaSql}\n` })
+    if (brief) files.push({ path: "docs/DESIGN.md", content: `# Design brief — ${config.identity.name}\n\n${brief}\n` })
+    s.brief = brief; s.files = files; s.ri = 0; s.pi = 0; s.phase = "routes"
+    return { state: s, done: false, detail: "diseño + esquema listos" }
+  }
   if (s.phase === "routes") {
     const routeFiles = groupRoutes(bp.routes)
     if (s.ri >= routeFiles.length) { s.phase = "pages"; return { state: s, done: false, detail: "rutas listas → páginas" } }
@@ -1138,7 +1146,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const geoDet = deterministicGeo(bp.tables, [])
     const shapes = [matchesDet?.shape, geoDet?.shape].filter(Boolean).join("\n")
     const p = bp.pages[s.pi]
-    const f = await genPolishedPage(config, bp, p, s.brief, shapes).catch(() => null)
+    const f = await genPage(config, bp, p, s.brief, shapes).catch(() => null)
     if (f) s.files.push(f)
     s.pi++
     return { state: s, done: false, detail: `página ${s.pi}/${bp.pages.length}: ${p.route}` }
