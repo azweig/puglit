@@ -25,7 +25,7 @@ export type StepStatus = "pending" | "running" | "done" | "error"
 export interface Step { key: string; label: string; status: StepStatus; detail?: string; startedAt?: string; finishedAt?: string; attempts?: number }
 
 // Safety rails
-const CONCURRENCY = 2          // max jobs running at once (queue the rest)
+const CONCURRENCY = 6          // max jobs running at once (queue the rest) — headroom so a fresh job isn't blocked by stale ones
 const STEP_TIMEOUT_MS = 120_000 // a "running" step older than this is considered stuck
 const MAX_ATTEMPTS = 3         // per-step retries before marking it errored
 const LEASE_MS = 100_000       // lock window while a step is being advanced
