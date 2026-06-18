@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Mark } from "@/components/Mark"
-import { SwarmStage } from "@/components/SwarmStage"
+import { FlowGraph } from "@/components/FlowGraph"
+import { OfficeStage } from "@/components/OfficeStage"
 
 type Step = { key: string; label: string; status: "pending" | "running" | "done" | "error"; detail?: string }
 type Job = { status: string; steps: Step[]; artifacts?: { githubUrl?: string; previewUrl?: string }; name?: string; slug?: string }
@@ -17,6 +18,7 @@ export default function BuildPage() {
   const [job, setJob] = useState<Job | null>(null)
   const [art, setArt] = useState<{ sql?: string; erd?: string; engine?: { path: string; code: string }; findings?: { severity: string; desc: string }[]; ciGreen?: boolean | null; ciErrors?: { path: string; line: number; message: string }[] } | null>(null)
   const [tab, setTab] = useState<"engine" | "findings" | "erd" | "sql">("engine")
+  const [view, setView] = useState<"oficina" | "flujo">("oficina")
   const [err, setErr] = useState("")
   const running = useRef(false)
 
@@ -50,15 +52,23 @@ export default function BuildPage() {
   const pct = Math.round((completed / total) * 100)
 
   return (
-    <main className="max-w-3xl mx-auto px-5 py-12">
+    <main className="max-w-5xl mx-auto px-5 py-12">
       <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
       <h1 className="text-3xl font-extrabold">{done ? "✅ " : job?.status === "queued" ? "⏳ " : ""}Construyendo {job?.name || "tu proyecto"}…</h1>
       <p className="text-white/60 mt-2 mb-6">{done ? "Listo. Tu app fue generada y entregada." : job?.status === "queued" ? "En cola — esperando un cupo de agentes. Esto sigue solo aunque cierres la pestaña (el watchdog lo continúa)." : job?.status === "error" ? "Hubo un error; el watchdog reintentará los pasos trabados." : "Los agentes están trabajando. Podés cerrar esta pestaña — te avisamos por mail si dejaste tu email."}</p>
 
       <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-6"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: "var(--violet)" }} /></div>
 
-      {/* live visual swarm */}
-      {!!job?.steps?.length && <div className="mb-6"><SwarmStage steps={job.steps} /></div>}
+      {/* live visual swarm — flow (n8n) / office (animated) tabs */}
+      {!!job?.steps?.length && (
+        <div className="mb-6">
+          <div className="flex gap-2 mb-3">
+            <button onClick={() => setView("oficina")} className={`text-xs font-bold px-3.5 py-1.5 rounded-lg ${view === "oficina" ? "text-white" : "text-white/55 border border-white/15"}`} style={view === "oficina" ? { background: "var(--violet)" } : undefined}>🏢 Vista oficina</button>
+            <button onClick={() => setView("flujo")} className={`text-xs font-bold px-3.5 py-1.5 rounded-lg ${view === "flujo" ? "text-white" : "text-white/55 border border-white/15"}`} style={view === "flujo" ? { background: "var(--violet)" } : undefined}>🔀 Vista flujo</button>
+          </div>
+          {view === "oficina" ? <OfficeStage steps={job.steps} /> : <FlowGraph steps={job.steps} />}
+        </div>
+      )}
 
       {/* detailed step log (text + checks) */}
       <details open className="group">

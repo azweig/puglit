@@ -40,3 +40,11 @@ body { background: var(--ink); color: #EDEAF6; -webkit-font-smoothing: antialias
 .ag-pop { animation: swarm-pop .35s ease-out both; }
 .glow-bar { animation: swarm-glow 1.6s ease-in-out infinite; }
 .dash-line { stroke-dasharray: 4 4; animation: swarm-dash .6s linear infinite; }
+
+/* n8n flow connector: dots flowing left→right into the active node */
+@keyframes dash-flow-move { from { background-position: 0 0 } to { background-position: 16px 0 } }
+.dash-flow {
+  background-image: radial-gradient(circle at 3px 50%, var(--violet-bright) 1.6px, transparent 2px);
+  background-size: 8px 100%;
+  animation: dash-flow-move .5s linear infinite;
+}

@@ -1,0 +1,25 @@
+{
+  "agents": [
+    "data-architect",
+    "researcher",
+    "contracts-architect",
+    "dba",
+    "backend-engineer",
+    "security-engineer",
+    "engine-lead",
+    "reliability-engineer",
+    "devops",
+    "art-director",
+    "frontend-designer",
+    "analyst",
+    "seo-specialist",
+    "tech-writer",
+    "business-strategist",
+    "queen-bee",
+    "sh-growth",
+    "sh-architecture",
+    "sh-design",
+    "sh-business",
+    "sh-fidelity"
+  ]
+}
