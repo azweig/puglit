@@ -13,7 +13,7 @@
  * canvas so nobody leaves the frame. Furniture is drawn per room. Pan + Ctrl/wheel zoom.
  */
 import { useEffect, useMemo, useRef, useState } from "react"
-import { SWARM_AGENTS, type SwarmAgent } from "@/lib/swarm-agents"
+import { SWARM_AGENTS, STEP_TO_AGENT, type SwarmAgent } from "@/lib/swarm-agents"
 
 export type Step = { key: string; label: string; status: "pending" | "running" | "done" | "error"; detail?: string }
 
@@ -66,7 +66,10 @@ const partySpot = (i: number) => ({ x: ROOMS.forum.x + ROOMS.forum.w / 2 + ((i %
 
 export function OfficeStage({ steps }: { steps: Step[] }) {
   const [sel, setSel] = useState<string | null>(null)
-  const [view, setView] = useState({ s: 0.78, x: 0, y: 0 })
+  const [view, setView] = useState({ s: 0.6, x: 0, y: 0 })
+  // queue of "I finished a task" comic reports (image-30 style), one per step completion
+  const [reports, setReports] = useState<{ agent: string; name: string; label: string; detail: string }[]>([])
+  const prevDone = useRef<Set<string>>(new Set())
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
   const wrapRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const sprRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -121,26 +124,29 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
         const s = sim.current.get(a.id), node = wrapRefs.current.get(a.id), spr = sprRefs.current.get(a.id)
         if (!s || !node || !spr) continue
         const working = isWorking(a)
-        let tx: number, ty: number, busy = true
-        if (ph.done) { const p = partySpot(idx); tx = p.x; ty = p.y }
-        else if (ph.planning && a.queen) { tx = FO_PODIUM.x; ty = FO_PODIUM.y }
-        else if (ph.planning && DISCOVERY.includes(a.id)) { const c = FO_CHAIRS[DISCOVERY.indexOf(a.id)]; tx = c.x; ty = c.y }
-        else if (ph.sh && a.queen) { tx = MG_SEATS[0].x; ty = MG_SEATS[0].y }
-        else if (ph.sh && a.stakeholder) { const sm = MG_SEATS[stakeOrder.indexOf(a) + 1] || MG_SEATS[1]; tx = sm.x; ty = sm.y }
-        else if (working) { const h = home.get(a.id)!; tx = h.x; ty = h.y }
-        else { // idle → wander within own room (LIFE)
-          busy = false
-          if (Math.hypot(s.wx - s.x, s.wy - s.y) < 3 && t > s.nextWander) { const p = randPoint(a.room); s.wx = p.x; s.wy = p.y; s.nextWander = t + 1500 + Math.random() * 3200 }
+        const ss = a.steps.map((k) => byStep.get(k)).filter(Boolean) as Step[]
+        const doneAll = ss.length > 0 && ss.every((x) => x.status === "done")
+        let tx: number, ty: number, roomId = a.room as string
+        if (ph.done) { const p = partySpot(idx); tx = p.x; ty = p.y; roomId = "forum" }
+        else if (ph.planning && a.queen) { tx = FO_PODIUM.x; ty = FO_PODIUM.y; roomId = "forum" }
+        else if (ph.planning && DISCOVERY.includes(a.id)) { const c = FO_CHAIRS[DISCOVERY.indexOf(a.id)]; tx = c.x; ty = c.y; roomId = "forum" }
+        else if (ph.sh && a.queen) { tx = MG_SEATS[0].x; ty = MG_SEATS[0].y; roomId = "management" }
+        else if (ph.sh && a.stakeholder) { const sm = MG_SEATS[stakeOrder.indexOf(a) + 1] || MG_SEATS[1]; tx = sm.x; ty = sm.y; roomId = "management" }
+        else if (working) { const h = home.get(a.id)!; tx = h.x; ty = h.y } // at the desk, working
+        else { // not working: finished agents relax in the rest area; the rest wander their own room
+          roomId = doneAll ? "rest" : a.room
+          if (Math.hypot(s.wx - s.x, s.wy - s.y) < 4 && t > s.nextWander) { const p = randPoint(roomId); s.wx = p.x; s.wy = p.y; s.nextWander = t + 1800 + Math.random() * 3500 }
           tx = s.wx; ty = s.wy
         }
         const dx = tx - s.x, dy = ty - s.y, dist = Math.hypot(dx, dy), moving = dist > 1.6
         if (moving) { s.x += (dx / dist) * SPEED; s.y += (dy / dist) * SPEED; if (Math.abs(dx) > 0.6) s.face = dx < 0 ? -1 : 1 }
-        s.x = Math.max(20, Math.min(W - 20, s.x)); s.y = Math.max(20, Math.min(H - 10, s.y))
+        // COLLISION: once arrived (not transiting), keep the agent strictly inside its room so it never drifts off-screen.
+        if (!moving) { const r = ROOMS[roomId]; if (r) { s.x = Math.max(r.x + 22, Math.min(r.x + r.w - 22, s.x)); s.y = Math.max(r.y + 44, Math.min(r.y + r.h - 22, s.y)) } }
+        s.x = Math.max(16, Math.min(W - 16, s.x)); s.y = Math.max(16, Math.min(H - 12, s.y))
         const bob = ph.done ? Math.abs(Math.sin(t / 120 + s.seed)) * 9 : moving ? Math.abs(Math.sin(t / 95)) * 3 : working ? Math.sin(t / 160 + s.seed) * 1.1 : Math.sin(t / 600 + s.seed) * 1
         node.style.transform = `translate(${s.x}px,${s.y}px) translate(-50%,-50%)`
         node.style.zIndex = String(Math.round(s.y) + 200)
         spr.style.transform = `scaleX(${s.face}) translateY(${-bob}px)`
-        void busy
       }
       raf = requestAnimationFrame(frame)
     }
@@ -151,6 +157,26 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
   const selAgent = SWARM_AGENTS.find((a) => a.id === sel)
   const selState = selAgent ? agentState(selAgent) : null
   const scene = shRunning ? "Reunión de revisión — los stakeholders evalúan en la sala de directorio" : planning ? "PI Planning — la reina presenta el roadmap; el equipo escucha" : allDone ? "¡Listo! 🎉 entrega completa" : running ? `Trabajando en: ${running.label}` : "En cola…"
+
+  // enqueue a comic "I finished X" report whenever a step newly completes
+  useEffect(() => {
+    const add: { agent: string; name: string; label: string; detail: string }[] = []
+    for (const st of steps) {
+      if (st.status === "done" && !prevDone.current.has(st.key)) {
+        const a = SWARM_AGENTS.find((x) => x.id === STEP_TO_AGENT[st.key])
+        if (a) add.push({ agent: a.id, name: a.name, label: st.label.replace(/^[^·]*·\s*/, ""), detail: st.detail && st.detail !== "—" ? st.detail : "Tarea completada." })
+      }
+    }
+    prevDone.current = new Set(steps.filter((s) => s.status === "done").map((s) => s.key))
+    if (add.length) setReports((q) => [...q, ...add])
+  }, [steps])
+  // auto-advance the current report after a few seconds (still skippable by hand)
+  useEffect(() => {
+    if (!reports.length) return
+    const t = setTimeout(() => setReports((q) => q.slice(1)), 7000)
+    return () => clearTimeout(t)
+  }, [reports])
+  const report = reports[0]
 
   function onWheel(e: React.WheelEvent) { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); setView((v) => ({ ...v, s: Math.min(1.6, Math.max(0.45, v.s - e.deltaY * 0.0015)) })) }
   function onDown(e: React.MouseEvent) { drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y } }
@@ -233,6 +259,25 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
               <img src={`/sprites/agents/${selAgent.id}.png`} alt="" className="w-9 h-9 object-contain" />
               <div><div className="text-sm font-bold text-white">{selAgent.queen ? "👑 " : ""}{selAgent.name}</div>
                 <div className="text-xs text-white/65">{selState.status === "running" ? selState.detail : selState.status === "done" ? "Terminó su parte ✓" : "Esperando su turno…"}</div></div>
+            </div>
+          </div>
+        )}
+
+        {/* comic "I finished a task" report — big portrait, queues up, skippable */}
+        {report && (
+          <div className="absolute inset-x-0 bottom-0 z-[70] flex justify-center pb-2 pointer-events-none">
+            <div className="pointer-events-auto relative w-[min(560px,94%)] rounded-2xl border border-white/15 bg-[#11131c]/[0.97] backdrop-blur shadow-2xl px-5 pt-4 pb-3 ag-pop">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/sprites/agents/${report.agent}.png`} alt="" className="absolute -top-24 right-3 w-32 h-32 object-contain drop-shadow-[0_6px_12px_rgba(0,0,0,.55)]" />
+              <div className="flex items-center justify-between">
+                <span className="inline-block bg-emerald-500 text-white text-[11px] font-extrabold px-2.5 py-1 rounded-md tracking-wide">✅ TAREA COMPLETADA</span>
+                <button onClick={() => setReports((q) => q.slice(1))} className="text-white/70 hover:text-white text-xs font-bold">{reports.length > 1 ? `Siguiente (${reports.length}) ` : ""}Skip ›</button>
+              </div>
+              <div className="mt-2 pr-28">
+                <div className="text-base font-extrabold text-white">{report.name}</div>
+                <div className="text-sm font-semibold text-violet-bright">Terminé: {report.label}</div>
+                <p className="mt-1 text-xs text-white/70 leading-snug line-clamp-3">{report.detail}</p>
+              </div>
             </div>
           </div>
         )}
