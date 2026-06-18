@@ -650,4 +650,45 @@ function IncidentCard({ incident }: { incident: IncidentRow }) {
       <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
         <div>
           <div className='flex flex-wrap gap-2'>
-            <span className='inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-3 py-1 text-xs font-semibold text-[#991B1B]'>Impact
+            <span className='inline-flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-3 py-1 text-xs font-semibold text-[#991B1B]'>Impacto {impactLabel(incident.impact)}</span>
+            <span className='inline-flex items-center gap-1.5 rounded-full bg-[#FEF3C7] px-3 py-1 text-xs font-semibold text-[#92400E]'>{incidentStatusLabel(incident.status)}</span>
+          </div>
+          <h3 className='mt-3 text-lg font-bold text-[#0F172A]'>{incident.title}</h3>
+          {incident.description ? <p className='mt-2 text-sm leading-6 text-[#475569]'>{incident.description}</p> : null}
+          <p className='mt-2 text-xs text-[#64748B]'>Inicio: {formatDateTime(incident.started_at)}</p>
+          {incident.resolved_at ? <p className='mt-1 text-xs text-[#64748B]'>Resolución: {formatDateTime(incident.resolved_at)} · {durationBetween(incident.started_at, incident.resolved_at)}</p> : null}
+        </div>
+        {latest ? (
+          <div className='sm:max-w-xs'>
+            <p className='text-xs font-semibold uppercase tracking-wide text-[#64748B]'>Última actualización</p>
+            <p className='mt-1 text-sm font-medium text-[#0F172A]'>{latest.message}</p>
+            <p className='mt-1 text-xs text-[#64748B]'>{formatDateTime(latest.published_at)} · {latest.author_label}</p>
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+export default function Page() {
+  const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    setError('');
+  }, []);
+
+  const data = useMemo<HomeData>(() => parseHomeData({ components: [] }), []);
+
+  return (
+    <div className='min-h-screen bg-[#F8FAFC] text-[#0F172A]'>
+      <Header page={data.page} />
+      <main className='mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8'>
+        {error ? <ErrorBanner message={error} onDismiss={() => setError('')} /> : null}
+        <Hero data={data} />
+        <section className='mt-6'>
+          {data.components.length === 0 ? <EmptyState /> : null}
+        </section>
+      </main>
+    </div>
+  );
+}
