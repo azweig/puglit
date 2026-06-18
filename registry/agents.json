@@ -182,13 +182,43 @@
       "purpose": "Reviews viability + money path: monetization coherence & wiring (gating/checkout/ads) or value/retention loop if free, legible pricing, trust/legal basics, low friction to value, audience-market fit."
     },
     {
+      "id": "specialist-fidelity",
+      "role": "Product Fidelity & Liveness Lead",
+      "phase": "review",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/stakeholder.ts · SPECIALISTS[fidelity]",
+      "purpose": "The lens the earlier reviews kept missing: is this a FAITHFUL, WORKING version of the named product, not a shell? Flags dead-by-design (stub crons / static seed with no real ingestion = 'no funciona'), broken links (pages calling routes/pages that don't exist), missing signature surfaces of the cloned product, and do-nothing stubs. Static (no execution) — pairs with the still-partial runtime-verifier."
+    },
+    {
       "id": "researcher",
       "role": "Domain Researcher",
       "phase": "research",
       "wired": true,
       "model": "premium",
       "location": "lib/app-builder.ts · researchProduct (step 'research' in jobs.ts)",
-      "purpose": "For data-driven products, identifies the REAL external data source (prefers free official APIs, notes free-tier limits + fields) and an ingestion plan; feeds the Data Ingestion agent so the seed mirrors the provider's schema and a cron can pull live data instead of inventing it. Reference impl: promiedos-dac9 app/api/cron/refresh (API-Football, mock fallback)."
+      "purpose": "For data-driven products, identifies the REAL external data source (prefers free official APIs, notes free-tier limits + fields) and an ingestion plan; feeds the Data Ingestion + Data Engineer agents. Reference impl: promiedos-dac9 app/api/cron/refresh (API-Football, mock fallback).",
+      "status": "wired but UNVERIFIED end-to-end — never run by the swarm (no API key); proof requires a real pipeline run."
+    },
+    {
+      "id": "reference-studier",
+      "role": "Reference Product Analyst",
+      "phase": "research",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · studyReference (step 'research' in jobs.ts)",
+      "purpose": "When the idea clones a known product, reconstructs that real product's actual surfaces/entities/signature-features and feeds them to the Domain Architect as the fidelity bar — so the architect plans match/lineup/team/etc. pages instead of a generic sketch. Addresses 'the agents never look at the real product'.",
+      "status": "wired but UNVERIFIED; knowledge-based today (gains web/fetch when the engine runs with a browsing tool)."
+    },
+    {
+      "id": "data-engineer",
+      "role": "Data Engineer (live ingestion codegen)",
+      "phase": "build",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · genIngestionCron (used in buildBespokeApp when research is present)",
+      "purpose": "THE AGENT THAT WAS MISSING. Turns the researcher's data-source plan + the real schema into a WORKING app/api/cron/refresh (fetch source → upsert into our tables, mock fallback, fire-and-forget) — replacing the SELECT-1 stub that made every data-driven product 'no funcionar'.",
+      "status": "wired but UNVERIFIED; replaces refreshCron stub only when the researcher returns a data source."
     },
     {
       "id": "quality-control-plane",

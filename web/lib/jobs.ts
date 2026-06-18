@@ -14,7 +14,7 @@ import { generateLogoSvg } from "@/lib/logo-gen"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
-import { buildBespokeApp, researchProduct } from "@/lib/app-builder"
+import { buildBespokeApp, researchProduct, studyReference } from "@/lib/app-builder"
 import { stakeholderReview } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
@@ -255,9 +255,11 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         // Researcher: find the REAL external data source(s) for data-driven products, so the
         // seed/catalog mirrors the provider's schema and a cron can pull live data later.
         if (job.config) {
-          const r = await researchProduct(job.config)
+          const [r, ref] = await Promise.all([researchProduct(job.config), studyReference(job.config)])
           job.artifacts.research = r.dataDriven ? r.plan : ""
-          step.detail = r.dataDriven ? "fuente de datos real identificada + plan de ingesta" : "producto sin datos externos"
+          job.artifacts.reference = ref
+          const bits = [r.dataDriven ? "fuente de datos real + plan de ingesta" : "sin datos externos", ref ? "producto de referencia mapeado" : ""].filter(Boolean)
+          step.detail = bits.join(" · ")
         } else { step.detail = "—" }
         break
       }
@@ -271,7 +273,7 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         // Frontend swarms emit the REAL pages and API routes for the product's core
         // journeys. Compilation is verified later by the real CI loop (ci-verify).
         if (job.config) {
-          const r = await buildBespokeApp(job.config, job.artifacts.contracts || "", job.artifacts.research || "")
+          const r = await buildBespokeApp(job.config, job.artifacts.contracts || "", job.artifacts.research || "", job.artifacts.reference || "")
           job.artifacts.appFiles = r.files
           job.artifacts.blueprint = r.blueprint
           const main = r.files.find((f) => /route\.ts$/.test(f.path)) || r.files[0]

@@ -66,7 +66,23 @@ const VISUAL_SYSTEM = `PREMIUM VISUAL QUALITY BAR (Tailwind only — there is NO
 - BANNED: the generic centered-narrow-column admin look, unstyled default buttons, gray-on-gray, walls of plain text, low-contrast placeholder vibes, Bootstrap-ish cards. Every screen must look intentionally designed for THIS product.`
 
 /** Domain Architect: infer the product's functional blueprint from the idea+config. */
-export async function planBlueprint(config: DomainConfig, contracts: string): Promise<Blueprint> {
+/** Reference Studier: when the idea clones/names a real product or category, enumerate that
+ *  REAL product's actual surfaces (pages), entities and signature features, so the architect
+ *  plans to that depth instead of the model's vague generic notion. Returns "" if not a clone.
+ *  (Knowledge-based today; gains a web/fetch tool when the engine runs with one.) */
+export async function studyReference(config: DomainConfig): Promise<string> {
+  const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are a Reference Product Analyst. If the product clones or is clearly modeled on a real, known product/site (e.g. "clon de promiedos", "como Tinder", "un Airbnb de X"), reconstruct that REAL product's surface as concretely as you can FROM MEMORY: the distinct PAGES/screens it has, the main ENTITIES behind them, and the signature FEATURES that make it recognizable (the things a user would notice are MISSING if absent). Be specific and exhaustive — this sets the fidelity bar. Example for promiedos.com.ar: home with a competitions sidebar + today's matches grouped by league showing live minute and inline scorers; a MATCH page (minute-by-minute timeline, stats, lineups/formation, last matches, venue/referee); a LEAGUE page (fixture, multiple standings tables, top scorers); a TEAM page (squad, fixtures, results). If the product is NOT a clone of something known, return an empty string for "surfaces".
+Return ONLY JSON: {"isClone": boolean, "product": "the real product, or ''", "surfaces": "markdown: pages → their key sections/entities/features (the fidelity bar)"}.` },
+      { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}` },
+    ], { model: MODELS.premium, temperature: 0.2 })) as { isClone?: boolean; surfaces?: string }
+    return out.isClone && out.surfaces ? String(out.surfaces) : ""
+  } catch { return "" }
+}
+
+export async function planBlueprint(config: DomainConfig, contracts: string, reference?: string): Promise<Blueprint> {
   const ents = (config.entities || []).map((e) => `${e.name}(${e.fields.map((f) => `${f.name}:${f.type}${f.required ? "!" : ""}`).join(", ")})`).join("; ")
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : JSON.stringify(config.identity.tagline)
   const out = (await chatJSON([
@@ -106,7 +122,7 @@ COMPLETENESS (CRITICAL — generators die here; never ship a read-only app):
 REFERENCE-PRODUCT DEPTH (critical — do NOT ship a toy): if the idea names or clearly clones a real product/category (e.g. "like promiedos", "a Tinder for X", "an Airbnb for Y", "a sports scores site"), MENTALLY ENUMERATE that real product's actual surfaces and MATCH their depth — not a stripped-down sketch. A live-scores product (Promiedos/365scores) is NOT 4 flat tables: it needs competitions, matches WITH minute-by-minute events, lineups/formations, match statistics, team & player pages, multiple standings views, fixtures by round, top scorers. Model the ENTITIES and SURFACES that make it recognizably that product. A data-driven product that shows external/live data (scores, prices, flights, listings) is INGESTED from a real source — model it as a curated catalog refreshed by cron, never as user-generated, and assume an ingestion job populates it.
 
 SIZE TO THE PRODUCT, do not cap artificially: simple tools may need 3-5 tables; a deep product (sports/marketplace/social/aggregator) legitimately needs 8-15+ tables and many routes/pages — generate what the product GENUINELY requires to be a faithful, usable clone. Keep each file focused, but never sacrifice the product's real feature surface to hit a small number. Make tables, routes and pages mutually consistent (same table/column names everywhere). ALWAYS include the homepage at route "/" (app/page.tsx) as the product itself, plus a detail page for the product's primary entity (e.g. a match/profile/listing page) and a create page when users contribute content. Use the product's language for UI labels.` },
-    { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n\nCONTRACTS:\n${contracts}` },
+    { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n${reference ? `\nREFERENCE PRODUCT — the user is cloning this; you MUST reach this depth (model the entities + create the surfaces/pages listed; a blueprint that omits these is a failure):\n${reference}\n` : ""}\nCONTRACTS:\n${contracts}` },
   ], { model: MODELS.premium, temperature: 0.3 })) as Partial<Blueprint>
 
   return {
@@ -909,6 +925,35 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Data Engineer: the agent that was MISSING. Turns the researcher's data-source plan + the
+ *  real schema into a WORKING ingestion route (fetch the source → upsert into our tables),
+ *  with a mock fallback so it runs before the API key exists. Replaces the SELECT-1 stub for
+ *  data-driven products — the single biggest reason generated products "no funcionan". */
+async function genIngestionCron(config: DomainConfig, bp: Blueprint, research: string): Promise<AppFile | null> {
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are a Data Engineer. Write app/api/cron/refresh/route.ts: a REAL ingestion job that pulls the product's live/external data from the source in the RESEARCH PLAN and UPSERTS it into the EXACT tables below. This must actually work — NO "SELECT 1" placeholder, NO TODO.
+
+HARD RULES (spine):
+- Next.js 16 route. import { NextRequest, NextResponse, after } from "next/server"; import { pool } from "@/lib/db"; NO other npm deps (use global fetch).
+- The API key comes from process.env (name it from the research, e.g. process.env.<PROVIDER>_KEY). If the key is ABSENT, fall back to a small inline MOCK (a few realistic rows) so the pipeline is verifiable offline — same upsert path.
+- Map the provider's response fields to our columns EXACTLY (use the DDL below). Parameterized SQL only. UPSERT by a stable external id (add ON CONFLICT on a unique api id column if present, else delete-by-scope then insert).
+- Fire-and-forget: GET schedules the work in after() and returns immediately; support ?sync=1 to await (for testing). Auth: if process.env.CRON_SECRET is set, require ?key= or x-cron-secret.
+- Tune cadence in comments to respect the provider's free-tier limits (pull live often, static data rarely).
+
+RESEARCH PLAN (the real source + endpoints + cadence):
+${research}
+
+TARGET TABLES (upsert into these EXACT columns):
+${tablesDoc(bp)}
+
+Return ONLY JSON {"code":"<full contents of app/api/cron/refresh/route.ts>"}.` },
+      { role: "user", content: `Product: ${config.identity.name}. Generate the working ingestion route.` },
+    ], { model: MODELS.premium, temperature: 0.2 })) as { code?: string }
+    return out.code && out.code.length > 200 ? { path: "app/api/cron/refresh/route.ts", content: String(out.code).slice(0, 30_000) } : null
+  } catch { return null }
+}
+
 /** Page↔route path reconciliation: pages and routes are generated by separate agents
  *  and sometimes pick DIFFERENT paths for the same endpoint (home fetches /api/nearby
  *  but the route is at /api/offers → 404). For each API path a PAGE calls that has no
@@ -1042,8 +1087,8 @@ ${fields}
 }
 
 /** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
-export async function buildBespokeApp(config: DomainConfig, contracts: string, research?: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
-  const blueprint = await planBlueprint(config, contracts)
+export async function buildBespokeApp(config: DomainConfig, contracts: string, research?: string, reference?: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
+  const blueprint = await planBlueprint(config, contracts, reference)
   if (!blueprint.routes.length && !blueprint.pages.length) return { files: [], blueprint }
 
   // Completeness: LLM critic + DETERMINISTIC backstop (the critic alone is unreliable;
@@ -1115,7 +1160,12 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string, r
   // Data Ingestion: a realistic catalog seed (overrides the generic seed via path
   // dedup) + a refresh cron scaffold — only for aggregator/catalog products.
   const seed = await seedPromise
-  if (seed) { files.push(seed); files.push(refreshCron(config)) }
+  if (seed) {
+    files.push(seed)
+    // Data Engineer writes a REAL ingestion cron from the research plan; else the stub scaffold.
+    const ingest = research ? await genIngestionCron(config, blueprint, research).catch(() => null) : null
+    files.push(ingest || refreshCron(config))
+  }
 
   reconcilePageRoutes(files) // mirror deterministic routes to the paths the pages call
   integratePageRoutes(files) // QUEEN: rewrite every page fetch to a real route path (global coherence)

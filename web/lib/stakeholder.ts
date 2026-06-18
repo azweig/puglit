@@ -50,6 +50,11 @@ const SPECIALISTS: { id: string; role: string; brief: string }[] = [
     role: "Business, Pricing & Finance Lead",
     brief: `Judge VIABILITY and the MONEY PATH. Check: the monetization model is coherent and actually wired where it should be (gating/paywall/ads placement/checkout) or, if free, that the value & retention loop is clear; pricing/plans are legible to the user; trust signals (who's behind it, terms) exist where money or accounts are involved; the core value is reachable fast (low friction to the "aha"); the product matches the stated audience & market. Flag a missing/contradictory money path, friction before value, absent trust/legal basics, audience mismatch.`,
   },
+  {
+    id: "fidelity",
+    role: "Product Fidelity & Liveness Lead",
+    brief: `Judge whether this is a FAITHFUL, WORKING version of the product the user named — not a plausible-looking shell. This is the lens the previous reviews kept missing. Check, ruthlessly: (1) DEAD-BY-DESIGN — is the data real or fake? A cron whose body is essentially "SELECT 1" / a TODO, or a data-driven product (scores, prices, listings) shipping only a static seed with no real ingestion, means "no funciona" — flag BLOCKING. (2) BROKEN LINKS — pages that fetch /api paths or <Link> to routes/pages that don't exist in the file tree (404 / empty data) — flag BLOCKING. (3) MISSING SIGNATURE SURFACES — if it clones a known product, are its defining pages present? (e.g. a Promiedos clone WITHOUT a match-detail page, lineups, or live minute is not Promiedos) — flag the missing surfaces. (4) STUBS — placeholder/empty handlers, hardcoded sample data in components, features that render but do nothing. Be concrete: name the file and exactly what's fake/missing/broken.`,
+  },
 ]
 
 /** Build a bounded project digest the specialists review: the file tree + the content of
