@@ -28,6 +28,53 @@ const DEMO_IDEAS: { name: string; what: string; audience: string; benefits: stri
   { name: "Reparto", what: "Gestión de logística de última milla para pymes: cargás pedidos y optimizás rutas.", audience: "Pymes que hacen envíos propios.", benefits: ["Optimización de rutas", "Seguimiento en vivo del repartidor", "Avisos al cliente"], monetization: "subscription", price: 39, modules: ["geo", "mobile", "emailLifecycle"], languages: "es", color: "#F97316" },
   { name: "Huerto", what: "Marketplace de productores locales: la gente compra verduras y productos directo del productor cercano.", audience: "Consumidores conscientes y productores locales.", benefits: ["Comprar directo del productor", "Productos cercanos por geolocalización", "Apoyo a la economía local"], monetization: "freemium", price: 0, modules: ["geo", "payments", "profiling"], languages: "es", color: "#16A34A" },
 ]
+type Idea = (typeof DEMO_IDEAS)[number]
+
+// Canned spec + designs (no OpenAI) so the demo lands on the summary INSTANTLY.
+function cannedSpec(idea: Idea) {
+  const mono = idea.name.slice(0, 2).toUpperCase()
+  const lighten = (hex: string, p = 0.4) => {
+    const n = parseInt(hex.slice(1), 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255
+    const m = (c: number) => Math.round(c + (255 - c) * p).toString(16).padStart(2, "0")
+    return `#${m(r)}${m(g)}${m(b)}`
+  }
+  return {
+    executiveSummary: `${idea.what} ${idea.name} resuelve el dolor de ${idea.audience.toLowerCase()} con una experiencia simple y rápida.`,
+    problem: `Hoy ${idea.audience.toLowerCase()} resuelven esto con planillas, WhatsApp o herramientas caras y dispersas.`,
+    audience: idea.audience,
+    useCases: idea.benefits.concat(["Onboarding en minutos", "Panel para administrar todo"]),
+    features: { mustHave: idea.benefits.concat(["Cuentas y login", "Panel principal", "Notificaciones"]), niceToHave: ["Exportar datos", "Integraciones", "Modo oscuro"], future: ["App mobile", "IA de recomendación"] },
+    roles: [{ role: "Usuario", permissions: ["Crear y ver su contenido", "Editar su perfil"] }, { role: "Admin", permissions: ["Gestionar usuarios", "Ver métricas"] }],
+    dataModel: [{ entity: "users", fields: ["id", "email", "name", "plan"], relations: ["1-N items"] }, { entity: "items", fields: ["id", "owner_id", "title", "created_at"], relations: ["N-1 users"] }],
+    screens: [{ name: "Home", purpose: "El producto en sí, listo para usar" }, { name: "Crear", purpose: "Dar de alta contenido" }, { name: "Detalle", purpose: "Ver un ítem" }, { name: "Cuenta", purpose: "Perfil y plan" }],
+    userFlows: ["Registro → onboarding → primer valor", "Crear → publicar → compartir", idea.monetization !== "free" ? "Upgrade → checkout → plan activo" : "Uso recurrente → retención"],
+    branding: { name: idea.name, tagline: idea.benefits[0], voice: "Cercano, claro, confiable", primaryColor: idea.color, colorRationale: "Color de marca elegido para transmitir confianza y energía.", palette: [{ hex: idea.color, label: "Primary" }, { hex: lighten(idea.color), label: "Accent" }, { hex: "#0B0912", label: "Fondo" }, { hex: "#FAF9FD", label: "Texto" }], logo: { monogram: mono, concept: `Monograma ${mono} en una marca limpia y moderna.` } },
+    monetization: idea.monetization === "free" ? "Gratis (crecimiento primero)" : idea.monetization === "subscription" ? `Suscripción a $${idea.price}/mes` : `Freemium${idea.price ? ` · Pro a $${idea.price}/mes` : ""}`,
+    integrations: idea.modules.includes("payments") ? [{ name: "Stripe", purpose: "Cobros y suscripciones" }] : [],
+    ai: "", analytics: ["Activación", "Retención D7", "Conversión a pago"], risks: ["Adquisición de los primeros usuarios", "Mantener la data actualizada"], assumptions: ["El público tiene el problema y paga por resolverlo"],
+    generatedStack: ["Next.js 16 + TypeScript", "PostgreSQL", "Auth + Stripe + Resend", "Landing + dashboard a medida"], openQuestions: [],
+  }
+}
+function cannedDesign(idea: Idea, variant: number) {
+  const c = idea.color, dark = variant === 0
+  const bg = dark ? "#0b0912" : "#faf9fd", fg = dark ? "#f4f2fb" : "#161126", muted = dark ? "#a39fb8" : "#5b5570", surf = dark ? "#15101f" : "#ffffff"
+  return `<!doctype html><html><head><meta charset="utf8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+*{margin:0;box-sizing:border-box;font-family:system-ui,sans-serif}body{background:${bg};color:${fg}}
+.wrap{max-width:880px;margin:0 auto;padding:28px 22px}
+.nav{display:flex;align-items:center;gap:8px;font-weight:800}.dot{width:22px;height:22px;border-radius:7px;background:${c};color:#fff;display:grid;place-items:center;font-size:12px}
+.hero{text-align:center;padding:46px 0 30px}.hero h1{font-size:40px;line-height:1.05;letter-spacing:-1px;margin-bottom:14px}.hero h1 b{color:${c}}
+.hero p{color:${muted};font-size:17px;max-width:540px;margin:0 auto 22px}
+.cta{display:inline-block;background:${c};color:#fff;font-weight:700;padding:13px 26px;border-radius:12px;text-decoration:none}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:18px}
+.card{background:${surf};border:1px solid ${dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.07)"};border-radius:16px;padding:18px}
+.card .ic{width:34px;height:34px;border-radius:9px;background:${c}22;color:${c};display:grid;place-items:center;font-weight:800;margin-bottom:9px}
+.card h3{font-size:15px;margin-bottom:5px}.card p{color:${muted};font-size:13px}
+</style></head><body><div class="wrap">
+<div class="nav"><span class="dot">${idea.name.slice(0, 1)}</span>${idea.name}</div>
+<div class="hero"><h1>${idea.benefits[0].split(" ").slice(0, 3).join(" ")} <b>con ${idea.name}</b></h1><p>${idea.what}</p><a class="cta" href="#">Empezar gratis →</a></div>
+<div class="grid">${idea.benefits.map((b, i) => `<div class="card"><div class="ic">${["✦", "◆", "●"][i] || "★"}</div><h3>${b.split(" ").slice(0, 4).join(" ")}</h3><p>${b}</p></div>`).join("")}</div>
+</div></body></html>`
+}
 
 // --- client image helpers ---
 function fileToDataURL(file: File, maxDim: number, mime = "image/png", q = 0.85): Promise<string> {
@@ -97,23 +144,21 @@ export default function Generate() {
     }
   }, [])
 
-  function startDemo() {
+  async function startDemo() {
     const idea = DEMO_IDEAS[Math.floor(Math.random() * DEMO_IDEAS.length)]
     setName(idea.name); setColor(idea.color)
-    const answers = { what: idea.what, audience: idea.audience, benefits: idea.benefits, monetization: idea.monetization, price: idea.price, modules: idea.modules, languages: idea.languages, color: idea.color }
-    const msgs: Msg[] = [
-      { role: "user", content: `Mi producto se llama "${idea.name}".` },
-      { role: "assistant", content: "¿Qué hace y para quién es?" },
-      { role: "user", content: `${idea.what} Es para: ${idea.audience}` },
-      { role: "assistant", content: "¿Cuáles son los beneficios clave?" },
-      { role: "user", content: idea.benefits.join("; ") },
-      { role: "assistant", content: "¿Cómo lo monetizás?" },
-      { role: "user", content: `${idea.monetization}${idea.price ? ` a $${idea.price}/mes` : " (gratis)"}.` },
-      { role: "assistant", content: "¿Idiomas y color de marca?" },
-      { role: "user", content: `Idioma ${idea.languages}, color ${idea.color}.` },
-    ]
-    setMessages(msgs)
-    produceSpec(answers, msgs, idea.name)
+    setPendingAnswers({ what: idea.what, audience: idea.audience, benefits: idea.benefits, monetization: idea.monetization, price: idea.price, modules: idea.modules, languages: idea.languages, color: idea.color })
+    // INSTANT: canned spec + 2 designs (no OpenAI) so the demo doesn't wait on generation.
+    setSpec(cannedSpec(idea))
+    setDesigns([cannedDesign(idea, 0), cannedDesign(idea, 1)])
+    setPhase("analyzing")
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    const upd = (st: ("pending" | "running" | "done")[]) => setAnalyze(ANALYZE_LABELS.map((l, i) => ({ label: l, status: st[i] })))
+    upd(["running", "pending", "pending"]); await sleep(420)
+    upd(["done", "running", "pending"]); await sleep(420)
+    upd(["done", "done", "running"]); await sleep(420)
+    upd(["done", "done", "done"]); await sleep(200)
+    setPhase("spec")
   }
 
   async function callInterview(msgs: Msg[]) {
