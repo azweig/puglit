@@ -14,7 +14,7 @@ import { generateLogoSvg } from "@/lib/logo-gen"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
-import { buildBespokeApp } from "@/lib/app-builder"
+import { buildBespokeApp, researchProduct } from "@/lib/app-builder"
 import { stakeholderReview } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
@@ -39,6 +39,7 @@ const CI_STEP_TIMEOUT_MS = 900_000 // ci-verify polls real CI for minutes — fa
 // (wired as a placeholder to be completed).
 const PLAN: { key: string; label: string }[] = [
   { key: "data-model", label: "Arquitecto · modelo de datos" },
+  { key: "research", label: "Researcher · fuentes de datos reales" },
   { key: "contracts", label: "Contracts · tipos + contrato de API" },
   { key: "brand", label: "Marca · logo + paleta" },
   { key: "design", label: "Diseño · landing" },
@@ -250,6 +251,16 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
       case "analytics": step.detail = "page_visits + analytics_events + /api/track + A/B — del spine"; break
       case "seo": step.detail = "metadata + sitemap + JSON-LD — scaffold"; break
       case "security": step.detail = "RLS, rate-limit map, security headers, validación — del spine"; break
+      case "research": {
+        // Researcher: find the REAL external data source(s) for data-driven products, so the
+        // seed/catalog mirrors the provider's schema and a cron can pull live data later.
+        if (job.config) {
+          const r = await researchProduct(job.config)
+          job.artifacts.research = r.dataDriven ? r.plan : ""
+          step.detail = r.dataDriven ? "fuente de datos real identificada + plan de ingesta" : "producto sin datos externos"
+        } else { step.detail = "—" }
+        break
+      }
       case "contracts": {
         if (job.config) job.artifacts.contracts = await runContracts(job.config)
         step.detail = job.artifacts.contracts ? "tipos + contrato de API definidos" : "—"
@@ -260,7 +271,7 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         // Frontend swarms emit the REAL pages and API routes for the product's core
         // journeys. Compilation is verified later by the real CI loop (ci-verify).
         if (job.config) {
-          const r = await buildBespokeApp(job.config, job.artifacts.contracts || "")
+          const r = await buildBespokeApp(job.config, job.artifacts.contracts || "", job.artifacts.research || "")
           job.artifacts.appFiles = r.files
           job.artifacts.blueprint = r.blueprint
           const main = r.files.find((f) => /route\.ts$/.test(f.path)) || r.files[0]

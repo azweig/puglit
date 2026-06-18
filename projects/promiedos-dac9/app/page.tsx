@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+interface Goal { player: string | null; minute: number | null; team: string | null }
 interface Match {
   id: number;
   tournament_id: number;
@@ -12,17 +13,23 @@ interface Match {
   score_home: number;
   score_away: number;
   status: string;
+  minute: number | null;
   tournament_name: string;
   country: string;
   flag: string;
+  goals: Goal[];
 }
 
 const BRAND = "#FF5733";
 
 function statusLabel(m: Match) {
-  if (m.status === "live") return "EN VIVO";
+  if (m.status === "live") return m.minute != null ? `${m.minute}'` : "EN VIVO";
   if (m.status === "finished") return "Final";
   return new Date(m.date).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+}
+
+function scorerLine(goals: Goal[], team: string) {
+  return goals.filter((g) => g.team === team && g.player).map((g) => `${g.minute}' ${g.player!.split(" ").slice(-1)[0]}`).join(" · ");
 }
 
 export default function HomePage() {
@@ -144,12 +151,18 @@ export default function HomePage() {
                             <span className="truncate font-semibold">{m.team_home}</span>
                             <span className={`shrink-0 tabular-nums font-extrabold ${live ? "text-emerald-400" : "text-white"}`}>{m.score_home}</span>
                           </div>
+                          {scorerLine(m.goals || [], m.team_home) && (
+                            <p className="mt-0.5 truncate text-[11px] text-slate-400">⚽ {scorerLine(m.goals, m.team_home)}</p>
+                          )}
                           <div className="mt-1 flex items-center justify-between gap-3">
                             <span className="truncate font-semibold">{m.team_away}</span>
                             <span className={`shrink-0 tabular-nums font-extrabold ${live ? "text-emerald-400" : "text-white"}`}>{m.score_away}</span>
                           </div>
+                          {scorerLine(m.goals || [], m.team_away) && (
+                            <p className="mt-0.5 truncate text-[11px] text-slate-400">⚽ {scorerLine(m.goals, m.team_away)}</p>
+                          )}
                         </div>
-                        <Link href={`/standings/${m.tournament_id}`} className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-white/10 hover:text-white transition-colors">›</Link>
+                        <Link href={`/match/${m.id}`} className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-white/10 hover:text-white transition-colors">›</Link>
                       </li>
                     );
                   })}

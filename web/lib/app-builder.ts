@@ -103,7 +103,9 @@ COMPLETENESS (CRITICAL — generators die here; never ship a read-only app):
 - Messaging/chat MUST have POST (send) and GET (list), BOTH scoped to the conversation's participants (verify the caller belongs to the match before reading/writing).
 - A swipe/like route must DETECT the mutual condition and create the match atomically.
 
-Make tables, routes and pages mutually consistent (same table/column names everywhere). Keep it focused: 4-6 tables, 5-8 routes, 4-6 pages. ALWAYS include the homepage page at route "/" (app/page.tsx) as the product itself, plus a publish/create page when users contribute content. Use the product's language for UI labels.` },
+REFERENCE-PRODUCT DEPTH (critical — do NOT ship a toy): if the idea names or clearly clones a real product/category (e.g. "like promiedos", "a Tinder for X", "an Airbnb for Y", "a sports scores site"), MENTALLY ENUMERATE that real product's actual surfaces and MATCH their depth — not a stripped-down sketch. A live-scores product (Promiedos/365scores) is NOT 4 flat tables: it needs competitions, matches WITH minute-by-minute events, lineups/formations, match statistics, team & player pages, multiple standings views, fixtures by round, top scorers. Model the ENTITIES and SURFACES that make it recognizably that product. A data-driven product that shows external/live data (scores, prices, flights, listings) is INGESTED from a real source — model it as a curated catalog refreshed by cron, never as user-generated, and assume an ingestion job populates it.
+
+SIZE TO THE PRODUCT, do not cap artificially: simple tools may need 3-5 tables; a deep product (sports/marketplace/social/aggregator) legitimately needs 8-15+ tables and many routes/pages — generate what the product GENUINELY requires to be a faithful, usable clone. Keep each file focused, but never sacrifice the product's real feature surface to hit a small number. Make tables, routes and pages mutually consistent (same table/column names everywhere). ALWAYS include the homepage at route "/" (app/page.tsx) as the product itself, plus a detail page for the product's primary entity (e.g. a match/profile/listing page) and a create page when users contribute content. Use the product's language for UI labels.` },
     { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n\nCONTRACTS:\n${contracts}` },
   ], { model: MODELS.premium, temperature: 0.3 })) as Partial<Blueprint>
 
@@ -832,7 +834,22 @@ const SEED_SKIP = new Set(["users", "auth_tokens", "records", "page_visits", "an
  *  listings curated/scraped from external sources) are useless empty. Generate a
  *  REALISTIC seed (real, plausible data for the product's market) for the catalog
  *  tables — NOT user/auth or user-owned tables. Generalizable to any aggregator. */
-async function genCatalogSeed(config: DomainConfig, bp: Blueprint): Promise<AppFile | null> {
+/** Researcher: for a data-driven product, identify the REAL external data source(s) and an
+ *  ingestion plan, so the seed/catalog mirrors the real provider's schema and a cron can pull
+ *  live data instead of inventing it. Returns a concise plan; safe (returns empty on failure). */
+export async function researchProduct(config: DomainConfig): Promise<{ dataDriven: boolean; plan: string }> {
+  const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are the Domain Researcher. Determine whether this product depends on EXTERNAL/LIVE data (sports scores, prices, flights, weather, listings, stocks, news…) vs purely user-generated data. If external, identify the BEST REAL data source(s) — prefer official/free APIs (name them, note free-tier limits + which fields they expose: e.g. live, events, lineups, stats), fall back to scraping only if no API fits — and outline a concrete ingestion plan (which endpoints, what cadence given the limits, what tables they populate, what to cache). Be specific and realistic; this drives a cron that pulls into Postgres. If the product is NOT data-driven, say so.
+Return ONLY JSON: {"dataDriven": boolean, "plan": "markdown: sources (with free-tier notes), endpoints, cadence, mapping to tables"}.` },
+      { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nEntities: ${(config.entities || []).map((e) => e.name).join(", ")}` },
+    ], { model: MODELS.premium, temperature: 0.3 })) as { dataDriven?: boolean; plan?: string }
+    return { dataDriven: !!out.dataDriven, plan: String(out.plan || "") }
+  } catch { return { dataDriven: false, plan: "" } }
+}
+
+async function genCatalogSeed(config: DomainConfig, bp: Blueprint, research?: string): Promise<AppFile | null> {
   const catalog = bp.tables.filter((t) => {
     if (SEED_SKIP.has(t.name)) return false
     const p = parseTable(t.ddl)
@@ -852,7 +869,7 @@ async function genCatalogSeed(config: DomainConfig, bp: Blueprint): Promise<AppF
 - Use ONLY the exact table & column names in the DDL. Strings single-quoted, escape apostrophes by doubling.
 - Do NOT seed user/auth/membership/selection tables (users fill those).
 Return ONLY JSON {"sql":"-- seed\\nINSERT INTO ...;\\n..."}.` },
-      { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\n\nCATALOG TABLES (seed exactly these):\n${catalog.map((t) => t.ddl).join("\n\n")}` },
+      { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\n${research ? `\nDATA SOURCE RESEARCH (mirror this real provider's schema/values so a cron can later replace the seed with live data):\n${research}\n` : ""}\nCATALOG TABLES (seed exactly these):\n${catalog.map((t) => t.ddl).join("\n\n")}` },
     ], { model: MODELS.balanced, temperature: 0.4 })) as { sql?: string }
     return out.sql && out.sql.length > 30 ? { path: "sql/seed.sql", content: `-- ${config.identity.name} — catalog seed (generated by Puglit's Data Ingestion agent).\n-- Real-world reference data so the app works on first run; refresh via app/api/cron/refresh.\n\n${out.sql}\n` } : null
   } catch { return null }
@@ -1025,7 +1042,7 @@ ${fields}
 }
 
 /** Orchestrate the swarm: blueprint → tables + routes (parallel) + pages (parallel). */
-export async function buildBespokeApp(config: DomainConfig, contracts: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
+export async function buildBespokeApp(config: DomainConfig, contracts: string, research?: string): Promise<{ files: AppFile[]; blueprint: Blueprint }> {
   const blueprint = await planBlueprint(config, contracts)
   if (!blueprint.routes.length && !blueprint.pages.length) return { files: [], blueprint }
 
@@ -1052,7 +1069,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   const geoDet = deterministicGeo(blueprint.tables, [])
   const shapes = [matchesDet?.shape, geoDet?.shape].filter(Boolean).join("\n")
   const briefPromise = genDesignBrief(config, blueprint).catch(() => "")
-  const seedPromise = genCatalogSeed(config, blueprint).catch(() => null)
+  const seedPromise = genCatalogSeed(config, blueprint, research).catch(() => null)
   const routePromise = Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).then((f) => (f ? hardenRoute(f, schemaSql) : null)).catch(() => null)))
   const brief = await briefPromise
   const pagePromise = Promise.all(pages.map((p) => genPolishedPage(config, blueprint, p, brief, shapes).catch(() => null)))

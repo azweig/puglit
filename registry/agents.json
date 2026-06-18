@@ -185,9 +185,10 @@
       "id": "researcher",
       "role": "Domain Researcher",
       "phase": "research",
-      "wired": false,
+      "wired": true,
       "model": "premium",
-      "purpose": "PLANNED, not yet connected: real web research (category refs, real data sources/feeds, current APIs, competitors) feeding the plan with cited findings instead of guesses."
+      "location": "lib/app-builder.ts · researchProduct (step 'research' in jobs.ts)",
+      "purpose": "For data-driven products, identifies the REAL external data source (prefers free official APIs, notes free-tier limits + fields) and an ingestion plan; feeds the Data Ingestion agent so the seed mirrors the provider's schema and a cron can pull live data instead of inventing it. Reference impl: promiedos-dac9 app/api/cron/refresh (API-Football, mock fallback)."
     },
     {
       "id": "quality-control-plane",

@@ -1,0 +1,106 @@
+{
+  "_note": "Mirror of API-Football v3 response shapes. Used when APIFOOTBALL_KEY is absent so the ingest pipeline is verifiable offline. 'when'/'elapsed' let the adapter place fixtures relative to NOW so 'live/today' always renders.",
+  "leagues": [
+    { "id": 128, "name": "Liga Profesional", "country": "Argentina", "flag": "🇦🇷", "season": "2026" },
+    { "id": 39, "name": "Premier League", "country": "Inglaterra", "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "season": "2025" }
+  ],
+  "fixtures": [
+    { "id": 1001, "leagueId": 128, "round": "Fecha 14", "when": "live", "elapsed": 67, "venue": "Estadio Más Monumental", "referee": "Darío Herrera",
+      "home": { "name": "River Plate", "logo": "" }, "away": { "name": "Boca Juniors", "logo": "" }, "goals": { "home": 2, "away": 1 } },
+    { "id": 1002, "leagueId": 128, "round": "Fecha 14", "when": "live", "elapsed": 23, "venue": "Cilindro de Avellaneda", "referee": "Facundo Tello",
+      "home": { "name": "Racing Club", "logo": "" }, "away": { "name": "Independiente", "logo": "" }, "goals": { "home": 0, "away": 0 } },
+    { "id": 1003, "leagueId": 128, "round": "Fecha 14", "when": "finished", "venue": "Nuevo Gasómetro", "referee": "Andrés Merlos",
+      "home": { "name": "San Lorenzo", "logo": "" }, "away": { "name": "Vélez Sarsfield", "logo": "" }, "goals": { "home": 1, "away": 2 } },
+    { "id": 1004, "leagueId": 128, "round": "Fecha 14", "when": "soon", "venue": "Estadio Mario A. Kempes", "referee": "Yael Falcón",
+      "home": { "name": "Talleres", "logo": "" }, "away": { "name": "Lanús", "logo": "" }, "goals": { "home": null, "away": null } },
+    { "id": 2001, "leagueId": 39, "round": "Round 22", "when": "live", "elapsed": 41, "venue": "Emirates Stadium", "referee": "Michael Oliver",
+      "home": { "name": "Arsenal", "logo": "" }, "away": { "name": "Manchester City", "logo": "" }, "goals": { "home": 1, "away": 1 } },
+    { "id": 2002, "leagueId": 39, "round": "Round 22", "when": "finished", "venue": "Anfield", "referee": "Anthony Taylor",
+      "home": { "name": "Liverpool", "logo": "" }, "away": { "name": "Manchester United", "logo": "" }, "goals": { "home": 3, "away": 1 } }
+  ],
+  "events": {
+    "1001": [
+      { "elapsed": 12, "extra": null, "team": "River Plate", "player": "Miguel Borja", "assist": "Franco Mastantuono", "type": "Goal", "detail": "Normal Goal" },
+      { "elapsed": 34, "extra": null, "team": "Boca Juniors", "player": "Edinson Cavani", "assist": null, "type": "Goal", "detail": "Normal Goal" },
+      { "elapsed": 41, "extra": null, "team": "Boca Juniors", "player": "Marcos Rojo", "assist": null, "type": "Card", "detail": "Yellow Card" },
+      { "elapsed": 58, "extra": null, "team": "River Plate", "player": "Facundo Colidio", "assist": "Manuel Lanzini", "type": "Goal", "detail": "Normal Goal" },
+      { "elapsed": 63, "extra": null, "team": "River Plate", "player": "Lanzini", "assist": "Aliendro", "type": "subst", "detail": "Substitution 1" }
+    ],
+    "1003": [
+      { "elapsed": 22, "extra": null, "team": "Vélez Sarsfield", "player": "Braian Romero", "assist": null, "type": "Goal", "detail": "Normal Goal" },
+      { "elapsed": 55, "extra": null, "team": "San Lorenzo", "player": "Adam Bareiro", "assist": null, "type": "Goal", "detail": "Penalty" },
+      { "elapsed": 78, "extra": null, "team": "Vélez Sarsfield", "player": "Michael Santos", "assist": "Lautaro Gianetti", "type": "Goal", "detail": "Normal Goal" }
+    ],
+    "2001": [
+      { "elapsed": 18, "extra": null, "team": "Manchester City", "player": "Erling Haaland", "assist": "Kevin De Bruyne", "type": "Goal", "detail": "Normal Goal" },
+      { "elapsed": 37, "extra": null, "team": "Arsenal", "player": "Bukayo Saka", "assist": "Martin Ødegaard", "type": "Goal", "detail": "Normal Goal" }
+    ]
+  },
+  "lineups": {
+    "1001": [
+      { "team": "River Plate", "formation": "4-3-1-2", "coach": "Marcelo Gallardo",
+        "startXI": [
+          { "name": "Franco Armani", "number": 1, "pos": "G", "grid": "1:1" },
+          { "name": "Andrés Herrera", "number": 4, "pos": "D", "grid": "2:1" },
+          { "name": "Paulo Díaz", "number": 17, "pos": "D", "grid": "2:2" },
+          { "name": "Germán Pezzella", "number": 2, "pos": "D", "grid": "2:3" },
+          { "name": "Marcos Acuña", "number": 8, "pos": "D", "grid": "2:4" },
+          { "name": "Enzo Pérez", "number": 24, "pos": "M", "grid": "3:1" },
+          { "name": "Rodrigo Aliendro", "number": 23, "pos": "M", "grid": "3:2" },
+          { "name": "Manuel Lanzini", "number": 10, "pos": "M", "grid": "3:3" },
+          { "name": "Franco Mastantuono", "number": 30, "pos": "M", "grid": "4:1" },
+          { "name": "Miguel Borja", "number": 9, "pos": "F", "grid": "5:1" },
+          { "name": "Facundo Colidio", "number": 36, "pos": "F", "grid": "5:2" }
+        ],
+        "substitutes": [
+          { "name": "Jeremías Ledesma", "number": 12, "pos": "G" },
+          { "name": "Santiago Simón", "number": 16, "pos": "M" },
+          { "name": "Ignacio Fernández", "number": 26, "pos": "M" }
+        ] },
+      { "team": "Boca Juniors", "formation": "4-4-2", "coach": "Fernando Gago",
+        "startXI": [
+          { "name": "Sergio Romero", "number": 1, "pos": "G", "grid": "1:1" },
+          { "name": "Luis Advíncula", "number": 17, "pos": "D", "grid": "2:1" },
+          { "name": "Marcos Rojo", "number": 6, "pos": "D", "grid": "2:2" },
+          { "name": "Cristian Lema", "number": 28, "pos": "D", "grid": "2:3" },
+          { "name": "Lautaro Blanco", "number": 3, "pos": "D", "grid": "2:4" },
+          { "name": "Kevin Zenón", "number": 8, "pos": "M", "grid": "3:1" },
+          { "name": "Pol Fernández", "number": 5, "pos": "M", "grid": "3:2" },
+          { "name": "Cristian Medina", "number": 36, "pos": "M", "grid": "3:3" },
+          { "name": "Exequiel Zeballos", "number": 7, "pos": "M", "grid": "3:4" },
+          { "name": "Edinson Cavani", "number": 10, "pos": "F", "grid": "4:1" },
+          { "name": "Miguel Merentiel", "number": 16, "pos": "F", "grid": "4:2" }
+        ],
+        "substitutes": [
+          { "name": "Javier García", "number": 12, "pos": "G" },
+          { "name": "Milton Giménez", "number": 33, "pos": "F" }
+        ] }
+    ]
+  },
+  "statistics": {
+    "1001": [
+      { "team": "River Plate", "stats": [ { "type": "Ball Possession", "value": "58%" }, { "type": "Total Shots", "value": 14 }, { "type": "Shots on Goal", "value": 6 }, { "type": "Corner Kicks", "value": 7 }, { "type": "Fouls", "value": 11 } ] },
+      { "team": "Boca Juniors", "stats": [ { "type": "Ball Possession", "value": "42%" }, { "type": "Total Shots", "value": 9 }, { "type": "Shots on Goal", "value": 4 }, { "type": "Corner Kicks", "value": 3 }, { "type": "Fouls", "value": 14 } ] }
+    ]
+  },
+  "standings": {
+    "128": [
+      { "rank": 1, "team": "River Plate", "points": 30, "played": 13, "won": 9, "drawn": 3, "lost": 1, "gf": 26, "ga": 10 },
+      { "rank": 2, "team": "Boca Juniors", "points": 27, "played": 13, "won": 8, "drawn": 3, "lost": 2, "gf": 22, "ga": 12 },
+      { "rank": 3, "team": "Racing Club", "points": 24, "played": 13, "won": 7, "drawn": 3, "lost": 3, "gf": 19, "ga": 14 },
+      { "rank": 4, "team": "San Lorenzo", "points": 22, "played": 13, "won": 6, "drawn": 4, "lost": 3, "gf": 16, "ga": 13 },
+      { "rank": 5, "team": "Talleres", "points": 21, "played": 13, "won": 6, "drawn": 3, "lost": 4, "gf": 18, "ga": 15 },
+      { "rank": 6, "team": "Vélez Sarsfield", "points": 19, "played": 13, "won": 5, "drawn": 4, "lost": 4, "gf": 14, "ga": 13 }
+    ],
+    "39": [
+      { "rank": 1, "team": "Manchester City", "points": 50, "played": 22, "won": 16, "drawn": 2, "lost": 4, "gf": 52, "ga": 22 },
+      { "rank": 2, "team": "Arsenal", "points": 49, "played": 22, "won": 15, "drawn": 4, "lost": 3, "gf": 45, "ga": 19 },
+      { "rank": 3, "team": "Liverpool", "points": 47, "played": 22, "won": 14, "drawn": 5, "lost": 3, "gf": 48, "ga": 24 },
+      { "rank": 4, "team": "Chelsea", "points": 41, "played": 22, "won": 12, "drawn": 5, "lost": 5, "gf": 39, "ga": 26 }
+    ]
+  },
+  "topscorers": {
+    "128": [ { "player": "Miguel Borja", "team": "River Plate", "goals": 12 }, { "player": "Edinson Cavani", "team": "Boca Juniors", "goals": 10 }, { "player": "Adrián Martínez", "team": "Racing Club", "goals": 9 } ],
+    "39": [ { "player": "Erling Haaland", "team": "Manchester City", "goals": 19 }, { "player": "Mohamed Salah", "team": "Liverpool", "goals": 16 }, { "player": "Bukayo Saka", "team": "Arsenal", "goals": 12 } ]
+  }
+}
