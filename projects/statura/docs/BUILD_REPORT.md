@@ -1,0 +1,9 @@
+# Build report — Statura
+
+## Bespoke app (generation swarm)
+
+Statura es una página pública de estado, sin login, estilo Statuspage/status.claude.com: muestra en `/` el estado global del sistema, componentes agrupados con indicadores individuales, incidentes activos, mantenimientos programados, uptime de los últimos 90 días, historial de incidentes y detalle con timeline. Los visitantes pueden suscribirse a actualizaciones por email, SMS, Slack o webhook, elegir componentes específicos, verificar su contacto y administrar/cancelar la suscripción mediante token. La configuración de páginas, componentes y monitores HTTPS es catálogo/operación interna sembrada o ingerida por la app; los visitantes solo leen estado público y crean suscripciones.
+
+- Tablas: status_pages, component_groups, components, endpoints, uptime_checks, uptime_days, incidents, incident_components, incident_updates, maintenances, maintenance_components, maintenance_updates, subscribers, subscriber_components, notification_deliveries
+- Rutas API: app/api/public/status-pages/[slug]/route.ts, app/api/public/status-pages/[slug]/uptime/route.ts, app/api/public/status-pages/[slug]/incidents/route.ts, app/api/public/incidents/[incidentId]/route.ts, app/api/public/maintenances/[maintenanceId]/route.ts, app/api/public/status-pages/[slug]/subscribers/route.ts, app/api/public/subscribers/verify/route.ts, app/api/public/subscribers/[token]/route.ts, app/api/public/status-pages/[slug]/rss/route.ts, app/api/public/status-pages/[slug]/atom/route.ts, app/api/monitor/run-checks/route.ts
+- Pantallas: /, /status/[slug], /uptime, /status/[slug]/uptime, /history, /status/[slug]/history, /incidents/[incidentId], /maintenance/[maintenanceId], /subscribe/verify, /subscribe/manage/[token], /app/status-pages/[slug]/subscribers/new

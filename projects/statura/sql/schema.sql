@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS status_pages (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  custom_domain TEXT,
+  is_public BOOLEAN NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS endpoints (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status_page_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  current_status TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS incidents (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status_page_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS uptime_checks (
+  id BIGSERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint_id TEXT NOT NULL,
+  checked_at TIMESTAMPTZ NOT NULL,
+  is_up BOOLEAN NOT NULL,
+  response_time_ms INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
