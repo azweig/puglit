@@ -20,6 +20,8 @@ export async function POST(request: NextRequest) {
       price: Number(a.price) || 0,
       modules: Array.isArray(a.modules) ? a.modules.map(String) : [],
       email: String(a.email || "").slice(0, 255),
+      references: a.references ? String(a.references).slice(0, 8000) : undefined,
+      archetype: a.archetype ? String(a.archetype).slice(0, 40) : undefined,
     }
     const id = await createJob({ answers, branding: a.branding, chosenLanding: a.landingHtml, creds: a.creds })
     return NextResponse.json({ ok: true, id })

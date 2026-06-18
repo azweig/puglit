@@ -24,8 +24,17 @@ BE COMPLETE — this must be enough to build a WHOLE app, not a sketch:
 
 IMPORTANT: Do NOT choose or ask about the tech stack — it is FIXED by the platform (Next.js, TypeScript, PostgreSQL, auth, Stripe, Resend, Fly.io). In "generatedStack" just state what will be generated on that fixed stack for THIS product.
 
+ARCHETYPE & HONESTY (critical — this is how we avoid building a nonsensical shell):
+- "archetype": classify the product as ONE of: "game" | "status_monitoring" | "marketplace" | "social" | "content_feed" | "directory" | "dashboard" | "ecommerce" | "tool" | "saas_accounts" | "other".
+- "ossAlternatives": if a MATURE open-source project already does ~90% of this (status page → Upptime/Cachet/Statping; analytics → Plausible/Umami; forum → Discourse; wiki → Outline; forms → Formbricks; etc.), list 1-3 as {"name","url","why"} and be honest that adopting/forking it may beat a from-scratch build. Empty array if none truly fits.
+- "neededFromYou": the REAL inputs only the founder can provide for this to actually work — be specific: a status/monitoring product needs the ACTUAL endpoints/services to check (URLs, expected status, cadence); a data-driven product needs the data source/API/credentials; an integrations product needs the accounts to connect. Short imperative strings. If the build ships with sample/seed data until these are provided, also say so in "assumptions".
+- Do NOT invent a money path that contradicts the model: if monetization is "free" there is NO pricing page and NO "registrate gratis"/paywall; if the product is public (it IS the homepage, no login) there is NO signup screen. State this explicitly in "monetization".
+
 Return ONLY JSON with this exact shape (arrays of short, concrete strings unless noted):
 {
+  "archetype": "game"|"status_monitoring"|"marketplace"|"social"|"content_feed"|"directory"|"dashboard"|"ecommerce"|"tool"|"saas_accounts"|"other",
+  "ossAlternatives": [{ "name": string, "url": string, "why": string }],
+  "neededFromYou": string[],
   "executiveSummary": string,
   "problem": string,
   "audience": string,
@@ -50,13 +59,16 @@ Return ONLY JSON with this exact shape (arrays of short, concrete strings unless
 export async function POST(request: NextRequest) {
   if (!aiConfigured()) return NextResponse.json({ error: "ai_not_configured" }, { status: 503 })
   try {
-    const { messages, productName } = await request.json()
+    const { messages, productName, references } = await request.json()
     const history: ChatMessage[] = Array.isArray(messages) ? messages : []
     const transcript = history.map((m) => `${m.role}: ${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}`).join("\n")
+    const refBlock = typeof references === "string" && references.trim()
+      ? `\n\nREFERENCES the founder provided (web pages / docs / images — use them for data interpretation, brand and feature suggestions):\n${references.slice(0, 6000)}`
+      : ""
 
     const spec = await chatJSON([
       { role: "system", content: SYSTEM },
-      { role: "user", content: `Product name: "${productName}".\n\nInterview transcript:\n${transcript}` },
+      { role: "user", content: `Product name: "${productName}".\n\nInterview transcript:\n${transcript}${refBlock}` },
     ], { model: MODELS.premium, temperature: 0.3 }) as any
 
     // Generate the real vector logo now so the diagnosis can show it.

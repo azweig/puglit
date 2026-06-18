@@ -21,6 +21,8 @@ export interface IntakeAnswers {
   email: string
   logo?: string        // data URL of an uploaded logo (rendered on the landing)
   websiteImage?: string // data URL of an existing site screenshot (reference only)
+  references?: string  // synthesized digest of references the founder gave up front (URLs/docs/images)
+  archetype?: string   // product archetype from the diagnosis ("game", "status_monitoring", …) — routes the build mold
 }
 
 const VALID_MODULES = [

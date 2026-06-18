@@ -15,6 +15,7 @@ import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
 import { buildAdvance, initEngineState, researchProduct, studyReference } from "@/lib/app-builder"
+import { gameAdvance, initGameState, looksLikeGame } from "@/lib/game-builder"
 import { stakeholderAdvance, initStakeholderState } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
 import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
@@ -211,6 +212,35 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
     step.status = "running"; step.startedAt = new Date().toISOString(); job.artifacts = job.artifacts || {}
     try {
       const config = job.config || applyBranding(generateConfig(job.answers as IntakeAnswers), job.branding)
+      const A2 = job.answers as IntakeAnswers
+      const isGame = A2?.archetype === "game" ||
+        looksLikeGame(`${config.identity.name} ${A2?.what || ""} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}`)
+
+      // GAME MOLD: a game is not tables→routes→pages — route to the dedicated builder.
+      if (isGame) {
+        const gs = job.artifacts.gameState || initGameState()
+        const gr = await gameAdvance(config, job.artifacts.reference || A2?.references || "", gs)
+        job.artifacts.gameState = gr.state
+        step.detail = "🎮 " + gr.detail
+        if (gr.done) {
+          job.artifacts.appFiles = gr.state.files
+          const hasScores = gr.state.files.some((f) => /app\.sql$/.test(f.path))
+          job.artifacts.blueprint = {
+            kind: "public", summary: gr.state.design?.pitch || "",
+            tables: hasScores ? [{ name: "scores", ddl: "" }] : [],
+            routes: gr.state.files.filter((f) => /route\.ts$/.test(f.path)).map((f) => ({ path: f.path, methods: ["GET", "POST"], purpose: "leaderboard", logic: "" })),
+            pages: [{ route: "/", file: "app/page.tsx", title: gr.state.design?.title || config.identity.name, behavior: "the playable game" }],
+            nav: [],
+          }
+          const main = gr.state.files.find((f) => f.path === "app/page.tsx")
+          if (main) job.artifacts.engine = { path: main.path, code: main.content }
+          step.status = "done"
+          step.detail = `🎮 ${gr.state.files.length} archivos · ${gr.state.design?.genre || "juego"}${hasScores ? " · leaderboard" : ""}`
+        }
+        await persist(job, true)
+        return job
+      }
+
       const state = job.artifacts.engineState || initEngineState()
       const r = await buildAdvance(config, job.artifacts.contracts || "", job.artifacts.research || "", job.artifacts.reference || "", state)
       job.artifacts.engineState = r.state
@@ -307,8 +337,11 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         if (job.config) {
           const [r, ref] = await Promise.all([researchProduct(job.config), studyReference(job.config)])
           job.artifacts.research = r.dataDriven ? r.plan : ""
-          job.artifacts.reference = ref
-          const bits = [r.dataDriven ? "fuente de datos real + plan de ingesta" : "sin datos externos", ref ? "producto de referencia mapeado" : ""].filter(Boolean)
+          // Fold the founder's up-front references (URLs/docs/images digest) into the reference
+          // brief so the blueprint reaches their fidelity bar and interprets their data.
+          const userRefs = (A.references || "").trim()
+          job.artifacts.reference = [ref, userRefs ? `FOUNDER-PROVIDED REFERENCES (match these cues — brand, data, features):\n${userRefs}` : ""].filter(Boolean).join("\n\n")
+          const bits = [r.dataDriven ? "fuente de datos real + plan de ingesta" : "sin datos externos", ref ? "producto de referencia mapeado" : "", userRefs ? "referencias del fundador integradas" : ""].filter(Boolean)
           step.detail = bits.join(" · ")
         } else { step.detail = "—" }
         break

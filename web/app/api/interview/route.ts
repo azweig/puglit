@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "ai_not_configured" }, { status: 503 })
   }
   try {
-    const { messages, productName, hasLogo, hasWebsite, finish } = await request.json()
+    const { messages, productName, hasLogo, hasWebsite, references, finish } = await request.json()
     const history: ChatMessage[] = Array.isArray(messages) ? messages : []
 
     // "Finish now": the user chose to stop the interview — extract what we have
@@ -74,6 +74,9 @@ export async function POST(request: NextRequest) {
     if (productName) ctx.push(`Product name: "${productName}".`)
     if (hasLogo) ctx.push("The founder already uploaded a logo — keep brand color suggestions compatible with an existing logo.")
     if (hasWebsite) ctx.push("The founder already has a website — keep the style coherent with an existing brand.")
+    if (typeof references === "string" && references.trim()) {
+      ctx.push(`REFERENCES the founder provided up front (use them to interpret the idea, infer data/brand/features, and make suggestions — do NOT re-ask what they already answer; DO confirm or refine the non-obvious parts):\n${references.slice(0, 6000)}`)
+    }
 
     const full: ChatMessage[] = [
       { role: "system", content: SYSTEM },

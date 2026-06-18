@@ -130,6 +130,14 @@ export default function Generate() {
   const [color, setColor] = useState<string | null>(null)
   const [result, setResult] = useState<{ url: string; slug: string; emailed: boolean; name: string } | null>(null)
   const [buildMsg, setBuildMsg] = useState("")
+  // references the founder gives up front (URLs / docs / images) — feed interpretation + suggestions
+  const [showRefs, setShowRefs] = useState(false)
+  const [refUrls, setRefUrls] = useState("")
+  const [refText, setRefText] = useState("")
+  const [refFiles, setRefFiles] = useState<{ type: "image" | "text"; value: string; name?: string }[]>([])
+  const [references, setReferences] = useState("")
+  const [refSuggestions, setRefSuggestions] = useState<string[]>([])
+  const [refBusy, setRefBusy] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [log, step, busy])
@@ -161,12 +169,40 @@ export default function Generate() {
     setPhase("spec")
   }
 
-  async function callInterview(msgs: Msg[]) {
+  // --- references ingestion (optional, up front) ---
+  async function onRefImages(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    for (const f of files) { const url = await fileToDataURL(f, 1100, "image/jpeg", 0.72); setRefFiles((r) => [...r, { type: "image", value: url, name: f.name }]) }
+    e.target.value = ""
+  }
+  async function onRefDocs(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    for (const f of files) { try { const txt = await f.text(); setRefFiles((r) => [...r, { type: "text", value: txt.slice(0, 8000), name: f.name }]) } catch { /* skip */ } }
+    e.target.value = ""
+  }
+  function refCount() { return refFiles.length + refUrls.split(/[\n,\s]+/).filter(Boolean).length + (refText.trim() ? 1 : 0) }
+  async function ingestReferences(): Promise<string> {
+    const items = [
+      ...refUrls.split(/[\n,\s]+/).map((u) => u.trim()).filter(Boolean).map((u) => ({ type: "url" as const, value: u })),
+      ...(refText.trim() ? [{ type: "text" as const, value: refText.trim() }] : []),
+      ...refFiles,
+    ]
+    if (!items.length) return ""
+    setRefBusy(true)
+    try {
+      const r = await fetch("/api/references", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, productName: name.trim() }) })
+      const d = await r.json()
+      if (r.ok && d.ok) { setReferences(d.digest || ""); setRefSuggestions(Array.isArray(d.suggestions) ? d.suggestions : []); return d.digest || "" }
+    } catch { /* references are optional */ } finally { setRefBusy(false) }
+    return ""
+  }
+
+  async function callInterview(msgs: Msg[], refs: string = references) {
     setBusy(true); setErr("")
     try {
       const r = await fetch("/api/interview", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: msgs, productName: name, hasLogo: !!logo, hasWebsite: !!website }),
+        body: JSON.stringify({ messages: msgs, productName: name, hasLogo: !!logo, hasWebsite: !!website, references: refs }),
       })
       const d = await r.json()
       if (!r.ok) { setErr(d.error === "ai_not_configured" ? "The AI interview isn’t connected yet (missing OpenAI key)." : "AI error — try again."); return }
@@ -187,7 +223,7 @@ export default function Generate() {
     const upd = (states: ("pending" | "running" | "done")[]) => setAnalyze(ANALYZE_LABELS.map((l, i) => ({ label: l, status: states[i] })))
     upd(["running", "pending", "pending"])
     try {
-      const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: nm }) })
+      const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: nm, references }) })
       const sd = await sr.json()
       if (!(sr.ok && sd.ok)) { await finalize(answers); return }
       setSpec(sd.spec)
@@ -221,11 +257,13 @@ export default function Generate() {
     })
   }
 
-  function start() {
+  async function start() {
     if (!name.trim()) return
+    let refs = references
+    if (!refs && refCount() > 0) refs = await ingestReferences()
     setPhase("chat")
-    const first: Msg[] = [{ role: "user", content: `My product is called "${name.trim()}".` }]
-    setMessages(first); callInterview(first)
+    const first: Msg[] = [{ role: "user", content: `My product is called "${name.trim()}".${refs ? " (I also gave references up front — use them.)" : ""}` }]
+    setMessages(first); callInterview(first, refs)
   }
 
   function answer(sendText: string, show: string, pickedColor?: string) {
@@ -259,7 +297,7 @@ export default function Generate() {
     try {
       const r = await fetch("/api/job/create", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...pendingAnswers, name: name.trim(), color: color || pendingAnswers.color, branding: spec?.branding, landingHtml, creds }),
+        body: JSON.stringify({ ...pendingAnswers, name: name.trim(), color: color || pendingAnswers.color, branding: spec?.branding, landingHtml, creds, references, archetype: spec?.archetype }),
       })
       const d = await r.json()
       if (r.ok && d.id) { router.push(`/build/${d.id}`); return }
@@ -313,8 +351,44 @@ export default function Generate() {
         <h1 className="text-3xl font-extrabold">Let’s build your SaaS.</h1>
         <p className="text-white/60 mt-2">It’s a quick chat — I’ll read your answers and suggest options as we go. First:</p>
         <label className="block text-sm font-semibold text-white/80 mt-8 mb-2">What’s your product called?</label>
-        <input autoFocus className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/35 focus:border-violet focus:outline-none" placeholder="e.g. Mesa" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && start()} />
-        <button onClick={start} disabled={!name.trim()} className="mt-5 px-6 py-3 rounded-xl font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>Start →</button>
+        <input autoFocus className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/35 focus:border-violet focus:outline-none" placeholder="e.g. Mesa" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !showRefs && start()} />
+
+        {/* Optional references — given up front, used to interpret the idea + suggest */}
+        <div className="mt-5 rounded-xl border border-white/10 bg-ink2">
+          <button onClick={() => setShowRefs((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+            <span className="text-sm font-semibold text-white/85">📎 ¿Tenés referencias? <span className="text-white/45 font-normal">(opcional)</span></span>
+            <span className="text-white/40 text-xs">{refCount() ? `${refCount()} agregada(s)` : "URLs · imágenes · docs · texto"}{showRefs ? "  ▲" : "  ▼"}</span>
+          </button>
+          {showRefs && (
+            <div className="px-4 pb-4 space-y-3">
+              <p className="text-xs text-white/50">Pegá links de sitios/productos que te gustan, subí capturas o mockups, documentos, o pegá texto. Los leo (las imágenes con visión) y los uso para interpretar tu idea y sugerirte cosas.</p>
+              <div>
+                <label className="block text-xs font-semibold text-white/60 mb-1">URLs / páginas web (una por línea)</label>
+                <textarea value={refUrls} onChange={(e) => setRefUrls(e.target.value)} rows={2} placeholder="https://status.claude.com&#10;https://miproducto.com" className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:border-violet focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-white/60 mb-1">Texto / documentación</label>
+                <textarea value={refText} onChange={(e) => setRefText(e.target.value)} rows={2} placeholder="Pegá specs, notas, requisitos…" className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:border-violet focus:outline-none" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <label className="cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-white/10 hover:border-violet/50">🖼️ Imágenes / capturas<input type="file" accept="image/*" multiple className="hidden" onChange={onRefImages} /></label>
+                <label className="cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-white/10 hover:border-violet/50">📄 Documentos (.txt/.md)<input type="file" accept=".txt,.md,.csv,.json,text/*" multiple className="hidden" onChange={onRefDocs} /></label>
+              </div>
+              {refFiles.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {refFiles.map((f, i) => (
+                    <span key={i} className="text-[11px] bg-white/5 border border-white/10 rounded-md px-2 py-1 flex items-center gap-1">
+                      {f.type === "image" ? "🖼️" : "📄"} {f.name || (f.type === "image" ? "imagen" : "texto")}
+                      <button onClick={() => setRefFiles((r) => r.filter((_, j) => j !== i))} className="text-white/40 hover:text-red-400">✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <button onClick={start} disabled={!name.trim() || refBusy} className="mt-5 px-6 py-3 rounded-xl font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{refBusy ? "Leyendo referencias…" : refCount() ? "Start con referencias →" : "Start →"}</button>
       </main>
     )
   }
@@ -408,7 +482,37 @@ export default function Generate() {
         <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
         <span className="text-xs font-bold uppercase tracking-widest text-violet-bright">Diagnosis · before we build anything</span>
         <h1 className="text-3xl font-extrabold mt-2">{name}: what we’ll build</h1>
-        <p className="text-white/60 mt-2 mb-7">Review the full spec. Nothing is generated until you approve it.</p>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          {spec.archetype && spec.archetype !== "other" && <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-violet/20 border border-violet/30 text-violet-bright">{({ game: "🎮 Juego", status_monitoring: "📈 Status / Monitoring", marketplace: "🛒 Marketplace", social: "💬 Social", content_feed: "📰 Contenido / Feed", directory: "📂 Directorio", dashboard: "📊 Dashboard", ecommerce: "🛍️ E-commerce", tool: "🛠️ Herramienta", saas_accounts: "🔐 SaaS con cuentas" } as Record<string, string>)[spec.archetype] || spec.archetype}</span>}
+          {references && <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">📎 Basado también en tus referencias</span>}
+        </div>
+        <p className="text-white/60 mt-3 mb-7">Review the full spec. Nothing is generated until you approve it.</p>
+
+        {/* Honest, decision-critical callouts: OSS alternatives + what only you can provide */}
+        {Array.isArray(spec.ossAlternatives) && spec.ossAlternatives.length > 0 && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 mb-4">
+            <h3 className="text-sm font-bold text-amber-300 mb-1">⚠️ Ya existe open-source que hace casi esto</h3>
+            <p className="text-xs text-white/55 mb-3">Honestidad ante todo: adoptarlo/forkearlo puede ganarle a construir de cero. Igual podemos hacerte una versión a medida si querés.</p>
+            <div className="space-y-2">
+              {spec.ossAlternatives.map((o: any, i: number) => (
+                <div key={i} className="text-sm text-white/80"><a href={o.url} target="_blank" rel="noopener" className="font-bold text-amber-200 hover:underline">{o.name} ↗</a> — {o.why}</div>
+              ))}
+            </div>
+          </div>
+        )}
+        {Array.isArray(spec.neededFromYou) && spec.neededFromYou.length > 0 && (
+          <div className="rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5 mb-4">
+            <h3 className="text-sm font-bold text-sky-300 mb-1">📥 Lo que necesitamos de vos para que funcione de verdad</h3>
+            <p className="text-xs text-white/55 mb-3">Mientras tanto se construye con datos de ejemplo; cuando nos pases esto, queda real.</p>
+            <ul className="space-y-1 text-sm text-white/80">{spec.neededFromYou.map((x: string, i: number) => <li key={i} className="flex gap-2"><span className="text-sky-300">→</span>{x}</li>)}</ul>
+          </div>
+        )}
+        {refSuggestions.length > 0 && (
+          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-5 mb-4">
+            <h3 className="text-sm font-bold text-emerald-300 mb-2">💡 Sugerencias a partir de tus referencias</h3>
+            <ul className="space-y-1 text-sm text-white/80">{refSuggestions.map((x, i) => <li key={i} className="flex gap-2"><span className="text-emerald-300">•</span>{x}</li>)}</ul>
+          </div>
+        )}
 
         <div className="rounded-2xl border border-white/10 bg-ink2 p-6">
           {/* generated identity: logo lockup + palette */}
