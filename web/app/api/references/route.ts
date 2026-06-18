@@ -7,7 +7,7 @@
  * interview, the spec diagnosis and the build (data interpretation + suggestions).
  */
 import { NextRequest, NextResponse } from "next/server"
-import { chatJSON, aiConfigured, MODELS } from "@/lib/openai"
+import { chatJSON, aiConfigured, MODELS, supportsVision } from "@/lib/openai"
 
 interface RefItem { type: "url" | "text" | "image"; value: string; name?: string }
 
@@ -63,10 +63,14 @@ export async function POST(request: NextRequest) {
     const list: RefItem[] = Array.isArray(items) ? items.slice(0, 12) : []
     if (!list.length) return NextResponse.json({ ok: true, digest: "", suggestions: [], detected: {} })
 
-    // Ingest each reference in parallel (URLs fetched, images described, text used as-is).
+    // If the active model can't see (e.g. text-only local Gemma), degrade gracefully instead
+    // of failing — analyze URLs/text normally and note the skipped images.
+    const canSee = supportsVision()
     const parts = await Promise.all(list.map(async (it) => {
       if (it.type === "url") return await fetchUrl(String(it.value))
-      if (it.type === "image") return await describeImage(String(it.value), it.name)
+      if (it.type === "image") return canSee
+        ? await describeImage(String(it.value), it.name)
+        : `IMAGEN${it.name ? ` ${it.name}` : ""}: (no analizada — el modelo activo no soporta visión; configurá un modelo con visión o seteá PUGLIT_VISION=always)`
       return `TEXTO${it.name ? ` ${it.name}` : ""}:\n${String(it.value).slice(0, 6000)}`
     }))
     const raw = parts.join("\n\n---\n\n").slice(0, 24000)
