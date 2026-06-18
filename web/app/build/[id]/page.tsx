@@ -38,8 +38,9 @@ export default function BuildPage() {
     ;(async () => {
       for (let i = 0; i < KEYS.length && !cancelled; i++) {
         setJob((j) => j && ({ ...j, status: "running", steps: j.steps.map((s, idx) => ({ ...s, status: idx < i ? "done" : idx === i ? "running" : "pending", detail: idx === i ? det(s.key) : s.detail })) }))
-        if (KEYS[i] === "stakeholder") { for (const r of [1, 2, 3]) { await sleep(1500); if (cancelled) return; setJob((j) => j && ({ ...j, steps: j.steps.map((s) => s.key === "stakeholder" ? { ...s, detail: `ronda ${r}/3 · 5 especialistas revisando` } : s) })) } }
-        else await sleep(1200)
+        if (KEYS[i] === "stakeholder") { for (const r of [1, 2, 3]) { await sleep(1800); if (cancelled) return; setJob((j) => j && ({ ...j, steps: j.steps.map((s) => s.key === "stakeholder" ? { ...s, detail: `ronda ${r}/3 · 5 especialistas revisando` } : s) })) } }
+        else if (i < 3) await sleep(2700) // planning: hold so the kickoff meeting assembles & is visible
+        else await sleep(1100)
       }
       if (!cancelled) setJob((j) => j && ({ ...j, status: "done", steps: j.steps.map((s) => ({ ...s, status: "done" })) }))
     })()
