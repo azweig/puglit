@@ -19,6 +19,16 @@ type Entry = { who: "ai" | "you"; text: string }
 
 const card = "rounded-2xl border border-white/10 bg-ink2 p-4"
 
+// Random-but-coherent product ideas for the ?demo=1 quickstart (skips the interview).
+const DEMO_IDEAS: { name: string; what: string; audience: string; benefits: string[]; monetization: "free" | "freemium" | "subscription"; price: number; modules: string[]; languages: "es" | "en" | "both"; color: string }[] = [
+  { name: "Mesa", what: "Una webapp de reservas para restaurantes: el comensal reserva online y el local gestiona su salón y turnos.", audience: "Dueños de restaurantes y sus comensales.", benefits: ["Reservas online 24/7", "Menos no-shows con recordatorios", "Panel de salón en tiempo real"], monetization: "subscription", price: 29, modules: ["payments", "emailLifecycle", "profiling"], languages: "es", color: "#E11D48" },
+  { name: "FitPulse", what: "App de rutinas de entrenamiento y seguimiento de progreso con planes personalizados.", audience: "Personas que entrenan en casa o gym y quieren seguir su progreso.", benefits: ["Rutinas personalizadas", "Seguimiento de progreso y récords", "Recordatorios y rachas"], monetization: "freemium", price: 8, modules: ["gamification", "profiling", "mobile"], languages: "both", color: "#22C55E" },
+  { name: "Cobra", what: "Facturación y cobranzas para freelancers de LATAM: emitís facturas y seguís los pagos.", audience: "Freelancers y pequeños estudios en Latinoamérica.", benefits: ["Facturas en segundos", "Seguimiento de cobranzas", "Recordatorios de pago automáticos"], monetization: "subscription", price: 12, modules: ["payments", "emailLifecycle"], languages: "es", color: "#7C3AED" },
+  { name: "Aula", what: "Plataforma para que profesores creen y vendan cursos online con lecciones y quizzes.", audience: "Profesores independientes y sus alumnos.", benefits: ["Crear cursos sin código", "Cobrar por suscripción o curso", "Progreso y certificados"], monetization: "freemium", price: 0, modules: ["contentBlog", "payments", "gamification"], languages: "es", color: "#0EA5E9" },
+  { name: "Reparto", what: "Gestión de logística de última milla para pymes: cargás pedidos y optimizás rutas.", audience: "Pymes que hacen envíos propios.", benefits: ["Optimización de rutas", "Seguimiento en vivo del repartidor", "Avisos al cliente"], monetization: "subscription", price: 39, modules: ["geo", "mobile", "emailLifecycle"], languages: "es", color: "#F97316" },
+  { name: "Huerto", what: "Marketplace de productores locales: la gente compra verduras y productos directo del productor cercano.", audience: "Consumidores conscientes y productores locales.", benefits: ["Comprar directo del productor", "Productos cercanos por geolocalización", "Apoyo a la economía local"], monetization: "freemium", price: 0, modules: ["geo", "payments", "profiling"], languages: "es", color: "#16A34A" },
+]
+
 // --- client image helpers ---
 function fileToDataURL(file: File, maxDim: number, mime = "image/png", q = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -77,6 +87,35 @@ export default function Generate() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [log, step, busy])
 
+  // ?demo=1 — skip the interview: pick a random coherent idea, synthesize the Q&A, and jump
+  // straight into the analysis → spec → designs → build screens (to review what comes AFTER).
+  const demoFired = useRef(false)
+  useEffect(() => {
+    if (demoFired.current) return
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo")) {
+      demoFired.current = true; startDemo()
+    }
+  }, [])
+
+  function startDemo() {
+    const idea = DEMO_IDEAS[Math.floor(Math.random() * DEMO_IDEAS.length)]
+    setName(idea.name); setColor(idea.color)
+    const answers = { what: idea.what, audience: idea.audience, benefits: idea.benefits, monetization: idea.monetization, price: idea.price, modules: idea.modules, languages: idea.languages, color: idea.color }
+    const msgs: Msg[] = [
+      { role: "user", content: `Mi producto se llama "${idea.name}".` },
+      { role: "assistant", content: "¿Qué hace y para quién es?" },
+      { role: "user", content: `${idea.what} Es para: ${idea.audience}` },
+      { role: "assistant", content: "¿Cuáles son los beneficios clave?" },
+      { role: "user", content: idea.benefits.join("; ") },
+      { role: "assistant", content: "¿Cómo lo monetizás?" },
+      { role: "user", content: `${idea.monetization}${idea.price ? ` a $${idea.price}/mes` : " (gratis)"}.` },
+      { role: "assistant", content: "¿Idiomas y color de marca?" },
+      { role: "user", content: `Idioma ${idea.languages}, color ${idea.color}.` },
+    ]
+    setMessages(msgs)
+    produceSpec(answers, msgs, idea.name)
+  }
+
   async function callInterview(msgs: Msg[]) {
     setBusy(true); setErr("")
     try {
@@ -97,19 +136,19 @@ export default function Generate() {
   // After the interview (or "finish now"): run the ANALYSIS (spec + identity + 2 designs)
   // with a visible checklist, then show the full diagnosis. Nothing is built yet.
   const ANALYZE_LABELS = ["Analizando tus respuestas", "Definiendo identidad (logo + paleta)", "Diseñando 2 propuestas visuales"]
-  async function produceSpec(answers: Record<string, unknown>, msgs: Msg[]) {
+  async function produceSpec(answers: Record<string, unknown>, msgs: Msg[], nm: string = name) {
     setPendingAnswers(answers)
     setPhase("analyzing")
     const upd = (states: ("pending" | "running" | "done")[]) => setAnalyze(ANALYZE_LABELS.map((l, i) => ({ label: l, status: states[i] })))
     upd(["running", "pending", "pending"])
     try {
-      const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: name }) })
+      const sr = await fetch("/api/spec", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: msgs, productName: nm }) })
       const sd = await sr.json()
       if (!(sr.ok && sd.ok)) { await finalize(answers); return }
       setSpec(sd.spec)
       upd(["done", "done", "running"])
       try {
-        const dr = await fetch("/api/designs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...answers, name: name.trim(), color: color || answers.color, branding: sd.spec?.branding }) })
+        const dr = await fetch("/api/designs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...answers, name: nm.trim(), color: color || answers.color, branding: sd.spec?.branding }) })
         const dd = await dr.json()
         if (dr.ok && dd.ok && dd.designs?.length) setDesigns(dd.designs)
       } catch { /* designs optional — spec still shows */ }
