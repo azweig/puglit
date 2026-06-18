@@ -479,7 +479,7 @@ export default function IncidentHistoryPage(): JSX.Element {
     setErrorVisible(true);
 
     try {
-      const response = await fetch(`/api/public/status-pages/[slug]${STATUS_PAGE_SLUG}/incidents?month=${encodeURIComponent(selectedMonth)}`, {
+      const response = await fetch(`/api/public/status-pages/${STATUS_PAGE_SLUG}/incidents?month=${encodeURIComponent(selectedMonth)}`, {
         method: "GET",
         signal,
         headers: { Accept: "application/json" },
@@ -561,7 +561,7 @@ export default function IncidentHistoryPage(): JSX.Element {
             <Link href="/history" className="rounded-full bg-[#EFF6FF] px-4 py-2 text-sm font-semibold text-[#1D4ED8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2">
               Historial de incidentes
             </Link>
-            <Link href={`/api/public/status-pages/[slug]${STATUS_PAGE_SLUG}/rss`} className="rounded-full px-4 py-2 text-sm font-semibold text-[#526071] transition-all duration-200 hover:bg-[#FFFFFF] hover:text-[#0B1220] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2">
+            <Link href={`/api/public/status-pages/${STATUS_PAGE_SLUG}/rss`} className="rounded-full px-4 py-2 text-sm font-semibold text-[#526071] transition-all duration-200 hover:bg-[#FFFFFF] hover:text-[#0B1220] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2">
               RSS
             </Link>
           </nav>
@@ -682,4 +682,3 @@ export default function IncidentHistoryPage(): JSX.Element {
     </div>
   );
 }
-"}
