@@ -1,8 +1,21 @@
 /**
  * Puglit web — openai.ts
- * Thin OpenAI chat client (same provider/model family as TodoAstros: gpt-4o-mini).
- * JSON mode so the interview always returns a parseable structured step.
+ * Thin OpenAI chat client. JSON mode so structured steps always parse.
+ *
+ * MODEL TIERS — not every agent needs the same model. Deep reasoning / architecture /
+ * visual design / code generation use the strongest model; mechanical extraction and
+ * targeted fixes use a cheaper/faster one. All tiers below are chat-completions
+ * compatible (support temperature + response_format json_object). Override per-env.
  */
+export const MODELS = {
+  /** Architecture, visual design, page/route code, discovery — quality is decisive. */
+  premium: process.env.PUGLIT_MODEL_PREMIUM || "gpt-4.1",
+  /** Standard structured generation (specs, critics, seeds, fixers). */
+  balanced: process.env.PUGLIT_MODEL_BALANCED || "gpt-4o",
+  /** Mechanical / high-volume / low-stakes (extraction, normalization). */
+  cheap: process.env.PUGLIT_MODEL_CHEAP || "gpt-4.1-mini",
+} as const
+
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: unknown }
 
 export function aiConfigured(): boolean {
@@ -31,7 +44,7 @@ export async function chatJSON(messages: ChatMessage[], opts?: { model?: string;
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: opts?.model || "gpt-4o-mini",
+      model: opts?.model || MODELS.balanced,
       temperature: opts?.temperature ?? 0.5,
       response_format: { type: "json_object" },
       messages,

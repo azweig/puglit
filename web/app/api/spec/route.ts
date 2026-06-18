@@ -6,7 +6,7 @@
  * stack (Puglit fixes that); instead it states what will be generated on it.
  */
 import { NextRequest, NextResponse } from "next/server"
-import { chatJSON, aiConfigured, type ChatMessage } from "@/lib/openai"
+import { chatJSON, aiConfigured, MODELS, type ChatMessage } from "@/lib/openai"
 import { generateLogoSvg } from "@/lib/logo-gen"
 
 const SYSTEM = `You are a Principal Product Architect + CTO + UX Lead + Product Manager + Brand Strategist. From the interview transcript, produce a COMPLETE Project Master Specification for the product — detailed enough that an AI could generate the full app. Be concrete and specific to THIS product (no generic filler); infer sensible specifics where the user didn't say.
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     const spec = await chatJSON([
       { role: "system", content: SYSTEM },
       { role: "user", content: `Product name: "${productName}".\n\nInterview transcript:\n${transcript}` },
-    ], { model: "gpt-4o", temperature: 0.3 }) as any
+    ], { model: MODELS.premium, temperature: 0.3 }) as any
 
     // Generate the real vector logo now so the diagnosis can show it.
     try {

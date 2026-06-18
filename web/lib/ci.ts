@@ -5,7 +5,7 @@
  * annotations), and let the Fixer repair the offending files against the REAL
  * compiler errors, then re-push. The build job's ci-verify step orchestrates this.
  */
-import { chatJSON } from "@/lib/openai"
+import { chatJSON, MODELS } from "@/lib/openai"
 
 const GH = "https://api.github.com"
 const OWNER = "azweig", REPO = "puglit", WF = "verify-generated.yml"
@@ -83,7 +83,7 @@ export async function fixFiles(errors: CiError[]): Promise<{ fixed: string[] }> 
 
 This project has NO external npm deps. For "Cannot find module 'X'" errors, do NOT add the package — replace it with the in-repo spine: auth via \`import { getAuthUser } from "@/lib/auth"\` (→ \`const u = await getAuthUser(request)\`, u.userId), DB via \`import { pool } from "@/lib/db"\`, email via "@/lib/mailer". Never use jsonwebtoken/jose/bcrypt/axios/etc.; rewrite the usage to the spine equivalent. For "Property query does not exist on AppRouterInstance", read route params with useParams() from next/navigation, not router.query.` },
         { role: "user", content: `FILE ${path}:\n${code}\n\nReal tsc errors:\n${errs.join("\n")}` },
-      ], { model: "gpt-4o", temperature: 0.1 })) as { code?: string }
+      ], { model: MODELS.balanced, temperature: 0.1 })) as { code?: string }
       if (out.code && out.code !== code) {
         await gh(`/repos/${OWNER}/${REPO}/contents/${encodeURI(path)}`, { method: "PUT", body: JSON.stringify({ message: `fix(ci): repair tsc errors in ${path.split("/").pop()}`, content: Buffer.from(out.code).toString("base64"), sha: cur.sha, branch: "main" }) })
         fixed.push(path)

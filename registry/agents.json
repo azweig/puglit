@@ -1,70 +1,163 @@
 {
-  "$comment": "Puglit's PERMANENT agent network. Agents are added here at runtime: when the orchestrator needs a capability no existing agent covers, it GENERATES a new agent definition (role + system prompt + the modules it owns) and appends it here, then commits it to GitHub so every future build inherits it. Build feedback updates an agent's prompt/quality-notes over time.",
-  "version": 1,
+  "$comment": "Puglit's agent network. 'wired' = actually runs in the current build pipeline (true) vs declared-but-not-yet-connected (false). 'model' = the tier each agent uses (premium=deep reasoning/design/code, balanced=standard structured gen, cheap=mechanical). Tiers resolve in lib/openai.ts (MODELS) and are env-overridable (PUGLIT_MODEL_PREMIUM/BALANCED/CHEAP). New agents are appended here at runtime when a capability is missing, then committed so future builds inherit them; build feedback updates an agent's prompt/qualityNotes over time.",
+  "version": 2,
+  "models": {
+    "premium": "gpt-4.1 — architecture, visual design, page/route code, discovery",
+    "balanced": "gpt-4o — specs, critics, seeds, fixers",
+    "cheap": "gpt-4.1-mini — extraction, normalization"
+  },
   "agents": [
     {
       "id": "discovery-interviewer",
       "role": "Product Discovery Lead",
       "phase": "interview",
-      "purpose": "Adaptive interview until 90-95% understanding of the concept (vision, users, journeys, data + sources, edge cases). Gates the build: refuses to proceed while coverage is incomplete and states exactly what is still unknown.",
-      "owns": [],
-      "qualityNotes": []
+      "wired": true,
+      "model": "premium",
+      "location": "app/api/interview/route.ts",
+      "purpose": "Adaptive interview (8–14 turns) until 90-95% understanding: vision, users, journeys, DATA + its sources/freshness, edge cases, brand. One question/turn, founder's language, brand color last."
     },
     {
-      "id": "researcher",
-      "role": "Domain Researcher",
-      "phase": "research",
-      "purpose": "Real web research on the concept: category references, real data sources/feeds, current APIs/versions, competitors. Output feeds the work plan with cited findings, not guesses.",
-      "owns": [],
-      "qualityNotes": []
+      "id": "answer-extractor",
+      "role": "Discovery Tokenizer",
+      "phase": "interview",
+      "wired": true,
+      "model": "cheap",
+      "location": "app/api/interview/route.ts",
+      "purpose": "Distills the transcript into the validated answers JSON manifest for the spec/build."
     },
     {
-      "id": "chief-architect",
-      "role": "Chief Architect",
+      "id": "master-spec-architect",
+      "role": "Principal Spec Architect",
+      "phase": "spec",
+      "wired": true,
+      "model": "premium",
+      "location": "app/api/spec/route.ts",
+      "purpose": "Full Project Master Specification (roles, dataModel, screens incl. view-states, userFlows incl. edge cases, branding palette, monetization) for review before build."
+    },
+    {
+      "id": "contracts-architect",
+      "role": "Contracts Architect",
       "phase": "plan",
-      "purpose": "From discovery + research, design the BESPOKE architecture for THIS concept (its own structure, data model, surfaces, integrations). Selects which registry modules to compose and what must be built fresh. No template.",
-      "owns": [],
-      "qualityNotes": []
+      "wired": true,
+      "model": "balanced",
+      "location": "lib/agents.ts",
+      "purpose": "TypeScript types + the single core API endpoint contract (method/path/request/response/auth/gating)."
     },
     {
-      "id": "frontend-architect",
-      "role": "Frontend Architect",
+      "id": "domain-architect",
+      "role": "Domain Architect",
       "phase": "build",
-      "purpose": "Generates the project's OWN frontend from scratch per concept (information architecture, navigation pattern, screens, components). The homepage IS the product (public where appropriate). Never a SaaS landing/login unless the concept is a SaaS.",
-      "owns": [],
-      "qualityNotes": []
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · planBlueprint",
+      "purpose": "Decides KIND (public vs accounts), the bespoke data model (FK-ordered), API routes and UI pages. The homepage IS the product, never a SaaS landing."
+    },
+    {
+      "id": "completeness-critic",
+      "role": "Completeness Critic",
+      "phase": "build",
+      "wired": true,
+      "model": "balanced",
+      "location": "lib/app-builder.ts · critiqueBlueprint",
+      "purpose": "Finds broken journeys (listable-but-not-creatable, chat without scoped send+list, orphan routes/pages) → emits the missing pieces."
     },
     {
       "id": "backend-engineer",
       "role": "Backend Engineer",
       "phase": "build",
-      "purpose": "Generates bespoke API/server logic, composing registry modules (auth, payments, crons, db) where they fit and writing fresh logic for the concept's core.",
-      "owns": ["auth-session", "db-postgres", "payments-stripe", "crons-fire-and-forget"],
-      "qualityNotes": []
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · genRouteFile",
+      "owns": ["auth-session", "db-postgres", "crons-fire-and-forget"],
+      "purpose": "One production-grade route handler per API: input validation, correct status codes, parameterized SQL, transaction safety, bare-array lists."
+    },
+    {
+      "id": "reliability-engineer",
+      "role": "Reliability Engineer",
+      "phase": "build",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · hardenRoute",
+      "purpose": "Per-route runtime-fatal audit tsc can't catch: schema conformance, scoping, feed exclusion, mutual-match correctness, Haversine geo, no external deps, bare-array shape."
+    },
+    {
+      "id": "art-director",
+      "role": "Art Director",
+      "phase": "build",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · genDesignBrief",
+      "purpose": "Bespoke, premium visual identity per product: layout architecture, color tokens (AA contrast), type scale, component recipes, per-screen + view-state composition. Banishes the generic admin look."
+    },
+    {
+      "id": "frontend-engineer",
+      "role": "Frontend Engineer",
+      "phase": "build",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · genPage",
+      "purpose": "One real, interactive, premium page per screen, following the brief + visual bar; defensive rendering, all four view-states, responsive, AA contrast."
+    },
+    {
+      "id": "design-qc",
+      "role": "Design Quality Control (reactive loop)",
+      "phase": "build",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · reviewPageVisual + refinePage (genPolishedPage)",
+      "purpose": "Reactive loop: critiques each generated page against the brief + visual bar for CRITICAL defects (contrast, generic layout, missing states) and refines it (max 2 cycles) before it ships. The 'sale feo → sale pulido' fix."
+    },
+    {
+      "id": "frontend-architect",
+      "role": "Frontend Architect",
+      "phase": "build",
+      "wired": true,
+      "model": "premium",
+      "location": "lib/app-builder.ts · genAppShell",
+      "purpose": "Bespoke app shell/layout for accounts apps (sidebar / top-tabs / full-bleed …) with client auth gate. Different products → different skeletons."
     },
     {
       "id": "data-architect",
-      "role": "Data Architect",
+      "role": "Data Ingestion / Architect",
       "phase": "build",
-      "purpose": "Bespoke schema for the concept (FK-ordered), seeds, ingestion/scraping where the concept needs external data.",
+      "wired": true,
+      "model": "balanced",
+      "location": "lib/app-builder.ts · genCatalogSeed + normalizeTables + sortTablesByDeps",
       "owns": ["db-postgres"],
-      "qualityNotes": []
+      "purpose": "FK-ordered schema, realistic localized catalog seed (relative timestamps for live views), canonical match tables. Plus deterministic auth pages + the queen-bee route integrator (code, not LLM)."
     },
     {
-      "id": "quality-control",
-      "role": "Quality Control Plane",
-      "phase": "review",
-      "purpose": "Enforces the TodoAstros quality CONCEPTS as rubrics on the bespoke output (not a template): correct auth/gating, pooled+parameterized DB, fire-and-forget crons, persisted funnels, security (RLS/headers/rate-limit), a11y/performance. BLOCKING vs ADVISORY findings.",
-      "owns": [],
-      "qualityNotes": []
-    },
-    {
-      "id": "verifier",
-      "role": "Verification Engineer",
+      "id": "ci-fixer",
+      "role": "CI Fixer / Verification",
       "phase": "verify",
-      "purpose": "Real verification: compiles (CI), runs (runtime e2e + headless render), checks the concept's journeys actually work. Feeds failures back to the network and to the modules.",
-      "owns": [],
-      "qualityNotes": []
+      "wired": true,
+      "model": "balanced",
+      "location": "lib/ci.ts",
+      "purpose": "Reads real tsc errors from GitHub Actions and applies minimal surgical fixes (no external deps; spine equivalents; App-Router params)."
+    },
+    {
+      "id": "researcher",
+      "role": "Domain Researcher",
+      "phase": "research",
+      "wired": false,
+      "model": "premium",
+      "purpose": "PLANNED, not yet connected: real web research (category refs, real data sources/feeds, current APIs, competitors) feeding the plan with cited findings instead of guesses."
+    },
+    {
+      "id": "quality-control-plane",
+      "role": "Quality Control Plane (a11y/perf/security)",
+      "phase": "review",
+      "wired": false,
+      "model": "premium",
+      "purpose": "PLANNED, not yet connected: rubric pass for a11y/performance/security (RLS, headers, rate-limit) across the output, BLOCKING vs ADVISORY. (Design-QC for visuals IS wired; this broader plane is not.)"
+    },
+    {
+      "id": "runtime-verifier",
+      "role": "Runtime Verifier",
+      "phase": "verify",
+      "wired": false,
+      "model": "balanced",
+      "purpose": "PARTIAL: CI (tsc) runs automatically; runtime e2e + headless render verification of real journeys is not yet run by the engine (done manually today)."
     }
   ]
 }

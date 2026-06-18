@@ -6,7 +6,7 @@
  * the iteration/budget cap. Verification here is LLM-based review (no compiler in
  * the serverless runtime); the delivered code still lands in GitHub for CI.
  */
-import { chatJSON, chatText, aiConfigured } from "@/lib/openai"
+import { chatJSON, chatText, aiConfigured, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
 
 const CONVENTIONS = `Puglit spine (Next.js 16 App Router, TS strict). Use ONLY these:
@@ -27,7 +27,7 @@ export async function runContracts(config: DomainConfig): Promise<string> {
   const out = await chatText([
     { role: "system", content: "You are the Contracts Architect. Define the CONTRACT (TypeScript types + the single most important API endpoint: method, path, request, response, auth, gating) for this product's CORE feature. Concise. No implementation. Markdown." },
     { role: "user", content: `Product: ${config.identity.name}. Core: ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}. Entities: ${ents}.` },
-  ], { model: "gpt-4o", temperature: 0.2 })
+  ], { model: MODELS.balanced, temperature: 0.2 })
   return out.slice(0, 6000)
 }
 

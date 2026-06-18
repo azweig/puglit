@@ -7,7 +7,7 @@
  * is asked LAST, as 3 AI-proposed palettes with rationale — never up front.
  */
 import { NextRequest, NextResponse } from "next/server"
-import { chatJSON, aiConfigured, type ChatMessage } from "@/lib/openai"
+import { chatJSON, aiConfigured, MODELS, type ChatMessage } from "@/lib/openai"
 
 const SYSTEM = `You are a world-class product discovery team in one — Principal Product Architect, CTO, UX Lead, Product Manager and Brand Strategist — interviewing a founder to fully understand their idea before anything is built. The product NAME is in the first user message.
 
@@ -51,7 +51,7 @@ async function extractAnswers(productName: string, history: ChatMessage[]): Prom
     return (await chatJSON([
       { role: "system", content: EXTRACT },
       { role: "user", content: `Product name: "${productName}".\n\nTranscript:\n${history.map((m) => `${m.role}: ${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}`).join("\n")}` },
-    ], { temperature: 0 })) as Record<string, unknown>
+    ], { model: MODELS.cheap, temperature: 0 })) as Record<string, unknown>
   } catch { return {} }
 }
 
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       ...history,
     ]
 
-    const step = (await chatJSON(full)) as Record<string, unknown>
+    const step = (await chatJSON(full, { model: MODELS.premium })) as Record<string, unknown>
 
     // Normalize completion: the model sometimes signals done via kind/field but
     // not the boolean, and doesn't reliably accumulate `answers`. When finished,

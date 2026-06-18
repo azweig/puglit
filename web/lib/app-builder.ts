@@ -14,7 +14,7 @@
  *  - Images = data: URLs or external URLs stored in TEXT (no object storage).
  *  - Postgres via pool.query(text, params) — parameterized only.
  */
-import { chatJSON, chatText } from "@/lib/openai"
+import { chatJSON, chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
 
 export interface AppFile { path: string; content: string }
@@ -48,6 +48,22 @@ const RULES = `HARD RULES:
 - Never reference a variable/import that you do not define. Code must compile with \`tsc --noEmit\`.
 - Next 16 navigation: use \`<Link href="/x">label</Link>\` directly. NEVER nest an <a> inside <Link> (runtime crash).
 - Dynamic route params ([id]) in client pages: read them with useParams() from "next/navigation" (e.g. const { matchId } = useParams<{ matchId: string }>()). NEVER use router.query (it does not exist in the App Router).`
+
+/** The non-negotiable visual quality bar, shared by the Art Director and every Frontend
+ *  agent. This is what separates a premium product from a generic admin panel — and it is
+ *  what fixes "los proyectos salen feos". Tailwind-only (the spine has no UI library). */
+const VISUAL_SYSTEM = `PREMIUM VISUAL QUALITY BAR (Tailwind only — there is NO Shadcn/Radix/component library; build every element by hand with Tailwind utility classes). Treat this as a hard spec, not inspiration:
+- CONTRAST IS LAW: never place text on a same-or-near color (the #1 defect: white text inheriting onto a white card → invisible). Every text node must have an explicit, WCAG-AA-passing color against ITS OWN background. When you put content on a colored section, re-declare the text color on the inner surface. Cards are almost always a light surface (white / near-white) with dark ink text, even on a dark/branded page background.
+- DEPTH & HIERARCHY: use a consistent radius scale (e.g. rounded-xl/2xl for cards, rounded-full for pills/avatars), layered shadows (shadow-sm on surfaces, shadow-lg/xl on raised/floating elements), and 1px hairline borders (border border-black/5 or white/10) to separate surfaces. No flat, borderless gray boxes.
+- SPACING RHYTHM: generous, consistent spacing (a 4/8px scale: gap-3/4/6, p-4/6, space-y-3/4). Cards breathe (p-4 to p-6). Never cramped, never edge-to-edge text.
+- TYPE SCALE: a clear hierarchy — oversized bold display titles (text-2xl/3xl/4xl font-extrabold tracking-tight), medium section headers, readable body (text-sm/base text-black/70), and small muted meta (text-xs text-black/50). Use font-semibold/bold deliberately.
+- COLOR USE: use the brand palette as TOKENS with roles (background, surface, primary CTA, accent, ink, muted) — apply via Tailwind arbitrary hex (bg-[#xxxxxx]). One dominant brand color + one accent; everything else neutral. Use subtle gradients (bg-gradient-to-b/br from-[..] to-[..]) for heroes/headers when it fits the brand. Badges/pills for status & metadata (e.g. score, distance, category) in accent-tinted chips.
+- INTERACTION STATES on every interactive element: hover (hover:bg-…/hover:scale-[1.02]/hover:shadow-lg), active (active:scale-95), focus-visible (focus-visible:ring-2 ring-offset-2 ring-[brand]), disabled (opacity-60 cursor-not-allowed). Transitions: transition-colors/transform duration-200. CSS only — no animation libraries.
+- POLISHED STATES (always implement all four): LOADING = skeleton blocks (animate-pulse bg-black/5 rounded) shaped like the real content, not a "Loading…" string; EMPTY = a friendly centered illustration-style block (emoji/icon glyph + heading + one-line hint + a CTA); ERROR = an inline dismissible banner in red-tinted surface; POPULATED = the real, dense, beautiful content.
+- IMAGERY: show images prominently with fixed aspect ratios (aspect-video/aspect-square, object-cover, rounded) and a graceful neutral placeholder when missing. Avatars are rounded-full with a colored fallback initial.
+- RESPONSIVE: mobile-first, then sm:/md:/lg: refinements. Real grids on desktop (grid sm:grid-cols-2 lg:grid-cols-3 gap-4), single column on mobile. Tap targets ≥ 44px on mobile.
+- A11Y: semantic elements (header/nav/main/section/button), alt text, aria-labels on icon-only buttons, visible focus. Color is never the only signal.
+- BANNED: the generic centered-narrow-column admin look, unstyled default buttons, gray-on-gray, walls of plain text, low-contrast placeholder vibes, Bootstrap-ish cards. Every screen must look intentionally designed for THIS product.`
 
 /** Domain Architect: infer the product's functional blueprint from the idea+config. */
 export async function planBlueprint(config: DomainConfig, contracts: string): Promise<Blueprint> {
@@ -89,7 +105,7 @@ COMPLETENESS (CRITICAL — generators die here; never ship a read-only app):
 
 Make tables, routes and pages mutually consistent (same table/column names everywhere). Keep it focused: 4-6 tables, 5-8 routes, 4-6 pages. ALWAYS include the homepage page at route "/" (app/page.tsx) as the product itself, plus a publish/create page when users contribute content. Use the product's language for UI labels.` },
     { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n\nCONTRACTS:\n${contracts}` },
-  ], { model: "gpt-4o", temperature: 0.3 })) as Partial<Blueprint>
+  ], { model: MODELS.premium, temperature: 0.3 })) as Partial<Blueprint>
 
   return {
     kind: out.kind === "public" ? "public" : "accounts",
@@ -181,12 +197,20 @@ ${bp.kind === "public"
   ? "- THIS IS A PUBLIC PRODUCT: do NOT call getAuthUser. Routes are PUBLIC reads/writes over the catalog/data; no per-user auth."
   : "- This product has accounts: protect per-user routes with getAuthUser (401 if missing)."}
 
+PRODUCTION-GRADE BACKEND STANDARDS (every handler):
+- INPUT VALIDATION: validate the body/params before touching the DB — required fields present, correct primitive types, sane ranges/lengths; on invalid input return 400 with {error:"..."} (never let bad input reach SQL or throw a 500). Coerce numbers with Number() and reject NaN.
+- CORRECT STATUS CODES: 200 read, 201 create, 400 bad input, 401 unauthenticated, 403 not-a-participant/forbidden, 404 missing, 409 conflict (e.g. duplicate). JSON body on every path.
+- PARAMETERIZED SQL ONLY ($1,$2,…) — never string-interpolate user input. Select explicit columns; avoid SELECT * when shaping a response.
+- TRANSACTION SAFETY: any multi-statement mutation that must be atomic (e.g. record a swipe AND create a match, decrement stock AND insert order) MUST run in a single transaction: \`const c = await pool.connect(); try { await c.query("BEGIN"); …; await c.query("COMMIT") } catch(e){ await c.query("ROLLBACK"); throw e } finally { c.release() }\`.
+- LIST SHAPE: a GET returning a collection returns the BARE ARRAY (return NextResponse.json(rows)) with exact snake_case columns — never {data:rows}. Support ?limit/?offset (sane defaults, cap limit) for lists that can grow; ORDER BY a real column.
+- RESILIENCE: wrap the handler body in try/catch; log and return 500 {error:"internal"} on unexpected failure. Never leak raw error objects to the client.
+
 DATABASE TABLES (already created — use these EXACT names/columns):
 ${tablesDoc(bp)}
 
 Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
     { role: "user", content: `File: ${rf.path}\nMethods to implement: ${[...rf.methods].join(", ")}\nOperations:\n${ops}` },
-  ], { model: "gpt-4o", temperature: 0.2 })) as { code?: string }
+  ], { model: MODELS.premium, temperature: 0.2 })) as { code?: string }
   return out.code ? { path: rf.path, content: String(out.code).slice(0, 30_000).replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {") } : null
 }
 
@@ -199,19 +223,22 @@ async function genDesignBrief(config: DomainConfig, bp: Blueprint): Promise<stri
   const tagline = typeof id.tagline === "string" ? id.tagline : JSON.stringify(id.tagline)
   try {
     return await chatText([
-      { role: "system", content: `You are a Senior Art Director + Product Designer. Design a DISTINCTIVE visual identity for THIS product's in-app screens — opinionated and specific, NOT a generic admin/CRUD look. Draw on the aesthetics of the product's category (e.g. a swipe-style used-goods marketplace → Tinder card-stack immersion + OLX/eBay marketplace warmth and trust). The result must feel bespoke to this product and not interchangeable with other apps.
+      { role: "system", content: `You are a Senior Art Director + Product Designer from a top-tier product studio (think Linear, Vercel, Arc, Cron, Things, Airbnb). You design DISTINCTIVE, premium, opinionated visual identities — never a generic admin/CRUD/Bootstrap look. Your brief is the single source of truth the frontend engineers follow verbatim, so it must be concrete and decisive (make the calls; do not offer options).
 
-Output a concrete DESIGN BRIEF the frontend engineers will follow verbatim. Cover, concisely:
-- MOOD + 1-2 references for this exact product.
-- LAYOUT ARCHITECTURE (decide the app's STRUCTURE — this must differ per product, not a fixed template): choose the navigation + page skeleton that fits THIS product and commit to it — e.g. a fixed left SIDEBAR + top header for a data/dashboard/admin app; a sticky TOP BAR with horizontal tabs and full-width content for a scores/news/feed app; a minimal FULL-BLEED wrapper with a floating action for an immersive/swipe/game app; a search-led header + grid for a marketplace. State the nav placement (sidebar / top tabs / floating / etc.), content width (full-bleed vs centered), and the home screen's overall composition. Avoid the generic "centered narrow column + bottom tab bar" unless it is genuinely the best fit.
-- COLOR ROLES: assign the given palette hexes to background, surface/cards, primary CTA, accent, text, muted. Use these EXACT hexes (Tailwind arbitrary values like bg-[#xxxxxx]).
-- TYPE: weight/scale personality (big bold titles? etc.).
-- COMPONENT RECIPES with concrete Tailwind classes: cards, primary & secondary buttons, chips/badges, inputs — sized to the chosen layout architecture.
-- MOTION: subtle transitions (CSS only — no libraries).
-- PER-SCREEN layout for each screen: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}. Design the home for the product's REAL nature: a swipe/dating/match product → an immersive full-bleed card stack with like/pass buttons; a scores/standings/news/feed product → a dense, scannable live list/table grouped sensibly (NEVER like/pass buttons — those belong only to swipe apps); a marketplace/catalog → a rich grid/list with photos. Chat = modern bubble thread. Match the interaction to the product; do NOT impose swipe/like-pass unless the product is actually about swiping/matching.
-Keep it ~450 words, all actionable. No code, just the brief.` },
+Anchor on the product's CATEGORY and pick a real aesthetic direction for it (e.g. swipe used-goods marketplace → Tinder card-stack immersion + OLX/eBay warmth/trust; live sports scores → ESPN/365scores dense real-time energy; loyalty-discounts map → Foursquare/Yelp local-discovery with map cues; productivity tool → Linear/Things crispness). The result must be unmistakably THIS product and not interchangeable with any other app you have designed.
+
+${VISUAL_SYSTEM}
+
+Output a concrete DESIGN BRIEF (~550 words, all actionable, NO code) with these sections:
+- DIRECTION: the aesthetic in one line + 1-2 concrete references for THIS exact product, and the emotional goal (e.g. "fast, trustworthy, a little playful").
+- LAYOUT ARCHITECTURE — decide the app's STRUCTURE and COMMIT (this MUST differ per product, never a fixed template): choose the nav + page skeleton that fits THIS product — fixed left SIDEBAR + top header (data/dashboard); sticky TOP BAR + horizontal tabs, full-width (scores/news/feed); minimal FULL-BLEED wrapper + floating action (immersive/swipe/game); search-led header + responsive grid (marketplace); map-anchored split (geo/local). State exact nav placement, content width (full-bleed vs centered max-w-…), and the home composition. BAN the generic "centered narrow column + bottom tab bar" unless it is genuinely the only right fit.
+- COLOR TOKENS: map the given palette to explicit roles — background, surface/card, primary CTA, accent, ink (primary text), muted (secondary text), border — each as a precise Tailwind arbitrary hex (bg-[#xxxxxx], text-[#xxxxxx]). Guarantee AA contrast for every text-on-surface pair (call out the exact text color used ON cards vs ON the page background). Note where a subtle gradient is used.
+- TYPE: the display/heading/body/meta scale with weights (e.g. titles text-3xl font-extrabold tracking-tight; meta text-xs text-[muted]).
+- COMPONENT RECIPES with concrete Tailwind classes for: card, primary button, secondary/ghost button, chip/badge, input, nav item (active+idle), avatar. Include hover/active/focus-visible/disabled states.
+- MOTION: the specific CSS transitions to use (durations, transforms).
+- PER-SCREEN layout for EACH screen [${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}], including its loading/empty/error/populated states. Match interaction to the product's REAL nature: swipe/match → full-bleed card stack with like/pass; scores/standings/news/feed → dense scannable live list/table grouped sensibly (NEVER like/pass); marketplace/catalog → rich photo grid; chat → modern bubble thread. Do NOT impose swipe/like-pass unless the product is actually about swiping.` },
       { role: "user", content: `Product: ${id.name}\nPitch: ${tagline}\nPalette: ${palette || id.brandColor}\nPrimary: ${id.brandColor}  Secondary: ${(id as any).secondaryColor || ""}  Accent: ${(id as any).accentColor || ""}\nScreens: ${bp.pages.map((p) => p.route + " — " + p.title).join("; ")}` },
-    ], { model: "gpt-4o", temperature: 0.6 })
+    ], { model: MODELS.premium, temperature: 0.6 })
   } catch { return "" }
 }
 
@@ -219,13 +246,15 @@ Keep it ~450 words, all actionable. No code, just the brief.` },
 async function genPage(config: DomainConfig, bp: Blueprint, p: PageSpec, brief: string, shapes: string): Promise<AppFile | null> {
   const routeList = groupRoutes(bp.routes).map((rf) => `${[...rf.methods].join("/")} ${rf.path.replace(/^app/, "").replace(/\/route\.ts$/, "")} — ${rf.specs.map((s) => s.purpose).join("; ")}`).join("\n")
   const out = (await chatJSON([
-    { role: "system", content: `You are a senior Frontend Engineer + Designer. Write ONE Next.js 16 page (App Router) that is REAL, interactive (no placeholders/TODOs) AND visually polished. It must compile under tsc --noEmit and work against the listed APIs.
+    { role: "system", content: `You are a senior Frontend Engineer + Product Designer who ships interfaces at the level of Linear / Vercel / Airbnb. Write ONE Next.js 16 page (App Router) that is REAL and fully interactive (no placeholders/TODOs/lorem) AND visually premium. It MUST compile under tsc --noEmit and work against the listed APIs. The page should look like a designer obsessed over it — never an auto-generated CRUD form.
 
 ${RULES}
 
-DESIGN BRIEF — follow this EXACTLY so every screen shares one bespoke identity (do NOT produce a generic CRUD page):
-${brief || "Bold, modern, mobile-first. Use the brand palette."}
-${bp.kind === "public" && p.file === "app/page.tsx" ? "\nThis is the PUBLIC HOMEPAGE and the product itself — render the real product here (the data, the tool), usable with NO login. No marketing hero, no 'Empezar gratis', no pricing.\n" : bp.kind === "public" ? "\nThis is a PUBLIC product page — no login assumed.\n" : ""}
+${VISUAL_SYSTEM}
+
+DESIGN BRIEF — this is the product's identity; follow it EXACTLY (layout architecture, color tokens, component recipes, per-screen composition). Every screen must share ONE bespoke identity:
+${brief || "Bold, modern, mobile-first, premium. Use the brand palette as tokens with explicit contrast."}
+${bp.kind === "public" && p.file === "app/page.tsx" ? "\nThis is the PUBLIC HOMEPAGE and the product itself — render the real product here (the live data, the tool), fully usable with NO login. No marketing hero, no 'Empezar gratis', no pricing.\n" : bp.kind === "public" ? "\nThis is a PUBLIC product page — no login assumed.\n" : ""}
 AVAILABLE APIs (call these with fetch):
 ${routeList}
 ${shapes ? `\nAPI RESPONSE SHAPES — the data you will receive (consume these EXACT field names):\n${shapes}\n` : ""}
@@ -233,15 +262,75 @@ DATA BINDING — the rows you render come from these DB tables; read each row's 
 ${tablesDoc(bp)}
 DEFENSIVE RENDERING (critical — a contract mismatch must NEVER crash the page):
 - List GET endpoints return a BARE ARRAY. After fetch+json, normalize before mapping: \`const list = Array.isArray(data) ? data : (data.items ?? data.rows ?? [])\`. NEVER call .map on the raw response.
-- Access nested fields with optional chaining + fallbacks (\`x?.field ?? ""\`); never an unguarded \`x.a.b\`.
+- Access nested fields with optional chaining + fallbacks (\`x?.field ?? ""\`); never an unguarded \`x.a.b\`. Guard numbers before .toFixed (\`(x?.n ?? 0).toFixed(2)\`).
 - An image with no URL → a neutral placeholder, not a crash.${bp.kind === "accounts" ? "\n- AUTH GATE: this product needs a login. If ANY data fetch returns status 401, immediately `router.replace(\"/login\")` (import useRouter from next/navigation). Pages /login and /register exist." : ""}
 
-Build the FULL screen per the brief: real layout, the product's palette (Tailwind arbitrary hex values), images shown prominently, polished empty/loading/error states, product-language copy. Match the interaction to the product: like/pass + card-stack ONLY for swipe/match/dating products; a scores/standings/news/feed product gets a dense scannable list/table (no like/pass); a marketplace gets a grid. For chat, poll every 2500ms.
+DELIVERY CHECKLIST — the page is not done until ALL are true:
+1. Implements the brief's layout architecture for THIS screen (not a generic centered column).
+2. Real data wired from the listed APIs, with correct snake_case fields.
+3. All four states present and styled: loading (skeletons), empty (friendly CTA block), error (inline banner), populated (dense, beautiful).
+4. Every interactive element has hover/active/focus-visible states and transitions.
+5. AA contrast everywhere — re-declare text color on every colored surface (cards = light surface + dark ink). No white-on-white, no gray-on-gray.
+6. Responsive: great on a 390px phone AND on desktop (real grid where it helps). Tap targets ≥44px.
+7. Copy in the product's language, specific and human (no "Item 1" / "Lorem").
+8. Interaction matches the product: like/pass card-stack ONLY for swipe/match; scores/news/feed → dense scannable list/table (no like/pass); marketplace → photo grid; chat → bubble thread polling every 2500ms.
 
 Return ONLY JSON: {"code":"<the full contents of ${p.file}>"}` },
     { role: "user", content: `File: ${p.file}\nRoute: ${p.route}\nTitle: ${p.title}\nBehavior to implement EXACTLY:\n${p.behavior}\n\nProduct: ${config.identity.name}. Nav between screens: ${bp.nav.map((n) => `${n.label}→${n.href}`).join(", ")}.` },
-  ], { model: "gpt-4o", temperature: 0.45 })) as { code?: string }
+  ], { model: MODELS.premium, temperature: 0.45 })) as { code?: string }
   return out.code ? { path: p.file, content: postTsx(String(out.code).slice(0, 30_000)) } : null
+}
+
+/** Design QC (LLM): the reactive quality plane that stops generic/ugly/broken-contrast
+ *  pages from shipping. Reviews ONE generated page against the brief + visual bar and
+ *  returns ONLY genuine CRITICAL defects, each with a concrete code-level fix. */
+async function reviewPageVisual(p: PageSpec, code: string, brief: string): Promise<{ issue: string; fix: string }[]> {
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are a ruthless Design QC reviewer at a top product studio. Review ONE generated Next.js page against the design brief and the quality bar. Return ONLY genuine CRITICAL visual/UX defects that make it look generic, broken or unpolished — each with a precise, code-level fix the engineer can apply directly. No nitpicks, no praise.
+
+${VISUAL_SYSTEM}
+
+DESIGN BRIEF the page must honor:
+${brief || "(none provided — judge against the quality bar)"}
+
+CRITICAL = any of: text on a same/near color surface (invisible / fails AA contrast); a generic centered-column or admin look when the brief specified another architecture; missing loading/empty/error states; unstyled default buttons or inputs; no hover/focus-visible states; cramped or inconsistent spacing; a wall of plain text with no type hierarchy; placeholder/lorem copy; images with no fixed aspect ratio / overflow; not responsive on mobile.
+
+Return ONLY JSON: {"critical":[{"issue":"short defect","fix":"exact change to make"}]}. Return an empty array if the page genuinely meets the bar — do NOT invent issues.` },
+      { role: "user", content: `Page: ${p.file} (${p.title}).\n\nCODE:\n${code.slice(0, 16_000)}` },
+    ], { model: MODELS.premium, temperature: 0.1 })) as { critical?: { issue: string; fix: string }[] }
+    return Array.isArray(out.critical) ? out.critical.filter((c) => c?.issue && c?.fix).slice(0, 8) : []
+  } catch { return [] }
+}
+
+/** Refiner: re-emit the page applying ONLY the QC fixes, preserving data wiring + logic. */
+async function refinePage(p: PageSpec, code: string, fixes: { issue: string; fix: string }[]): Promise<string> {
+  try {
+    const out = (await chatJSON([
+      { role: "system", content: `You are a senior Frontend Engineer. Apply the listed design fixes to this Next.js page WITHOUT changing its data wiring (same fetch calls, same fields) and WITHOUT breaking tsc. Keep all working logic; improve only what the fixes call out, to the quality bar below.
+
+${VISUAL_SYSTEM}
+
+Return ONLY JSON {"code":"<full corrected contents of ${p.file}>"}.` },
+      { role: "user", content: `FIXES TO APPLY:\n${fixes.map((f) => `- ${f.issue} → ${f.fix}`).join("\n")}\n\nCURRENT CODE:\n${code}` },
+    ], { model: MODELS.premium, temperature: 0.3 })) as { code?: string }
+    return out.code && out.code.length > 100 ? postTsx(String(out.code).slice(0, 30_000)) : code
+  } catch { return code }
+}
+
+/** genPage + REACTIVE DESIGN QC LOOP: generate → QC critiques against the brief → refine,
+ *  until no CRITICAL visual defect remains (max 2 cycles). This is the loop that turns
+ *  "sale feo" into "sale pulido" without a human in the middle. */
+async function genPolishedPage(config: DomainConfig, bp: Blueprint, p: PageSpec, brief: string, shapes: string): Promise<AppFile | null> {
+  const file = await genPage(config, bp, p, brief, shapes)
+  if (!file) return null
+  let code = file.content
+  for (let cycle = 0; cycle < 2; cycle++) {
+    const critical = await reviewPageVisual(p, code, brief)
+    if (!critical.length) break
+    code = await refinePage(p, code, critical)
+  }
+  return { path: file.path, content: code }
 }
 
 /** Next 13+ forbids a nested <a> inside <Link> (runtime crash). LLMs still emit the old
@@ -330,13 +419,16 @@ HARD REQUIREMENTS:
 - Build the navigation from these items (use next/link <Link>, highlight the active route via usePathname): ${nav}
 - Tailwind classes only; use the palette from the brief (Tailwind arbitrary hex like bg-[#xxxxxx]); responsive (works on mobile AND desktop). No external libraries.
 - It must compile under tsc --noEmit (type children: React.ReactNode).
+- The chrome itself must look premium: real active/idle nav states (active item gets brand bg or a brand underline/indicator + bolder weight; idle is muted with hover), proper spacing, a hairline divider/shadow separating nav from content, an app wordmark/logo lockup. On mobile the nav collapses sensibly (e.g. bottom bar or a top bar) — never overflow.
 
-DESIGN BRIEF (follow its structure + palette):
-${brief || "Pick a distinctive layout for the product."}
+${VISUAL_SYSTEM}
+
+DESIGN BRIEF (follow its layout architecture, color tokens + component recipes):
+${brief || "Pick a distinctive, premium layout for the product."}
 
 Return ONLY JSON {"code":"<full contents of app/app/layout.tsx>"}` },
       { role: "user", content: `Product: ${config.identity.name} — ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}\nScreens: ${bp.pages.map((p) => `${p.route} (${p.title})`).join(", ")}` },
-    ], { model: "gpt-4o", temperature: 0.5 })) as { code?: string }
+    ], { model: MODELS.premium, temperature: 0.5 })) as { code?: string }
     if (!out.code || !/auth\/me/.test(out.code) || out.code.length < 200) return null
     return { path: "app/app/layout.tsx", content: postTsx(String(out.code).slice(0, 16_000)) }
   } catch { return null }
@@ -353,7 +445,7 @@ Check: a CREATE (POST) route AND a create page for every user-generated content 
 Return ONLY JSON: {"addRoutes":[{"path":"app/api/.../route.ts","methods":["POST"],"purpose":"...","logic":"precise SQL + scoping, exact tables/columns"}],"addPages":[{"route":"/app/...","file":"app/app/.../page.tsx","title":"...","behavior":"precise behavior + which routes it calls"}]}. Same table/column names as the blueprint. Empty arrays if complete. No duplicates of existing routes/pages.
 DB tables:\n${tablesDoc(bp)}\n\n${SPINE_API}` },
       { role: "user", content: `Product: ${config.identity.name}\nBlueprint:\n${JSON.stringify(summary, null, 1)}\n\nRoute logic:\n${bp.routes.map((r) => `${r.path}: ${r.logic}`).join("\n")}` },
-    ], { model: "gpt-4o", temperature: 0.2 })) as { addRoutes?: RouteSpec[]; addPages?: PageSpec[] }
+    ], { model: MODELS.balanced, temperature: 0.2 })) as { addRoutes?: RouteSpec[]; addPages?: PageSpec[] }
     const haveR = new Set(bp.routes.map((r) => r.path)), haveP = new Set(bp.pages.map((p) => p.file))
     return {
       addRoutes: (Array.isArray(out.addRoutes) ? out.addRoutes : []).filter((r) => r?.path && r?.logic && !haveR.has(r.path)),
@@ -427,7 +519,7 @@ ${schemaSql}
 
 Return ONLY JSON {"code":"<full corrected file>"}. If nothing needs fixing, return the file unchanged.` },
       { role: "user", content: `File ${file.path}:\n${file.content}` },
-    ], { model: "gpt-4o", temperature: 0.1 })) as { code?: string }
+    ], { model: MODELS.premium, temperature: 0.1 })) as { code?: string }
     const fixed = out.code && out.code.length > 40 ? String(out.code).slice(0, 30_000) : file.content
     return { path: file.path, content: fixAuthUserFields(fixed) }
   } catch { return { path: file.path, content: fixAuthUserFields(file.content) } }
@@ -761,7 +853,7 @@ async function genCatalogSeed(config: DomainConfig, bp: Blueprint): Promise<AppF
 - Do NOT seed user/auth/membership/selection tables (users fill those).
 Return ONLY JSON {"sql":"-- seed\\nINSERT INTO ...;\\n..."}.` },
       { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\n\nCATALOG TABLES (seed exactly these):\n${catalog.map((t) => t.ddl).join("\n\n")}` },
-    ], { model: "gpt-4o", temperature: 0.4 })) as { sql?: string }
+    ], { model: MODELS.balanced, temperature: 0.4 })) as { sql?: string }
     return out.sql && out.sql.length > 30 ? { path: "sql/seed.sql", content: `-- ${config.identity.name} — catalog seed (generated by Puglit's Data Ingestion agent).\n-- Real-world reference data so the app works on first run; refresh via app/api/cron/refresh.\n\n${out.sql}\n` } : null
   } catch { return null }
 }
@@ -963,7 +1055,7 @@ export async function buildBespokeApp(config: DomainConfig, contracts: string): 
   const seedPromise = genCatalogSeed(config, blueprint).catch(() => null)
   const routePromise = Promise.all(routeFiles.map((rf) => genRouteFile(config, blueprint, rf).then((f) => (f ? hardenRoute(f, schemaSql) : null)).catch(() => null)))
   const brief = await briefPromise
-  const pagePromise = Promise.all(pages.map((p) => genPage(config, blueprint, p, brief, shapes).catch(() => null)))
+  const pagePromise = Promise.all(pages.map((p) => genPolishedPage(config, blueprint, p, brief, shapes).catch(() => null)))
   const [routeOut, pageOut] = await Promise.all([routePromise, pagePromise])
 
   const files: AppFile[] = []
