@@ -36,6 +36,8 @@ function grid(r: Rect, n: number, cols: number) {
   for (let i = 0; i < n; i++) { const c = i % cols, ro = Math.floor(i / cols); out.push({ x: r.x + 40 + cw * c + cw / 2, y: r.y + 70 + ch * ro + ch / 2 }) }
   return out
 }
+const rnd = (a: number, b: number) => a + Math.random() * (b - a)
+function randPoint(roomId: string) { const r = ROOMS[roomId] || ROOMS.ti; return { x: rnd(r.x + 40, r.x + r.w - 40), y: rnd(r.y + 60, r.y + r.h - 34) } }
 // home desks per office (agents listed in SWARM_AGENTS order within each room)
 const DESKS: Record<string, { x: number; y: number }[]> = {
   ti: grid(ROOMS.ti, 9, 3), business: grid(ROOMS.business, 4, 2), design: grid(ROOMS.design, 2, 1),
@@ -59,7 +61,8 @@ const FO_CHAIRS = [
 
 const DISCOVERY = ["data-architect", "researcher", "contracts-architect"]
 
-interface Sim { x: number; y: number; tx: number; ty: number; face: number; seed: number }
+interface Sim { x: number; y: number; wx: number; wy: number; nextWander: number; face: number; seed: number }
+const partySpot = (i: number) => ({ x: ROOMS.forum.x + ROOMS.forum.w / 2 + ((i % 6) - 2.5) * 70, y: ROOMS.forum.y + 70 + Math.floor(i / 6) * 52 })
 
 export function OfficeStage({ steps }: { steps: Step[] }) {
   const [sel, setSel] = useState<string | null>(null)
@@ -68,7 +71,7 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
   const wrapRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const sprRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const sim = useRef<Map<string, Sim>>(new Map())
-  const phaseRef = useRef({ planning: false, sh: false })
+  const phaseRef = useRef({ planning: false, sh: false, done: false })
 
   const byStep = useMemo(() => new Map(steps.map((s) => [s.key, s])), [steps])
   const running = steps.find((s) => s.status === "running")
@@ -97,36 +100,47 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
   }, [])
 
   // live phase read by the rAF loop (avoids effect-ordering pitfalls)
-  phaseRef.current = { planning, sh: shRunning }
+  phaseRef.current = { planning, sh: shRunning, done: allDone }
   const stakeOrder = useMemo(() => SWARM_AGENTS.filter((a) => a.stakeholder), [])
 
   // init positions at home
   useEffect(() => {
-    SWARM_AGENTS.forEach((a, i) => { const h = home.get(a.id)!; sim.current.set(a.id, { x: h.x, y: h.y, tx: h.x, ty: h.y, face: 1, seed: i * 1.7 }) })
+    SWARM_AGENTS.forEach((a, i) => { const h = home.get(a.id)!; sim.current.set(a.id, { x: h.x, y: h.y, wx: h.x, wy: h.y, nextWander: 0, face: 1, seed: i * 1.7 }) })
   }, [home])
 
-  // rAF walk loop — computes each agent's seat from the live phase, walks there, then sits.
+  // rAF walk loop. RULE: a WORKING agent stays at its desk; everyone else has LIFE —
+  // they wander around their own room. Meetings (planning/supervision) pull the relevant
+  // agents to the forum/boardroom. When ALL are done → everyone parties in the forum.
   useEffect(() => {
     let raf = 0; const SPEED = 2.1
-    const targetFor = (a: SwarmAgent): { x: number; y: number } => {
-      const ph = phaseRef.current
-      if (ph.planning) { if (a.queen) return FO_PODIUM; const di = DISCOVERY.indexOf(a.id); if (di >= 0) return FO_CHAIRS[di] }
-      if (ph.sh) { if (a.queen) return MG_SEATS[0]; if (a.stakeholder) return MG_SEATS[stakeOrder.indexOf(a) + 1] || MG_SEATS[1] }
-      return home.get(a.id)!
-    }
+    const isWorking = (a: SwarmAgent) => (a.steps.map((k) => byStep.get(k)).filter(Boolean) as Step[]).some((x) => x.status === "running")
     const frame = (t: number) => {
-      for (const a of SWARM_AGENTS) {
+      const ph = phaseRef.current
+      for (let idx = 0; idx < SWARM_AGENTS.length; idx++) {
+        const a = SWARM_AGENTS[idx]
         const s = sim.current.get(a.id), node = wrapRefs.current.get(a.id), spr = sprRefs.current.get(a.id)
         if (!s || !node || !spr) continue
-        const tgt = targetFor(a)
-        const dx = tgt.x - s.x, dy = tgt.y - s.y, dist = Math.hypot(dx, dy), moving = dist > 1.6
+        const working = isWorking(a)
+        let tx: number, ty: number, busy = true
+        if (ph.done) { const p = partySpot(idx); tx = p.x; ty = p.y }
+        else if (ph.planning && a.queen) { tx = FO_PODIUM.x; ty = FO_PODIUM.y }
+        else if (ph.planning && DISCOVERY.includes(a.id)) { const c = FO_CHAIRS[DISCOVERY.indexOf(a.id)]; tx = c.x; ty = c.y }
+        else if (ph.sh && a.queen) { tx = MG_SEATS[0].x; ty = MG_SEATS[0].y }
+        else if (ph.sh && a.stakeholder) { const sm = MG_SEATS[stakeOrder.indexOf(a) + 1] || MG_SEATS[1]; tx = sm.x; ty = sm.y }
+        else if (working) { const h = home.get(a.id)!; tx = h.x; ty = h.y }
+        else { // idle → wander within own room (LIFE)
+          busy = false
+          if (Math.hypot(s.wx - s.x, s.wy - s.y) < 3 && t > s.nextWander) { const p = randPoint(a.room); s.wx = p.x; s.wy = p.y; s.nextWander = t + 1500 + Math.random() * 3200 }
+          tx = s.wx; ty = s.wy
+        }
+        const dx = tx - s.x, dy = ty - s.y, dist = Math.hypot(dx, dy), moving = dist > 1.6
         if (moving) { s.x += (dx / dist) * SPEED; s.y += (dy / dist) * SPEED; if (Math.abs(dx) > 0.6) s.face = dx < 0 ? -1 : 1 }
         s.x = Math.max(20, Math.min(W - 20, s.x)); s.y = Math.max(20, Math.min(H - 10, s.y))
-        const working = (() => { const ss = a.steps.map((k) => byStep.get(k)).filter(Boolean) as Step[]; return ss.some((x) => x.status === "running") })()
-        const bob = moving ? Math.abs(Math.sin(t / 95)) * 3 : working ? Math.sin(t / 160 + s.seed) * 1.1 : Math.sin(t / 650 + s.seed) * 0.8
+        const bob = ph.done ? Math.abs(Math.sin(t / 120 + s.seed)) * 9 : moving ? Math.abs(Math.sin(t / 95)) * 3 : working ? Math.sin(t / 160 + s.seed) * 1.1 : Math.sin(t / 600 + s.seed) * 1
         node.style.transform = `translate(${s.x}px,${s.y}px) translate(-50%,-50%)`
         node.style.zIndex = String(Math.round(s.y) + 200)
         spr.style.transform = `scaleX(${s.face}) translateY(${-bob}px)`
+        void busy
       }
       raf = requestAnimationFrame(frame)
     }
@@ -187,8 +201,13 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={`/sprites/agents/${a.id}.png`} alt={a.name} draggable={false}
                         className={`w-[54px] h-[54px] object-contain ${st.status === "pending" ? "opacity-85" : ""} ${working ? "drop-shadow-[0_0_9px_rgba(124,58,237,.8)]" : ""}`} />
-                      {st.status === "done" && <span className="absolute -right-1 -top-1 text-xs">✅</span>}
+                      {st.status === "done" && !allDone && <span className="absolute -right-1 -top-1 text-xs">✅</span>}
                       {a.queen && <span className="absolute -left-1 -top-2 text-xs">👑</span>}
+                      {allDone && (
+                        <span className="absolute left-1/2 -translate-x-1/2 -top-3 w-0 h-0" style={{ borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderBottom: `15px solid ${["#f43f5e", "#f59e0b", "#22c55e", "#38bdf8", "#a855f7"][a.name.length % 5]}` }}>
+                          <span className="absolute left-1/2 -translate-x-1/2 -top-[3px] w-1.5 h-1.5 rounded-full bg-white" />
+                        </span>
+                      )}
                     </div>
                     <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap ${working ? "bg-violet text-white" : "bg-black/55 text-white/80"} ${sel === a.id ? "ring-1 ring-violet-bright" : ""}`}>{a.name}</span>
                   </button>
@@ -198,6 +217,7 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
           </div>
         </div>
 
+        {allDone && <Confetti />}
         <div className="absolute left-4 top-3 rounded-lg bg-black/60 backdrop-blur px-3 py-1.5 text-xs font-semibold text-white/90 max-w-[70%]">{scene}</div>
         <div className="absolute right-4 top-3 flex items-center gap-1">
           <button onClick={() => zoom(-0.12)} className="w-7 h-7 rounded-lg bg-black/60 text-white font-bold">−</button>
@@ -225,6 +245,15 @@ export function OfficeStage({ steps }: { steps: Step[] }) {
       </div>
     </div>
   )
+}
+
+function Confetti() {
+  const C = ["#f43f5e", "#f59e0b", "#22c55e", "#38bdf8", "#a855f7", "#ffffff"]
+  return <div className="absolute inset-0 pointer-events-none overflow-hidden z-[60]">
+    {Array.from({ length: 38 }).map((_, i) => (
+      <span key={i} className="absolute w-2 h-3 rounded-[1px]" style={{ left: `${(i * 53) % 100}%`, top: "-24px", background: C[i % C.length], animation: `confetti-fall ${2.4 + (i % 5) * 0.4}s linear ${(i % 12) * 0.25}s infinite` }} />
+    ))}
+  </div>
 }
 
 /* ---- CSS furniture (isometric-ish) ---- */
