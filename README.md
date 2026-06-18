@@ -57,6 +57,17 @@ puglit/
 └─ infra/              # Dockerfile, fly.toml template, secrets.example
 ```
 
+## Run it locally (100% local, no paid keys)
+
+Puglit runs entirely on local open models (**Ollama + Gemma**); BYOK to OpenAI/Gemini/Claude or
+any OpenAI-compatible endpoint, mixing providers per tier.
+
+- **[`web/docs/LOCAL-SETUP.md`](web/docs/LOCAL-SETUP.md)** — tested step-by-step (Ollama, Postgres, env, run, generate).
+- **[`web/docs/PROVIDERS.md`](web/docs/PROVIDERS.md)** — provider/model guide, presets (Gemma/Hermes/DeepSeek/Qwen/Llama), BYOK & mixing.
+
+> Verify the wiring with `GET /api/doctor?ping=1`. Small local models (e.g. `gemma2:2b`) run the
+> full pipeline but write low-quality code — use a bigger local model or a cloud `premium` tier.
+
 ## Status
 
 Phase 1 (the Spine) is under active extraction. See [`modules/README.md`](modules/README.md) for per-module progress.
