@@ -121,10 +121,13 @@ CREATE TABLE IF NOT EXISTS puglit_projects (
   name VARCHAR(120) NOT NULL,
   answers JSONB NOT NULL,
   config JSONB NOT NULL,
+  landing_html TEXT,
   featured BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_puglit_projects_created ON puglit_projects(created_at DESC);
+-- Idempotent: add landing_html to tables created before this column existed.
+ALTER TABLE puglit_projects ADD COLUMN IF NOT EXISTS landing_html TEXT;
 
 CREATE TABLE IF NOT EXISTS puglit_waitlist (
   id BIGSERIAL PRIMARY KEY,

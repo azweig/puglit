@@ -107,7 +107,7 @@ async function applyFindings(file: AppFile, findings: Finding[]): Promise<AppFil
       { role: "system", content: `You are the Integrator (the queen bee) applying a review board's findings to ONE file. Apply EVERY listed fix precisely, WITHOUT changing unrelated behavior, data wiring or imports, and WITHOUT breaking \`tsc --noEmit\`. Keep the same framework conventions (Next.js 16 App Router, Tailwind, the spine's @/lib/* — no new npm deps).${isTsx ? ' If it is a client component keep "use client" as the very first line; read dynamic params with useParams(); never nest <a> in <Link>.' : ""}
 Return ONLY JSON {"code":"<full corrected contents of ${file.path}>"}.` },
       { role: "user", content: `FINDINGS FOR ${file.path}:\n${findings.map((f) => `- [${f.severity}] ${f.issue} → ${f.fix}`).join("\n")}\n\nCURRENT FILE:\n${file.content}` },
-    ], { model: MODELS.premium, temperature: 0.2 })) as { code?: string }
+    ], { model: MODELS.code, temperature: 0.2 })) as { code?: string }
     let code = out.code && out.code.length > 80 ? String(out.code).slice(0, 30_000) : file.content
     if (isTsx) {
       // keep the App-Router invariants the deterministic backstops enforce

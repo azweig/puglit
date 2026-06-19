@@ -37,30 +37,34 @@ const DEFAULT_PROVIDER = (
     : "ollama")
 ).toLowerCase()
 
-/** Sensible per-provider model defaults (all overridable per tier via PUGLIT_MODEL_*). */
-function providerModels(p: string): { premium: string; balanced: string; cheap: string } {
+/** Sensible per-provider model defaults (all overridable per tier via PUGLIT_MODEL_*).
+ *  `code` is a dedicated lane for code generation/repair — a coder model when local. */
+function providerModels(p: string): { premium: string; balanced: string; cheap: string; code: string } {
   switch (p) {
-    case "openai":    return { premium: "gpt-5.5", balanced: "gpt-5.4", cheap: "gpt-5.4-mini" }
-    case "gemini":    return { premium: "gemini-2.5-pro", balanced: "gemini-2.5-flash", cheap: "gemini-2.5-flash-lite" }
-    case "anthropic": return { premium: "claude-opus-4-8", balanced: "claude-sonnet-4-6", cheap: "claude-haiku-4-5" }
-    default:          return { premium: "gemma2:27b", balanced: "gemma2", cheap: "gemma2:2b" } // ollama / custom
+    case "openai":    return { premium: "gpt-5.5", balanced: "gpt-5.4", cheap: "gpt-5.4-mini", code: "gpt-5.5" }
+    case "gemini":    return { premium: "gemini-2.5-pro", balanced: "gemini-2.5-flash", cheap: "gemini-2.5-flash-lite", code: "gemini-2.5-pro" }
+    case "anthropic": return { premium: "claude-opus-4-8", balanced: "claude-sonnet-4-6", cheap: "claude-haiku-4-5", code: "claude-sonnet-4-6" }
+    default:          return { premium: "gemma2:27b", balanced: "gemma2", cheap: "gemma2:2b", code: "qwen2.5-coder:7b" } // ollama / custom
   }
 }
 const DEFAULTS = providerModels(DEFAULT_PROVIDER)
 
 export const MODELS = {
-  /** Architecture, visual design, page/route code, discovery, review — quality is decisive. */
+  /** Architecture, blueprint, discovery, review — reasoning quality is decisive. */
   premium: process.env.PUGLIT_MODEL_PREMIUM || DEFAULTS.premium,
-  /** Standard structured generation (specs, critics, seeds, fixers). */
+  /** Standard structured generation (specs, critics, seeds). */
   balanced: process.env.PUGLIT_MODEL_BALANCED || DEFAULTS.balanced,
   /** Mechanical / high-volume / low-stakes (extraction, normalization). */
   cheap: process.env.PUGLIT_MODEL_CHEAP || DEFAULTS.cheap,
+  /** CODE generation + repair (routes, pages, shell, SQL, fixers) — a coder model when local. */
+  code: process.env.PUGLIT_MODEL_CODE || DEFAULTS.code,
 } as const
 
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: unknown }
 
 // ── Resolution (provider + base URL + key per call, with per-tier overrides) ──
-function tierOf(model: string): "PREMIUM" | "BALANCED" | "CHEAP" | null {
+function tierOf(model: string): "PREMIUM" | "BALANCED" | "CHEAP" | "CODE" | null {
+  if (model === MODELS.code) return "CODE"
   if (model === MODELS.premium) return "PREMIUM"
   if (model === MODELS.balanced) return "BALANCED"
   if (model === MODELS.cheap) return "CHEAP"
@@ -145,11 +149,39 @@ async function callAnthropic(messages: ChatMessage[], opts: { model: string; tem
   return String(text)
 }
 
+// ── Constrained decoding: is this an Ollama server? (native /api/chat + `format`) ──
+function isOllama(r: Resolved): boolean {
+  return r.name === "ollama" || /:11434(\b|\/)/.test(r.baseURL)
+}
+const allStrings = (messages: ChatMessage[]) => messages.every((m) => typeof m.content === "string")
+
+/** Ollama NATIVE structured output: pass a JSON Schema in `format` so generation is
+ *  grammar-constrained to valid JSON matching the schema — the reliable way to stop small
+ *  local models emitting malformed/markdown-wrapped JSON. Uses /api/chat (not the /v1 shim). */
+async function callOllamaSchema(messages: ChatMessage[], opts: { model: string; temperature?: number; schema: object }, r: Resolved): Promise<string> {
+  const host = r.baseURL.replace(/\/v1\/?$/, "")
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    messages: messages.map((m) => ({ role: m.role, content: String(m.content) })),
+    stream: false,
+    format: opts.schema,
+    options: wantsTemperature(opts.model) ? { temperature: opts.temperature ?? 0.2 } : {},
+  }
+  const res = await fetch(`${host}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(`ollama_${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`)
+  const data = await res.json()
+  const content = data?.message?.content
+  if (!content) throw new Error("ollama_empty")
+  return String(content)
+}
+
 // ── OpenAI-compatible (OpenAI / Gemini / Ollama / custom) ─────────────────────
-async function callOpenAICompat(messages: ChatMessage[], opts: { model: string; temperature?: number; json?: boolean }, r: Resolved): Promise<string> {
+async function callOpenAICompat(messages: ChatMessage[], opts: { model: string; temperature?: number; json?: boolean; schema?: object }, r: Resolved): Promise<string> {
   const body: Record<string, unknown> = { model: opts.model, messages }
   if (wantsTemperature(opts.model)) body.temperature = opts.temperature ?? 0.5
-  if (opts.json && r.def.supportsJsonMode) body.response_format = { type: "json_object" }
+  // Real structured output when a schema is given (OpenAI/Gemini); else plain JSON mode.
+  if (opts.schema && r.def.supportsJsonMode) body.response_format = { type: "json_schema", json_schema: { name: "out", schema: opts.schema, strict: true } }
+  else if (opts.json && r.def.supportsJsonMode) body.response_format = { type: "json_object" }
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   if (r.key) headers.Authorization = `Bearer ${r.key}`
   const res = await fetch(`${r.baseURL}/chat/completions`, { method: "POST", headers, body: JSON.stringify(body) })
@@ -160,10 +192,13 @@ async function callOpenAICompat(messages: ChatMessage[], opts: { model: string; 
   return String(content)
 }
 
-async function call(messages: ChatMessage[], opts: { model: string; temperature?: number; json?: boolean }): Promise<string> {
+async function call(messages: ChatMessage[], opts: { model: string; temperature?: number; json?: boolean; schema?: object }): Promise<string> {
   const r = resolve(opts.model)
   if (r.def.needsKey && !r.key) throw new Error("ai_not_configured")
-  return r.def.protocol === "anthropic" ? callAnthropic(messages, opts, r) : callOpenAICompat(messages, opts, r)
+  if (r.def.protocol === "anthropic") return callAnthropic(messages, opts, r)
+  // Ollama: route schema-constrained calls through the native endpoint (most reliable).
+  if (opts.schema && isOllama(r) && allStrings(messages)) return callOllamaSchema(messages, { ...opts, schema: opts.schema }, r)
+  return callOpenAICompat(messages, opts, r)
 }
 
 // ── Robust JSON (local/open models love to wrap JSON in prose or ```fences) ───
@@ -180,7 +215,7 @@ function parseLoose(s: string): unknown {
 
 // ── Introspection (for the setup "doctor" — never leaks keys) ─────────────────
 export function providerInfo() {
-  const tier = (t: "PREMIUM" | "BALANCED" | "CHEAP", model: string) => {
+  const tier = (t: "PREMIUM" | "BALANCED" | "CHEAP" | "CODE", model: string) => {
     const r = resolve(model)
     return { tier: t.toLowerCase(), provider: r.name, model, baseURL: r.baseURL, protocol: r.def.protocol, hasKey: r.def.needsKey ? !!r.key : true, needsKey: r.def.needsKey }
   }
@@ -188,7 +223,7 @@ export function providerInfo() {
     defaultProvider: DEFAULT_PROVIDER,
     vision: supportsVision(),
     configured: aiConfigured(),
-    tiers: [tier("PREMIUM", MODELS.premium), tier("BALANCED", MODELS.balanced), tier("CHEAP", MODELS.cheap)],
+    tiers: [tier("PREMIUM", MODELS.premium), tier("BALANCED", MODELS.balanced), tier("CHEAP", MODELS.cheap), tier("CODE", MODELS.code)],
   }
 }
 
@@ -208,16 +243,18 @@ export async function chatText(messages: ChatMessage[], opts?: { model?: string;
   return call(messages, { model: opts?.model || MODELS.balanced, temperature: opts?.temperature ?? 0.7 })
 }
 
-export async function chatJSON(messages: ChatMessage[], opts?: { model?: string; temperature?: number }): Promise<unknown> {
+export async function chatJSON(messages: ChatMessage[], opts?: { model?: string; temperature?: number; schema?: object }): Promise<unknown> {
   const model = opts?.model || MODELS.balanced
-  const out = await call(messages, { model, temperature: opts?.temperature, json: true })
+  // When a JSON Schema is given, generation is grammar-constrained (Ollama native /
+  // OpenAI json_schema) so the output is valid JSON by construction.
+  const out = await call(messages, { model, temperature: opts?.temperature, json: true, schema: opts?.schema })
   try {
     return parseLoose(out)
   } catch {
     // One stricter retry — essential for weaker open models that ignored "JSON only".
     const retry = await call(
       [...messages, { role: "user", content: "Return ONLY valid minified JSON — no prose, no markdown, no code fences." }],
-      { model, temperature: 0, json: true },
+      { model, temperature: 0, json: true, schema: opts?.schema },
     )
     return parseLoose(retry)
   }

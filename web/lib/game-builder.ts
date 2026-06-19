@@ -96,7 +96,7 @@ ${d.hasHighscores ? `- HIGHSCORES: on game over, POST {name, score} to /api/scor
 
 Return ONLY JSON: {"code":"<the FULL contents of app/page.tsx>"}.` },
     { role: "user", content: `${brief(config, "")}\n\nDESIGN:\n${JSON.stringify(d, null, 2)}` },
-  ], { model: MODELS.premium, temperature: 0.3 }) as { code?: string }
+  ], { model: MODELS.code, temperature: 0.3 }) as { code?: string }
   const code = raw.code && raw.code.length > 200 ? String(raw.code) : ""
   return code ? hardenTsx(code) : ""
 }
