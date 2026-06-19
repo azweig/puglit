@@ -24,10 +24,10 @@ const depth = (x: number, y: number) => Math.round(x + y)
 
 type RoomRel = { x: number; y: number; w: number; h: number; label: string; emoji: string; cols: number; furn: string; fw: number }
 const ROOMS_REL: Record<string, RoomRel> = {
-  ti:         { x: 0,   y: 0,   w: 360, h: 250, label: "INGENIERÍA", emoji: "💻", cols: 4, furn: "it-desk",         fw: 60 },
-  business:   { x: 380, y: 0,   w: 250, h: 250, label: "BUSINESS",   emoji: "📊", cols: 2, furn: "cubicle",         fw: 68 },
-  design:     { x: 0,   y: 270, w: 230, h: 210, label: "DISEÑO",     emoji: "🎨", cols: 2, furn: "easel",           fw: 56 },
-  management: { x: 250, y: 270, w: 380, h: 210, label: "DIRECCIÓN",  emoji: "👑", cols: 1, furn: "boardroom-table", fw: 128 },
+  ti:         { x: 0,   y: 0,   w: 360, h: 250, label: "INGENIERÍA", emoji: "💻", cols: 4, furn: "it-desk",         fw: 76 },
+  business:   { x: 380, y: 0,   w: 250, h: 250, label: "BUSINESS",   emoji: "📊", cols: 2, furn: "cubicle",         fw: 86 },
+  design:     { x: 0,   y: 270, w: 230, h: 210, label: "DISEÑO",     emoji: "🎨", cols: 2, furn: "easel",           fw: 70 },
+  management: { x: 250, y: 270, w: 380, h: 210, label: "DIRECCIÓN",  emoji: "👑", cols: 1, furn: "boardroom-table", fw: 156 },
 }
 const BUILD_W = 630, BUILD_H = 480
 const BUILDINGS: { team: TeamId; ox: number; oy: number }[] = [
@@ -105,7 +105,9 @@ export function CampusStage() {
     roster.forEach((a, i) => {
       const k = a.team + ":" + a.room; const di = (idx[k] = (idx[k] ?? -1) + 1)
       const arr = desks[k]; const d = arr[di] || arr[arr.length - 1]
-      sim.current.set(a.id, { x: d.x, y: d.y, wx: d.x, wy: d.y, nextWander: 0, face: 1, seed: i * 1.3, home: d })
+      // stand IN FRONT of the desk (offset toward the viewer) so the desk stays visible behind the agent
+      const h = { x: d.x, y: d.y + (a.room === "management" ? 56 : 26) }
+      sim.current.set(a.id, { x: h.x, y: h.y, wx: h.x, wy: h.y, nextWander: 0, face: 1, seed: i * 1.3, home: h })
     })
     force((n) => n + 1)
   }, [roster, desks])
