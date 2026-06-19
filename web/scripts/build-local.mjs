@@ -123,10 +123,13 @@ function configToTs(config) {
 }
 function assemble({ config, appFiles, sql, seedSql }) {
   execSync(`rm -rf ${DIR} && mkdir -p ${DIR}`)
-  // copy spine app (exclude node_modules + the dropped template surfaces), then symlink deps
+  // copy spine app (exclude node_modules + the dropped template surfaces)
   execSync(`rsync -a --exclude node_modules ${SPINE}/ ${DIR}/`)
   for (const d of SPINE_DROP) execSync(`rm -rf ${path.join(DIR, d)}`)
-  fs.symlinkSync(path.join(SPINE, "node_modules"), path.join(DIR, "node_modules"))
+  // node_modules: a REAL dir (not a symlink — Turbopack rejects symlinks out of root).
+  // APFS clonefile (`cp -c`) is instant + no extra disk; fall back to symlink if it fails.
+  try { execSync(`cp -Rc ${SPINE}/node_modules ${DIR}/node_modules`) }
+  catch { try { execSync(`cp -R ${SPINE}/node_modules ${DIR}/node_modules`) } catch { fs.symlinkSync(path.join(SPINE, "node_modules"), path.join(DIR, "node_modules")) } }
   // spine SQL migrations
   execSync(`mkdir -p ${path.join(DIR, "sql")}`)
   for (const f of ["001_core.sql", "002_auth.sql", "003_records.sql"]) {
@@ -203,22 +206,37 @@ function ensureUseClient(code) {
   const c = code.replace(/^\s*["']use client["'];?\s*/i, "")
   return hasHook ? '"use client";\n' + c : c
 }
+const totalErrs = (m) => [...m.values()].reduce((n, l) => n + l.length, 0)
 async function repairTs() {
+  // Anti-oscillation: keep the BEST-seen snapshot (fewest errors) of every file that ever
+  // errored, and stop early if N rounds bring no improvement — then restore the best.
+  const tracked = new Set(), best = new Map()
+  let bestTotal = Infinity, stale = 0
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const errs = tscErrors()
+    const total = totalErrs(errs)
+    for (const rel of errs.keys()) tracked.add(rel)
     if (errs.size === 0) { log(`tsc: COMPILA ✓ (ronda ${round})`); return true }
-    log(`tsc ronda ${round}: ${errs.size} archivos con errores`)
+    if (total < bestTotal) { // new best → snapshot every tracked file's current content
+      bestTotal = total; stale = 0; best.clear()
+      for (const rel of tracked) { const fp = path.join(DIR, rel); if (fs.existsSync(fp)) best.set(rel, fs.readFileSync(fp, "utf8")) }
+    } else { stale++ }
+    log(`tsc ronda ${round}: ${errs.size} archivos · ${total} errores (best ${bestTotal})`)
+    if (stale >= 2) { log("tsc: sin mejora en 2 rondas → restauro el mejor y paro"); break }
     for (const [rel, list] of errs) {
       const fp = path.join(DIR, rel); if (!fs.existsSync(fp)) continue
       const cur = fs.readFileSync(fp, "utf8")
       const isTsx = rel.endsWith(".tsx")
-      const sys = `You fix ONE file in a Next.js 16 App Router + TypeScript + raw 'pg' project. Return ONLY the full corrected file — no prose, no fences. Import only from "next/*", "react", "@/lib/*", "@/domain.config". Add NO npm deps. ${isTsx ? 'If it uses hooks it MUST start with "use client"; ALL hooks/JSX live INSIDE one default-exported component; import every hook from "react".' : 'Route handlers MUST `export async function GET/POST(req: Request)`; `import { NextResponse } from "next/server"`; DB via `import { pool } from "@/lib/db"` (parameterized).'}`
+      const sys = `You fix ONE file in a Next.js 16 App Router + TypeScript + raw 'pg' project. Return ONLY the full corrected file — no prose, no fences. Make the MINIMAL change that clears the listed errors; do NOT rewrite working parts. Import only from "next/*", "react", "@/lib/*", "@/domain.config". Add NO npm deps. ${isTsx ? 'If it uses hooks it MUST start with "use client"; ALL hooks/JSX live INSIDE one default-exported component; import every hook from "react".' : 'Route handlers MUST `export async function GET/POST(req: Request)`; `import { NextResponse } from "next/server"`; DB via `import { pool } from "@/lib/db"` (parameterized).'}`
       const fixed = await ask(sys, `tsc errors:\n${list.join("\n")}\n\n--- ${rel} ---\n${cur}`, 8192)
       if (fixed.length > 40) { fs.writeFileSync(fp, isTsx ? ensureUseClient(fixed) : fixed); log(`  fix → ${rel} (${list.length} err)`) }
     }
   }
+  // restore best-seen if the final state is worse
+  const finalTotal = totalErrs(tscErrors())
+  if (finalTotal > bestTotal && best.size) { for (const [rel, content] of best) fs.writeFileSync(path.join(DIR, rel), content); log(`tsc: restaurado best (${bestTotal} errores)`) }
   const left = tscErrors()
-  log(left.size === 0 ? "tsc: COMPILA ✓" : `tsc: quedan ${left.size} archivos con errores`)
+  log(left.size === 0 ? "tsc: COMPILA ✓" : `tsc: quedan ${totalErrs(left)} errores en ${left.size} archivos (best-effort)`)
   return left.size === 0
 }
 
