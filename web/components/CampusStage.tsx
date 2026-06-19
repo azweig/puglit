@@ -10,6 +10,7 @@
  * Demo-driven by default (progress climbs, agents cycle working/idle).
  */
 import { useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { buildRoster, TEAMS, type TeamId } from "@/lib/roster"
 import { RpgCard } from "@/components/RpgCard"
 import { spriteFor } from "@/lib/sprite-alias"
@@ -138,7 +139,11 @@ export function CampusStage() {
     if (worldRef.current) worldRef.current.style.transform = `translate(${view.current.x}px,${view.current.y}px) scale(${s})`
   }
   useEffect(() => { applyCamera(); force((n) => n + 1) /* eslint-disable-next-line */ }, [focus])
-  useEffect(() => { const t = new URLSearchParams(window.location.search).get("team"); if (t === "A" || t === "B" || t === "C") setFocus(t) }, [])
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    const t = q.get("team"); if (t === "A" || t === "B" || t === "C") setFocus(t)
+    const c = q.get("card"); if (c) setSel(c)
+  }, [])
 
   // rAF walk loop — agents positioned in WORLD (iso) coords; camera handled by the container
   useEffect(() => {
@@ -265,11 +270,12 @@ export function CampusStage() {
         })}
       </div>
 
-      {/* agent RPG modal — OUTSIDE the world container, above everything */}
-      {sel && (
-        <div className="fixed inset-0 z-[9000] grid place-items-center bg-black/75 p-4" onClick={() => setSel(null)}>
+      {/* agent RPG modal — PORTALED to <body> so no campus sprite/compositing layer can cover it */}
+      {sel && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[2147483000] grid place-items-center bg-black/80 p-4" onClick={() => setSel(null)}>
           <div onClick={(e) => e.stopPropagation()}><RpgCard id={sel} onClose={() => setSel(null)} /></div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
