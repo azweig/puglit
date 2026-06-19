@@ -112,11 +112,23 @@ PSQL="psql -h localhost -p $PG_PORT -U $PG_USER -d $PG_DB -v ON_ERROR_STOP=0"
 [ -f "$WEB/sql/genetic.sql" ] && $PSQL -f "$WEB/sql/genetic.sql" >/dev/null 2>&1 || true
 echo "schema loaded ✓"
 
-# ── 7. Start dev server (bind 0.0.0.0 for RunPod proxy) + seed roster ───────
-say "7/7 Starting dev server (:$DEV_PORT) + seeding roster"
-pkill -f "next dev" 2>/dev/null || true
-nohup npm run dev -- -p "$DEV_PORT" -H 0.0.0.0 >/tmp/puglit-dev.log 2>&1 &
-for i in $(seq 1 40); do curl -sf "http://localhost:$DEV_PORT/api/doctor" >/dev/null 2>&1 && break; sleep 2; done
+# ── 7. Serve (bind 0.0.0.0 for RunPod proxy) + seed roster ──────────────────
+# SERVE=prod → production build (no HMR/websocket; robust behind the proxy). The build
+# runs here BEFORE any inference, so the big model isn't in RAM yet → no OOM. SERVE=dev
+# (default) → next dev (hot reload, lighter, but flaky behind a proxy).
+SERVE="${SERVE:-dev}"
+say "7/7 Serving (:$DEV_PORT, mode=$SERVE) + seeding roster"
+pkill -9 -f "next dev" 2>/dev/null || true; pkill -9 -f "next-server" 2>/dev/null || true
+lsof -ti:"$DEV_PORT" 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+sleep 1
+if [ "$SERVE" = "prod" ]; then
+  rm -rf .next
+  npm run build 2>&1 | tail -6
+  nohup npm run start -- -p "$DEV_PORT" -H 0.0.0.0 >/tmp/puglit-prod.log 2>&1 &
+else
+  nohup npm run dev -- -p "$DEV_PORT" -H 0.0.0.0 >/tmp/puglit-dev.log 2>&1 &
+fi
+for i in $(seq 1 70); do curl -sf "http://localhost:$DEV_PORT/api/doctor" >/dev/null 2>&1 && break; sleep 2; done
 curl -s -X POST "http://localhost:$DEV_PORT/api/genetic/seed" | jq . 2>/dev/null || true
 
 say "DONE ✓"
