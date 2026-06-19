@@ -70,23 +70,44 @@ const VISUAL_SYSTEM = `PREMIUM VISUAL QUALITY BAR (Tailwind only — there is NO
  *  REAL product's actual surfaces (pages), entities and signature features, so the architect
  *  plans to that depth instead of the model's vague generic notion. Returns "" if not a clone.
  *  (Knowledge-based today; gains a web/fetch tool when the engine runs with one.) */
+const REFERENCE_SCHEMA = {
+  type: "object",
+  properties: {
+    product: { type: "string" },
+    entities: { type: "array", items: { type: "string" } },
+    surfaces: { type: "string" },
+  },
+  required: ["entities", "surfaces"],
+}
 export async function studyReference(config: DomainConfig): Promise<string> {
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
   try {
     const out = (await chatJSON([
-      { role: "system", content: `You are a Reference Product Analyst. If the product clones or is clearly modeled on a real, known product/site (e.g. "clon de promiedos", "como Tinder", "un Airbnb de X"), reconstruct that REAL product's surface as concretely as you can FROM MEMORY: the distinct PAGES/screens it has, the main ENTITIES behind them, and the signature FEATURES that make it recognizable (the things a user would notice are MISSING if absent). Be specific and exhaustive — this sets the fidelity bar. Example for promiedos.com.ar: home with a competitions sidebar + today's matches grouped by league showing live minute and inline scorers; a MATCH page (minute-by-minute timeline, stats, lineups/formation, last matches, venue/referee); a LEAGUE page (fixture, multiple standings tables, top scorers); a TEAM page (squad, fixtures, results). If the product is NOT a clone of something known, return an empty string for "surfaces".
-Return ONLY JSON: {"isClone": boolean, "product": "the real product, or ''", "surfaces": "markdown: pages → their key sections/entities/features (the fidelity bar)"}.` },
+      { role: "system", content: `You are a Reference Product Analyst. For the given product — whether it names a real product ("clon de promiedos") OR fits a well-known CATEGORY (a status page, a job board, a recipe app, a habit tracker, a forum…) — reconstruct the fidelity bar FROM MEMORY: the DISTINCT PAGES/screens, the DATA ENTITIES behind them, and the signature FEATURES a user would notice are MISSING if absent. Be specific and EXHAUSTIVE about the data model — list EVERY distinct entity/table the real product needs (think 6-15 for a real product, not 1-2).
+Examples:
+- a STATUS PAGE (status.claude.com / Statuspage): entities = service, component, component_group, status_check (uptime samples), incident, incident_update, maintenance, subscriber. Pages = overview (components grouped, each with current status + 90-day uptime bar), incident history (timeline of incidents + updates), a single incident page, scheduled maintenance, subscribe.
+- promiedos: entities = competition, team, match, match_event, lineup, player, standing, top_scorer. Pages = home (matches by league), match (timeline/stats/lineups), league (fixture/standings/scorers), team (squad).
+Always fill 'entities' and 'surfaces' for any recognizable product/category; leave them empty ONLY if the idea is genuinely novel with no analog.
+Return ONLY JSON: {"product": "...", "entities": ["service","component",...], "surfaces": "markdown: pages → key sections/features"}.` },
       { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}` },
-    ], { model: MODELS.premium, temperature: 0.2 })) as { isClone?: boolean; surfaces?: string }
-    return out.isClone && out.surfaces ? String(out.surfaces) : ""
+    ], { model: MODELS.premium, temperature: 0.2, schema: REFERENCE_SCHEMA })) as { product?: string; entities?: string[]; surfaces?: string }
+    const entities = Array.isArray(out.entities) ? out.entities.filter(Boolean) : []
+    const surfaces = String(out.surfaces || "").trim()
+    if (!entities.length && !surfaces) return ""
+    return [
+      out.product ? `Reference product/category: ${out.product}` : "",
+      entities.length ? `REQUIRED DATA ENTITIES (model each as its own table unless truly trivial): ${entities.join(", ")}` : "",
+      surfaces ? `SURFACES (pages → features):\n${surfaces}` : "",
+    ].filter(Boolean).join("\n")
   } catch { return "" }
 }
 
-export async function planBlueprint(config: DomainConfig, contracts: string, reference?: string): Promise<Blueprint> {
+export async function planBlueprint(config: DomainConfig, contracts: string, reference?: string, lens?: string): Promise<Blueprint> {
   const ents = (config.entities || []).map((e) => `${e.name}(${e.fields.map((f) => `${f.name}:${f.type}${f.required ? "!" : ""}`).join(", ")})`).join("; ")
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : JSON.stringify(config.identity.tagline)
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
+${lens ? `\n${lens}\nLet this philosophy genuinely shape your blueprint (table count, layering, route style) so it is DISTINCT from other approaches — but stay 100% on THIS product's domain (never invent unrelated entities like sports leagues in a status page).\n` : ""}
 
 Think hard about the real user journeys. Examples of inference:
 - A Tinder-style used-goods marketplace ⇒ tables: items (owner, title, description, photo TEXT for data-url, city, status), swipes (user_id, item_id, liked), matches (user_a, user_b, item_a, item_b), messages (match_id, sender_id, body). Operations: publish item, get a swipe feed (others' items not yet swiped), record a swipe and DETECT a mutual match (when the owner of the liked item has also liked one of my items → create a match referencing both items), list my matches, send/list messages scoped to a match. Pages: feed/swipe (home), publish, matches list, chat per match. Anonymous: never expose email between users; show only first name/alias.
@@ -460,13 +481,19 @@ async function critiqueBlueprint(config: DomainConfig, bp: Blueprint): Promise<{
     const out = (await chatJSON([
       { role: "system", content: `You are the Completeness Critic. Find every place a real user journey BREAKS because something is missing, and return ONLY the missing pieces.
 Check: a CREATE (POST) route AND a create page for every user-generated content type? chat with BOTH send (POST) and list (GET), each scoped to participants? every route reachable from a page, every page's routes present?
-Return ONLY JSON: {"addRoutes":[{"path":"app/api/.../route.ts","methods":["POST"],"purpose":"...","logic":"precise SQL + scoping, exact tables/columns"}],"addPages":[{"route":"/app/...","file":"app/app/.../page.tsx","title":"...","behavior":"precise behavior + which routes it calls"}]}. Same table/column names as the blueprint. Empty arrays if complete. No duplicates of existing routes/pages.
+Return ONLY JSON: {"addRoutes":[{"path":"app/api/.../route.ts","methods":["POST"],"purpose":"...","logic":"precise SQL + scoping, exact tables/columns"}],"addPages":[{"route":"/app/...","file":"app/app/.../page.tsx","title":"...","behavior":"precise behavior + which routes it calls"}]}. Empty arrays if complete. No duplicates of existing routes/pages.
+HARD RULE (anti-contamination): use ONLY the EXACT table & column names listed below. Do NOT invent new tables, and do NOT introduce ANY entity that is not part of THIS product's domain (e.g. never add sports leagues/countries to a status page). If a journey is already complete, return empty arrays — do not pad.
 DB tables:\n${tablesDoc(bp)}\n\n${SPINE_API}` },
-      { role: "user", content: `Product: ${config.identity.name}\nBlueprint:\n${JSON.stringify(summary, null, 1)}\n\nRoute logic:\n${bp.routes.map((r) => `${r.path}: ${r.logic}`).join("\n")}` },
-    ], { model: MODELS.balanced, temperature: 0.2 })) as { addRoutes?: RouteSpec[]; addPages?: PageSpec[] }
+      { role: "user", content: `Product: ${config.identity.name} — ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}\nBlueprint:\n${JSON.stringify(summary, null, 1)}\n\nRoute logic:\n${bp.routes.map((r) => `${r.path}: ${r.logic}`).join("\n")}` },
+    ], { model: MODELS.premium, temperature: 0.2 })) as { addRoutes?: RouteSpec[]; addPages?: PageSpec[] }
     const haveR = new Set(bp.routes.map((r) => r.path)), haveP = new Set(bp.pages.map((p) => p.file))
+    // Deterministic anti-contamination guard: a proposed route may only reference tables that
+    // already exist in the blueprint (the critic doesn't get to invent the schema).
+    const known = bp.tables.map((t) => t.name.toLowerCase())
+    const tablesInLogic = (logic: string) => (logic.match(/\b(?:from|join|into|update)\s+([a-z_][a-z0-9_]*)/gi) || []).map((m) => m.split(/\s+/).pop()!.toLowerCase())
+    const cleanRoute = (r: RouteSpec) => tablesInLogic(String(r.logic || "")).every((t) => known.includes(t) || ["users", "user_locations"].includes(t))
     return {
-      addRoutes: (Array.isArray(out.addRoutes) ? out.addRoutes : []).filter((r) => r?.path && r?.logic && !haveR.has(r.path)),
+      addRoutes: (Array.isArray(out.addRoutes) ? out.addRoutes : []).filter((r) => r?.path && r?.logic && !haveR.has(r.path) && cleanRoute(r)),
       addPages: (Array.isArray(out.addPages) ? out.addPages : []).filter((p) => p?.file && p?.behavior && !haveP.has(p.file)),
     }
   } catch { return { addRoutes: [], addPages: [] } }
