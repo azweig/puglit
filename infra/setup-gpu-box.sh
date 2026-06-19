@@ -47,7 +47,7 @@ say(){ echo -e "\n\033[1;35m▶ $*\033[0m"; }
 # ── 1. System deps ──────────────────────────────────────────────────────────
 say "1/7 System packages (git, curl, postgres, build tools)"
 $SUDO apt-get update -y
-$SUDO apt-get install -y curl git build-essential postgresql postgresql-contrib jq rsync lsof
+$SUDO apt-get install -y curl git build-essential postgresql postgresql-contrib jq rsync lsof zstd
 
 if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   say "Installing Node 20"
