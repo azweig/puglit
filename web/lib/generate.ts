@@ -69,14 +69,14 @@ const T = {
 }
 
 export function generateConfig(a: IntakeAnswers): DomainConfig {
-  const langs = a.languages === "both" ? ["en", "es"] : [a.languages]
+  const langs = a.languages === "both" ? ["en", "es"] : [a.languages || "es"]
   const L = langs[0] === "es" ? T.es : T.en
-  const name = a.name.trim()
-  const benefits = a.benefits.map((b) => b.trim()).filter(Boolean).slice(0, 3)
-  const what = a.what.trim()
+  const name = (a.name || "").trim()
+  const benefits = (a.benefits || []).map((b) => b.trim()).filter(Boolean).slice(0, 3)
+  const what = (a.what || "").trim()
 
   const modules: Modules = {}
-  for (const m of a.modules) {
+  for (const m of a.modules || []) {
     if ((VALID_MODULES as readonly string[]).includes(m)) (modules as Record<string, boolean>)[m] = true
   }
 
