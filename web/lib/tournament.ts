@@ -48,11 +48,19 @@ const JUDGE_SCHEMA = {
 export async function divergeBlueprints(config: DomainConfig, contracts: string, reference?: string): Promise<TeamDesign[]> {
   const out: TeamDesign[] = []
   for (const t of TEAMS) {
+    const lessons = await teamLessonDigest(t.id).catch(() => "")
+    const wanted = TEAM_MODEL[t.id]
+    let bp: Blueprint | null = null, usedModel = wanted
     try {
-      const lessons = await teamLessonDigest(t.id).catch(() => "")
-      const bp = await planBlueprint(config, contracts, reference, t.lens, { model: TEAM_MODEL[t.id], lessons })
-      out.push({ team: t.id, philosophy: t.philosophy, model: TEAM_MODEL[t.id], blueprint: bp, metrics: { tables: bp.tables.length, routes: bp.routes.length, pages: bp.pages.length } })
-    } catch { /* a team whose model isn't pulled / that fails simply doesn't compete this round */ }
+      bp = await planBlueprint(config, contracts, reference, t.lens, { model: wanted, lessons })
+    } catch (e) {
+      // the team's model failed (not pulled, or returned unparseable output) → log + fall back
+      // to the default code model so the team STILL competes (graceful council degradation).
+      console.error(`[tournament] team ${t.id} model "${wanted}" failed: ${(e as Error).message?.slice(0, 200)} — retrying with ${MODELS.code}`)
+      try { bp = await planBlueprint(config, contracts, reference, t.lens, { model: MODELS.code, lessons }); usedModel = `${MODELS.code} (fallback de ${wanted})` }
+      catch (e2) { console.error(`[tournament] team ${t.id} fallback also failed: ${(e2 as Error).message?.slice(0, 200)}`); continue }
+    }
+    if (bp) out.push({ team: t.id, philosophy: t.philosophy, model: usedModel, blueprint: bp, metrics: { tables: bp.tables.length, routes: bp.routes.length, pages: bp.pages.length } })
   }
   return out
 }
