@@ -64,7 +64,7 @@ interface Sim { x: number; y: number; wx: number; wy: number; nextWander: number
 export function CampusStage() {
   const roster = useMemo(() => buildRoster(), [])
   const [sel, setSel] = useState<string | null>(null)
-  const [focus, setFocus] = useState<TeamId | null>(null)
+  const [focus, setFocus] = useState<TeamId | "center" | null>(null)
   const [progress, setProgress] = useState<Record<TeamId, number>>({ A: 6, B: 4, C: 9 })
   const [, force] = useState(0)
 
@@ -145,7 +145,8 @@ export function CampusStage() {
     const el = containerRef.current; if (!el) return
     const cw = el.clientWidth, ch = el.clientHeight
     let bbox: { minX: number; maxX: number; minY: number; maxY: number }; let pad = 0.86
-    if (focus) { bbox = buildBox(focus); pad = 0.9 }
+    if (focus === "center") { const cp = isoCircle(CENTER.cx, CENTER.cy, CENTER.r + 30); bbox = { minX: Math.min(...cp.map((p) => p.sx)), maxX: Math.max(...cp.map((p) => p.sx)), minY: Math.min(...cp.map((p) => p.sy)) - 30, maxY: Math.max(...cp.map((p) => p.sy)) }; pad = 0.9 }
+    else if (focus) { bbox = buildBox(focus); pad = 0.9 }
     else {
       const cpts = isoCircle(CENTER.cx, CENTER.cy, CENTER.r)
       const boxes = [...(["A", "B", "C"] as TeamId[]).map(buildBox), {
@@ -163,7 +164,7 @@ export function CampusStage() {
   useEffect(() => { applyCamera(); force((n) => n + 1) /* eslint-disable-next-line */ }, [focus])
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
-    const t = q.get("team"); if (t === "A" || t === "B" || t === "C") setFocus(t)
+    const t = q.get("team"); if (t === "A" || t === "B" || t === "C" || t === "center") setFocus(t)
     const c = q.get("card"); if (c) setSel(c)
   }, [])
 
@@ -186,10 +187,13 @@ export function CampusStage() {
         if (moving) { s.x += (dx / dist) * SPEED; s.y += (dy / dist) * SPEED; if (Math.abs(dx) > 0.6) s.face = dx < 0 ? -1 : 1 }
         const p = iso(s.x, s.y)
         const bob = moving ? Math.abs(Math.sin(t / 95)) * 3 : isWorking ? Math.sin(t / 150 + s.seed) * 1.2 : Math.sin(t / 600 + s.seed) * 0.9
+        // counter-scale vs camera so agents stay readable when zoomed out (overview)
+        const inv = Math.min(1.9, Math.max(1, 0.72 / view.current.s))
         node.style.transform = `translate(${p.sx}px,${p.sy}px) translate(-50%,-100%)`
         node.style.zIndex = String(depth(s.x, s.y) * 2 + 4001)
         node.style.opacity = focus && a.team !== focus ? "0.08" : "1"
-        spr.style.transform = `scaleX(${s.face}) translateY(${-bob}px)`
+        spr.style.transformOrigin = "center bottom"
+        spr.style.transform = `scale(${inv}) scaleX(${s.face}) translateY(${-bob}px)`
       }
       raf = requestAnimationFrame(frame)
     }
@@ -212,8 +216,8 @@ export function CampusStage() {
           color={TEAM_COLOR[b.team]} floor={TEAM_FLOOR[b.team]} dim={!!focus && focus !== b.team}
           onClick={(e) => { e.stopPropagation(); setFocus(b.team) }} />
       )))}
-      {/* furniture only appears once you ZOOM into a building (focus) — keeps the overview clean */}
-      {focus && furniture.map((f, i) => {
+      {/* furniture only appears once you ZOOM into a building — keeps the overview clean */}
+      {focus && focus !== "center" && furniture.map((f, i) => {
         const p = iso(f.x, f.y)
         return (
           <div key={"f" + i} className="absolute pointer-events-none" style={{ left: p.sx, top: p.sy, transform: "translate(-50%,-100%)", zIndex: depth(f.x, f.y) * 2 + 4000, opacity: f.team !== focus ? 0.1 : 1 }}>
@@ -242,12 +246,20 @@ export function CampusStage() {
         <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: "0 0", transform: `translate(${cam.x}px,${cam.y}px) scale(${cam.s})` }}>
           {worldStatic}
 
-          {/* central DECISION ROOM (round) + Stakeholder & 4 advisors waiting for the Queens */}
-          <CenterRoom queensPresenting={false} />
+          {/* glass walkways connecting the 3 buildings to the central decision room */}
+          <Tunnels />
+
+          {/* central DECISION ROOM (round, clickable to zoom) + projector + Stakeholder & 4 advisors */}
+          <CenterRoom onClick={(e) => { e.stopPropagation(); setFocus("center") }} />
+          {(() => {
+            const pp = iso(CENTER.cx, CENTER.cy - CENTER.r + 36)
+            return <img key="projector" src="/sprites/props/projector-screen.png" alt="" draggable={false}
+              className="absolute pointer-events-none" style={{ left: pp.sx, top: pp.sy, transform: "translate(-50%,-100%)", width: 96, maxWidth: "none", zIndex: depth(CENTER.cx, CENTER.cy - CENTER.r + 36) * 2 + 4000 }} />
+          })()}
           {STAKEHOLDERS.map((s) => {
             const wx = CENTER.cx + s.dx, wy = CENTER.cy + s.dy, p = iso(wx, wy)
             return (
-              <div key={s.id} className="absolute flex flex-col items-center" style={{ left: p.sx, top: p.sy, transform: "translate(-50%,-100%)", zIndex: depth(wx, wy) * 2 + 4002 }}>
+              <div key={s.id} onClick={(e) => { e.stopPropagation(); setFocus("center") }} className="absolute flex cursor-zoom-in flex-col items-center" style={{ left: p.sx, top: p.sy, transform: "translate(-50%,-100%)", zIndex: depth(wx, wy) * 2 + 4002 }}>
                 <span className="mb-0.5 text-sm">{s.boss ? "⚖️" : "⏳"}</span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/sprites/agents/${s.sprite}.png`} alt={s.name} draggable={false}
@@ -321,8 +333,8 @@ export function CampusStage() {
   )
 }
 
-/* central round DECISION ROOM — floor disc + round table + caption */
-function CenterRoom({ queensPresenting }: { queensPresenting: boolean }) {
+/* central round DECISION ROOM — floor disc + round table + caption (clickable to zoom) */
+function CenterRoom({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
   const pts = isoCircle(CENTER.cx, CENTER.cy, CENTER.r)
   const minX = Math.min(...pts.map((p) => p.sx)), minY = Math.min(...pts.map((p) => p.sy)) - 26
   const maxX = Math.max(...pts.map((p) => p.sx)), maxY = Math.max(...pts.map((p) => p.sy))
@@ -330,20 +342,43 @@ function CenterRoom({ queensPresenting }: { queensPresenting: boolean }) {
   const labelP = iso(CENTER.cx, CENTER.cy - CENTER.r)
   return (
     <>
-      <div className="absolute pointer-events-none" style={{ left: minX, top: minY, zIndex: Math.round(CENTER.cx + CENTER.cy) }}>
-        <svg style={{ overflow: "visible", width: maxX - minX, height: maxY - minY }}>
+      <div className="absolute" style={{ left: minX, top: minY, zIndex: Math.round(CENTER.cx + CENTER.cy) }} onClick={onClick}>
+        <svg style={{ overflow: "visible", width: maxX - minX, height: maxY - minY, cursor: "zoom-in" }}>
           <polygon points={poly(pts)} fill="#241d0c" />
           <polygon points={poly(pts)} fill="rgba(251,191,36,.12)" stroke="rgba(251,191,36,.55)" strokeWidth="2.5" />
           <polygon points={poly(isoCircle(CENTER.cx, CENTER.cy, 58, 40))} fill="#5a4332" stroke="rgba(0,0,0,.45)" strokeWidth="1.5" />
         </svg>
       </div>
-      <div className="absolute -translate-x-1/2 -translate-y-full" style={{ left: labelP.sx, top: labelP.sy - 24, zIndex: 9500 }}>
+      <button onClick={onClick} className="absolute -translate-x-1/2 -translate-y-full" style={{ left: labelP.sx, top: labelP.sy - 24, zIndex: 9500 }}>
         <div className="whitespace-nowrap rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-center backdrop-blur">
           <div className="text-[11px] font-extrabold tracking-wider text-amber-300">⚖️ SALA DE DECISIÓN</div>
-          <div className="text-[8px] uppercase tracking-widest text-white/55">{queensPresenting ? "las reinas presentan sus proyectos" : "esperando a las 3 reinas…"}</div>
+          <div className="text-[8px] uppercase tracking-widest text-white/55">esperando a las 3 reinas…</div>
         </div>
-      </div>
+      </button>
     </>
+  )
+}
+
+/* glass walkways from each building to the central decision room */
+function Tunnels() {
+  const hw = 24
+  const segs = BUILDINGS.map((b) => {
+    const bx = b.ox + BUILD_W / 2, by = b.oy + BUILD_H / 2
+    const dx = bx - CENTER.cx, dy = by - CENTER.cy, len = Math.hypot(dx, dy) || 1
+    const ax = CENTER.cx + (dx / len) * (CENTER.r - 8), ay = CENTER.cy + (dy / len) * (CENTER.r - 8)
+    const ex = bx - (dx / len) * (BUILD_W * 0.34), ey = by - (dy / len) * (BUILD_H * 0.34)
+    const px = -dy / len * hw, py = dx / len * hw
+    return [iso(ax + px, ay + py), iso(ex + px, ey + py), iso(ex - px, ey - py), iso(ax - px, ay - py)]
+  })
+  const all = segs.flat()
+  const minX = Math.min(...all.map((p) => p.sx)), minY = Math.min(...all.map((p) => p.sy)), maxX = Math.max(...all.map((p) => p.sx)), maxY = Math.max(...all.map((p) => p.sy))
+  const poly = (q: { sx: number; sy: number }[]) => q.map((p) => `${(p.sx - minX).toFixed(1)},${(p.sy - minY).toFixed(1)}`).join(" ")
+  return (
+    <div className="absolute pointer-events-none" style={{ left: minX, top: minY, zIndex: 4 }}>
+      <svg style={{ overflow: "visible", width: maxX - minX, height: maxY - minY }}>
+        {segs.map((q, i) => <polygon key={i} points={poly(q)} fill="rgba(170,180,220,.10)" stroke="rgba(200,210,240,.30)" strokeWidth="1.5" />)}
+      </svg>
+    </div>
   )
 }
 
