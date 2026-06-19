@@ -21,14 +21,14 @@ const STAT_ES: Record<keyof Stats, string> = { creativity: "CREATIVIDAD", rigor:
 
 function Bar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-[92px] text-[10px] font-bold tracking-wider text-white/55">{label}</span>
-      <div className="flex gap-[3px]">
+    <div className="flex items-center gap-1.5">
+      <span className="w-[78px] shrink-0 text-[9px] font-bold tracking-wider text-white/55">{label}</span>
+      <div className="flex gap-[2px]">
         {Array.from({ length: 10 }).map((_, i) => (
-          <span key={i} className="h-3 w-2 rounded-[1px]" style={{ background: i < value ? color : "rgba(255,255,255,.08)" }} />
+          <span key={i} className="h-3 w-[6px] rounded-[1px]" style={{ background: i < value ? color : "rgba(255,255,255,.08)" }} />
         ))}
       </div>
-      <span className="ml-1 text-[10px] font-extrabold tabular-nums" style={{ color }}>{value}</span>
+      <span className="ml-1 w-3 shrink-0 text-right text-[10px] font-extrabold tabular-nums" style={{ color }}>{value}</span>
     </div>
   )
 }
@@ -45,7 +45,7 @@ export function RpgCard({ id, onClose }: { id: string; onClose?: () => void }) {
 
   const tint = agent ? TEAM_TINT[agent.team] || "#a855f7" : "#a855f7"
   return (
-    <div className="relative w-[330px] rounded-2xl border-2 p-4 shadow-2xl" style={{ borderColor: tint, background: "linear-gradient(180deg,#15131d,#0c0b12)" }}>
+    <div className="relative w-[348px] rounded-2xl border-2 p-4 shadow-2xl" style={{ borderColor: tint, background: "linear-gradient(180deg,#15131d,#0c0b12)" }}>
       {onClose && <button onClick={onClose} className="absolute right-2 top-2 z-10 h-6 w-6 rounded-md bg-black/50 text-white/70 hover:text-white">✕</button>}
       {!agent && !err && <div className="py-16 text-center text-sm text-white/40">cargando ficha…</div>}
       {err && <div className="py-16 text-center text-sm text-red-400">no se pudo cargar la ficha</div>}
