@@ -54,6 +54,7 @@ export function CampusStage() {
   const [progress, setProgress] = useState<Record<TeamId, number>>({ A: 6, B: 4, C: 9 })
   const [, force] = useState(0)
 
+  const soloFurn = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("solo") === "furn"
   const containerRef = useRef<HTMLDivElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const wrapRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -197,7 +198,7 @@ export function CampusStage() {
         return (
           <div key={"f" + i} className="absolute pointer-events-none" style={{ left: p.sx, top: p.sy, transform: "translate(-50%,-100%)", zIndex: depth(f.x, f.y) * 2 + 4000, opacity: focus && f.team !== focus ? 0.1 : 1 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/sprites/props/${f.src}.png`} alt="" draggable={false} style={{ width: f.w }} className="object-contain" onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }} />
+            <img src={`/sprites/props/${f.src}.png`} alt="" draggable={false} style={{ width: f.w, height: "auto", maxWidth: "none" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }} />
           </div>
         )
       })}
@@ -220,7 +221,7 @@ export function CampusStage() {
         {/* ONE camera-transformed world container */}
         <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: "0 0", transform: `translate(${cam.x}px,${cam.y}px) scale(${cam.s})` }}>
           {worldStatic}
-          {roster.map((a) => {
+          {!soloFurn && roster.map((a) => {
             const w = working.current.has(a.id) || a.queen
             return (
               <div key={a.id} ref={(el) => { if (el) wrapRefs.current.set(a.id, el) }} className="absolute left-0 top-0 will-change-transform" style={{ transform: "translate(-9999px,-9999px)" }}>
