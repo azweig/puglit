@@ -5,6 +5,7 @@
  * level/xp, projects/wins, the Queen's quality reputation, and the agent's learning diary.
  */
 import { useEffect, useState } from "react"
+import { spriteFor } from "@/lib/sprite-alias"
 
 interface Stats { creativity: number; rigor: number; security: number; speed: number; depth: number }
 interface Agent {
@@ -59,7 +60,7 @@ export function RpgCard({ id, onClose }: { id: string; onClose?: () => void }) {
           <div className="mt-3 flex gap-3">
             <div className="relative grid h-[104px] w-[104px] shrink-0 place-items-center overflow-hidden rounded-xl border" style={{ borderColor: tint + "66", background: "#0a0911" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/sprites/agents/${agent.role}.png`} alt={agent.name} className="h-[92px] w-[92px] object-contain"
+              <img src={`/sprites/agents/${spriteFor(agent.role)}.png`} alt={agent.name} className="h-[92px] w-[92px] object-contain"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }} />
               <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-extrabold" style={{ color: tint }}>LVL {agent.level}</span>
             </div>

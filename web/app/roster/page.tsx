@@ -5,6 +5,7 @@
  */
 import { useEffect, useState } from "react"
 import { RpgCard } from "@/components/RpgCard"
+import { spriteFor } from "@/lib/sprite-alias"
 
 interface A { id: string; team: string; role: string; name: string; queen: boolean; level: number; quality: number; temperature: number }
 const TEAM = {
@@ -44,7 +45,7 @@ export default function RosterPage() {
                     <button key={a.id} onClick={() => setSel(a.id)}
                       className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-left transition-colors hover:border-white/30">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/sprites/agents/${a.role}.png`} alt="" className="h-7 w-7 object-contain" onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }} />
+                      <img src={`/sprites/agents/${spriteFor(a.role)}.png`} alt="" className="h-7 w-7 object-contain" onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }} />
                       <span className="flex-1 truncate text-xs font-semibold">{a.queen ? "👑 " : ""}{a.name.replace(/ · .*/, "")}</span>
                       <span className="text-[9px] text-white/35">L{a.level}</span>
                       <span className="rounded bg-white/10 px-1 text-[9px] tabular-nums text-white/55">t{a.temperature.toFixed(2)}</span>
