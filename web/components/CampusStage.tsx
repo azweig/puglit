@@ -31,10 +31,24 @@ const ROOMS_REL: Record<string, RoomRel> = {
 }
 const BUILD_W = 670, BUILD_H = 550
 const BUILDINGS: { team: TeamId; ox: number; oy: number }[] = [
-  { team: "A", ox: 0,   oy: 0 },
-  { team: "B", ox: 860, oy: 0 },
-  { team: "C", ox: 430, oy: 690 },
+  { team: "A", ox: -180, oy: -120 },
+  { team: "B", ox: 1000, oy: -120 },
+  { team: "C", ox: 410,  oy: 800 },
 ]
+
+// central DECISION ROOM (round) — the Stakeholder + 4 advisors wait here for the 3 Queens
+// to arrive and present their projects for evaluation. Sits in the gap between the 3 buildings.
+const CENTER = { cx: 720, cy: 430, r: 150 }
+const STAKEHOLDERS = [
+  { id: "stakeholder", name: "Stakeholder", sprite: "sh-fidelity", dx: 0,   dy: -62, boss: true },
+  { id: "adv-growth",  name: "Growth",       sprite: "sh-growth",       dx: -78, dy: -12 },
+  { id: "adv-arch",    name: "Arquitectura", sprite: "sh-architecture", dx: 78,  dy: -12 },
+  { id: "adv-design",  name: "Diseño",       sprite: "sh-design",       dx: -50, dy: 52 },
+  { id: "adv-biz",     name: "Negocio",      sprite: "sh-business",     dx: 50,  dy: 52 },
+]
+function isoCircle(cx: number, cy: number, r: number, n = 44) {
+  return Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; return iso(cx + Math.cos(a) * r, cy + Math.sin(a) * r) })
+}
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 function grid(rx: number, ry: number, rw: number, rh: number, n: number, cols: number) {
@@ -133,8 +147,12 @@ export function CampusStage() {
     let bbox: { minX: number; maxX: number; minY: number; maxY: number }; let pad = 0.86
     if (focus) { bbox = buildBox(focus); pad = 0.9 }
     else {
-      const all = (["A", "B", "C"] as TeamId[]).map(buildBox)
-      bbox = { minX: Math.min(...all.map((b) => b.minX)), maxX: Math.max(...all.map((b) => b.maxX)), minY: Math.min(...all.map((b) => b.minY)), maxY: Math.max(...all.map((b) => b.maxY)) }
+      const cpts = isoCircle(CENTER.cx, CENTER.cy, CENTER.r)
+      const boxes = [...(["A", "B", "C"] as TeamId[]).map(buildBox), {
+        minX: Math.min(...cpts.map((p) => p.sx)), maxX: Math.max(...cpts.map((p) => p.sx)),
+        minY: Math.min(...cpts.map((p) => p.sy)), maxY: Math.max(...cpts.map((p) => p.sy)),
+      }]
+      bbox = { minX: Math.min(...boxes.map((b) => b.minX)), maxX: Math.max(...boxes.map((b) => b.maxX)), minY: Math.min(...boxes.map((b) => b.minY)), maxY: Math.max(...boxes.map((b) => b.maxY)) }
     }
     const bw = bbox.maxX - bbox.minX, bh = bbox.maxY - bbox.minY
     const s = Math.max(0.28, Math.min(1.5, Math.min(cw / bw, ch / bh) * pad))
@@ -223,6 +241,23 @@ export function CampusStage() {
         {/* ONE camera-transformed world container */}
         <div ref={worldRef} className="absolute left-0 top-0" style={{ transformOrigin: "0 0", transform: `translate(${cam.x}px,${cam.y}px) scale(${cam.s})` }}>
           {worldStatic}
+
+          {/* central DECISION ROOM (round) + Stakeholder & 4 advisors waiting for the Queens */}
+          <CenterRoom queensPresenting={false} />
+          {STAKEHOLDERS.map((s) => {
+            const wx = CENTER.cx + s.dx, wy = CENTER.cy + s.dy, p = iso(wx, wy)
+            return (
+              <div key={s.id} className="absolute flex flex-col items-center" style={{ left: p.sx, top: p.sy, transform: "translate(-50%,-100%)", zIndex: depth(wx, wy) * 2 + 4002 }}>
+                <span className="mb-0.5 text-sm">{s.boss ? "⚖️" : "⏳"}</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/sprites/agents/${s.sprite}.png`} alt={s.name} draggable={false}
+                  className={`${s.boss ? "h-[58px] w-[58px]" : "h-[46px] w-[46px]"} object-contain drop-shadow-[0_0_8px_rgba(251,191,36,.5)]`}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }} />
+                <span className="mt-0.5 whitespace-nowrap rounded bg-black/65 px-1 text-[8px] font-bold text-amber-200">{s.name}</span>
+              </div>
+            )
+          })}
+
           {!soloFurn && roster.map((a) => {
             const w = working.current.has(a.id) || a.queen
             return (
@@ -283,6 +318,32 @@ export function CampusStage() {
         document.body,
       )}
     </div>
+  )
+}
+
+/* central round DECISION ROOM — floor disc + round table + caption */
+function CenterRoom({ queensPresenting }: { queensPresenting: boolean }) {
+  const pts = isoCircle(CENTER.cx, CENTER.cy, CENTER.r)
+  const minX = Math.min(...pts.map((p) => p.sx)), minY = Math.min(...pts.map((p) => p.sy)) - 26
+  const maxX = Math.max(...pts.map((p) => p.sx)), maxY = Math.max(...pts.map((p) => p.sy))
+  const poly = (arr: { sx: number; sy: number }[]) => arr.map((p) => `${(p.sx - minX).toFixed(1)},${(p.sy - minY).toFixed(1)}`).join(" ")
+  const labelP = iso(CENTER.cx, CENTER.cy - CENTER.r)
+  return (
+    <>
+      <div className="absolute pointer-events-none" style={{ left: minX, top: minY, zIndex: Math.round(CENTER.cx + CENTER.cy) }}>
+        <svg style={{ overflow: "visible", width: maxX - minX, height: maxY - minY }}>
+          <polygon points={poly(pts)} fill="#241d0c" />
+          <polygon points={poly(pts)} fill="rgba(251,191,36,.12)" stroke="rgba(251,191,36,.55)" strokeWidth="2.5" />
+          <polygon points={poly(isoCircle(CENTER.cx, CENTER.cy, 58, 40))} fill="#5a4332" stroke="rgba(0,0,0,.45)" strokeWidth="1.5" />
+        </svg>
+      </div>
+      <div className="absolute -translate-x-1/2 -translate-y-full" style={{ left: labelP.sx, top: labelP.sy - 24, zIndex: 9500 }}>
+        <div className="whitespace-nowrap rounded-lg border border-amber-400/50 bg-amber-500/15 px-3 py-1 text-center backdrop-blur">
+          <div className="text-[11px] font-extrabold tracking-wider text-amber-300">⚖️ SALA DE DECISIÓN</div>
+          <div className="text-[8px] uppercase tracking-widest text-white/55">{queensPresenting ? "las reinas presentan sus proyectos" : "esperando a las 3 reinas…"}</div>
+        </div>
+      </div>
+    </>
   )
 }
 
