@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Puglit — one-shot setup for a fresh GPU box (Paperspace A6000 / Ubuntu 22.04).
+# Puglit — one-shot setup for a fresh GPU box.
+#
+# Works on BOTH:
+#   • RunPod Pods (Ubuntu+CUDA container, usually root, no systemd) ← recommended, cheapest
+#   • Paperspace/DigitalOcean Machines (full Ubuntu VM with systemd)
 #
 # Moves the WHOLE local stack off an 8GB laptop onto a real GPU so the agents
 # run a capable code model (qwen2.5-coder:32B) instead of the 7B that oscillates.
-# Installs Ollama + models, Postgres, Node, the repo deps, the schema + 75-agent
-# roster, and leaves Ollama + the dev server running. Idempotent: safe to re-run.
+# Installs Ollama + models, Postgres, Node, repo deps, schema + 75-agent roster,
+# and leaves Ollama + the dev server running. Idempotent: safe to re-run.
 #
 # USAGE (on the box, after `git clone` + `cd puglit`):
 #   bash infra/setup-gpu-box.sh
 #
-# Override models/ports up top via env if you want, e.g.:
+# Override up top via env, e.g.:
 #   MODEL_CODE=qwen2.5-coder:32b MODEL_AUX=gemma2:9b bash infra/setup-gpu-box.sh
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -25,30 +29,40 @@ PG_PASS="${PG_PASS:-postgres}"
 PG_PORT="${PG_PORT:-5432}"
 DEV_PORT="${DEV_PORT:-3000}"
 
-# locate the repo root from this script's location
+# ── Portability: sudo-optional (root containers) + postgres-as-user helper ───
+SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+pg_run(){ if [ "$(id -u)" -eq 0 ]; then su postgres -c "$1"; else sudo -u postgres bash -lc "$1"; fi }
+start_pg(){
+  $SUDO systemctl start postgresql 2>/dev/null && return 0
+  $SUDO service postgresql start    2>/dev/null && return 0
+  local ver; ver="$(ls /etc/postgresql 2>/dev/null | sort -n | tail -1)"
+  [ -n "$ver" ] && $SUDO pg_ctlcluster "$ver" main start 2>/dev/null && return 0
+  return 1
+}
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB="$ROOT/web"
 say(){ echo -e "\n\033[1;35m▶ $*\033[0m"; }
 
 # ── 1. System deps ──────────────────────────────────────────────────────────
 say "1/7 System packages (git, curl, postgres, build tools)"
-sudo apt-get update -y
-sudo apt-get install -y curl git build-essential postgresql postgresql-contrib jq rsync
+$SUDO apt-get update -y
+$SUDO apt-get install -y curl git build-essential postgresql postgresql-contrib jq rsync lsof
 
-# Node 20 (skip if already present)
 if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   say "Installing Node 20"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO -E bash -
+  $SUDO apt-get install -y nodejs
 fi
 echo "node $(node -v) · npm $(npm -v)"
 
 # ── 2. Ollama ───────────────────────────────────────────────────────────────
 say "2/7 Ollama"
 if ! command -v ollama >/dev/null; then curl -fsSL https://ollama.com/install.sh | sh; fi
-# start the server (systemd if available, else nohup)
-sudo systemctl enable --now ollama 2>/dev/null || (pgrep -f "ollama serve" >/dev/null || (OLLAMA_FLASH_ATTENTION=1 nohup ollama serve >/tmp/ollama.log 2>&1 &))
-# wait until it answers
+# start server: systemd if present, else nohup (RunPod containers have no systemd)
+$SUDO systemctl enable --now ollama 2>/dev/null \
+  || pgrep -f "ollama serve" >/dev/null \
+  || (OLLAMA_FLASH_ATTENTION=1 OLLAMA_HOST=0.0.0.0 nohup ollama serve >/tmp/ollama.log 2>&1 &)
 for i in $(seq 1 30); do curl -sf http://localhost:11434/api/tags >/dev/null 2>&1 && break; sleep 2; done
 echo "ollama up ✓"
 
@@ -59,12 +73,13 @@ ollama pull "$MODEL_AUX"
 [ -n "$MODEL_VISION" ] && ollama pull "$MODEL_VISION" || true
 ollama list
 
-# ── 4. Postgres: db + user ──────────────────────────────────────────────────
+# ── 4. Postgres: start + db + user (no systemd needed) ──────────────────────
 say "4/7 Postgres ($PG_DB on :$PG_PORT)"
-sudo systemctl enable --now postgresql
-sudo -u postgres psql -p "$PG_PORT" -c "ALTER USER $PG_USER PASSWORD '$PG_PASS';" >/dev/null
-sudo -u postgres psql -p "$PG_PORT" -tc "SELECT 1 FROM pg_database WHERE datname='$PG_DB'" | grep -q 1 \
-  || sudo -u postgres createdb -p "$PG_PORT" "$PG_DB"
+start_pg || { echo "WARN: no pude arrancar postgres por los métodos estándar"; }
+for i in $(seq 1 20); do pg_run "psql -p $PG_PORT -tc 'SELECT 1'" >/dev/null 2>&1 && break; sleep 1; done
+pg_run "psql -p $PG_PORT -c \"ALTER USER $PG_USER PASSWORD '$PG_PASS';\"" >/dev/null
+pg_run "psql -p $PG_PORT -tc \"SELECT 1 FROM pg_database WHERE datname='$PG_DB'\"" | grep -q 1 \
+  || pg_run "createdb -p $PG_PORT $PG_DB"
 echo "postgres ready ✓"
 
 # ── 5. Repo deps + env ──────────────────────────────────────────────────────
@@ -97,10 +112,10 @@ PSQL="psql -h localhost -p $PG_PORT -U $PG_USER -d $PG_DB -v ON_ERROR_STOP=0"
 [ -f "$WEB/sql/genetic.sql" ] && $PSQL -f "$WEB/sql/genetic.sql" >/dev/null 2>&1 || true
 echo "schema loaded ✓"
 
-# ── 7. Start dev server + seed the 75-agent roster ──────────────────────────
+# ── 7. Start dev server (bind 0.0.0.0 for RunPod proxy) + seed roster ───────
 say "7/7 Starting dev server (:$DEV_PORT) + seeding roster"
 pkill -f "next dev" 2>/dev/null || true
-nohup npm run dev -- -p "$DEV_PORT" >/tmp/puglit-dev.log 2>&1 &
+nohup npm run dev -- -p "$DEV_PORT" -H 0.0.0.0 >/tmp/puglit-dev.log 2>&1 &
 for i in $(seq 1 40); do curl -sf "http://localhost:$DEV_PORT/api/doctor" >/dev/null 2>&1 && break; sleep 2; done
 curl -s -X POST "http://localhost:$DEV_PORT/api/genetic/seed" | jq . 2>/dev/null || true
 
@@ -119,13 +134,9 @@ cat <<EOF
     cd $WEB && node scripts/build-local.mjs
 
   Ver el roster / torneo:
-    http://localhost:$DEV_PORT/roster
-    http://localhost:$DEV_PORT/tournament
+    • RunPod: exponé el puerto $DEV_PORT → https://<podid>-$DEV_PORT.proxy.runpod.net/roster
+    • VM:     túnel  ssh -L $DEV_PORT:localhost:$DEV_PORT  user@<IP>  → http://localhost:$DEV_PORT/roster
 
-  Para verlo desde tu Mac sin abrir puertos, hacé un túnel SSH:
-    ssh -L $DEV_PORT:localhost:$DEV_PORT  paperspace@<IP-de-la-caja>
-    # luego abrí http://localhost:$DEV_PORT en tu navegador
-
-  Cuando termines: APAGÁ la máquina en la consola de Paperspace
-  (pagás compute solo encendida; apagada = solo storage).
+  Cuando termines: APAGÁ / STOP el pod (pagás compute solo encendido;
+  el volume disk persiste los modelos para el próximo arranque).
 EOF
