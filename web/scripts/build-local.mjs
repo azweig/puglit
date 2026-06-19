@@ -121,6 +121,25 @@ const SPINE_DROP = ["app/page.tsx", "app/login", "app/register", "app/app/page.t
 function configToTs(config) {
   return `export * from "./domain-types"\nimport type { DomainConfig } from "./domain-types"\nconst config: DomainConfig = ${JSON.stringify(config, null, 2)}\nexport default config\n`
 }
+/** Deterministic spine-import fixer: small models use pool/getAuthUser/NextResponse without
+ *  importing them (→ ReferenceError 500s tsc can miss). Prepend any missing spine import. */
+function ensureSpineImports(code, rel) {
+  if (!/\.(ts|tsx)$/.test(rel)) return code
+  const adds = []
+  const uses = (re) => re.test(code)
+  const imported = (sym, from) => new RegExp(`import\\s*\\{[^}]*\\b${sym}\\b[^}]*\\}\\s*from\\s*["']${from.replace(/[/]/g, "\\/")}["']`).test(code)
+  if (uses(/\bpool\b/) && !imported("pool", "@/lib/db")) adds.push(`import { pool } from "@/lib/db"`)
+  if (uses(/\bgetAuthUser\b/) && !imported("getAuthUser", "@/lib/auth")) adds.push(`import { getAuthUser } from "@/lib/auth"`)
+  const srv = []
+  if (uses(/\bNextResponse\b/) && !imported("NextResponse", "next/server")) srv.push("NextResponse")
+  if (uses(/\bNextRequest\b/) && !imported("NextRequest", "next/server")) srv.push("NextRequest")
+  if (srv.length) adds.push(`import { ${srv.join(", ")} } from "next/server"`)
+  if (!adds.length) return code
+  // insert after a leading "use client" directive if present
+  const m = code.match(/^\s*["']use client["'];?\s*\n/)
+  if (m) return m[0] + adds.join("\n") + "\n" + code.slice(m[0].length)
+  return adds.join("\n") + "\n" + code
+}
 function assemble({ config, appFiles, sql, seedSql }) {
   execSync(`rm -rf ${DIR} && mkdir -p ${DIR}`)
   // copy spine app (exclude node_modules + the dropped template surfaces)
@@ -137,12 +156,12 @@ function assemble({ config, appFiles, sql, seedSql }) {
   }
   // user config
   fs.writeFileSync(path.join(DIR, "domain.config.ts"), configToTs(config))
-  // bespoke files (override spine on collision)
+  // bespoke files (override spine on collision) + DETERMINISTIC spine-import fix
   let count = 0
   for (const f of appFiles) {
     if (!f?.path || !f?.content) continue
     const fp = path.join(DIR, f.path)
-    fs.mkdirSync(path.dirname(fp), { recursive: true }); fs.writeFileSync(fp, f.content); count++
+    fs.mkdirSync(path.dirname(fp), { recursive: true }); fs.writeFileSync(fp, ensureSpineImports(f.content, f.path)); count++
   }
   // ensure a bespoke schema + seed exist as sql/app.sql + sql/seed.sql
   if (!fs.existsSync(path.join(DIR, "sql/app.sql")) && sql) fs.writeFileSync(path.join(DIR, "sql/app.sql"), sql)
