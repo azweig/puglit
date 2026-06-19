@@ -47,7 +47,9 @@ say(){ echo -e "\n\033[1;35m▶ $*\033[0m"; }
 # ── 1. System deps ──────────────────────────────────────────────────────────
 say "1/7 System packages (git, curl, postgres, build tools)"
 $SUDO apt-get update -y
-$SUDO apt-get install -y curl git build-essential postgresql postgresql-contrib jq rsync lsof zstd
+# NOTE: pciutils (lspci) + lshw are REQUIRED before Ollama installs, or Ollama can't detect
+# the GPU and silently installs CPU-only (a 32B then crawls on CPU). Install them first.
+$SUDO apt-get install -y curl git build-essential postgresql postgresql-contrib jq rsync lsof zstd pciutils lshw
 
 if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   say "Installing Node 20"
