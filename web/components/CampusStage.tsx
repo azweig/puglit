@@ -194,10 +194,11 @@ export function CampusStage() {
           color={TEAM_COLOR[b.team]} floor={TEAM_FLOOR[b.team]} dim={!!focus && focus !== b.team}
           onClick={(e) => { e.stopPropagation(); setFocus(b.team) }} />
       )))}
-      {furniture.map((f, i) => {
+      {/* furniture only appears once you ZOOM into a building (focus) — keeps the overview clean */}
+      {focus && furniture.map((f, i) => {
         const p = iso(f.x, f.y)
         return (
-          <div key={"f" + i} className="absolute pointer-events-none" style={{ left: p.sx, top: p.sy, transform: "translate(-50%,-100%)", zIndex: depth(f.x, f.y) * 2 + 4000, opacity: focus && f.team !== focus ? 0.1 : 1 }}>
+          <div key={"f" + i} className="absolute pointer-events-none" style={{ left: p.sx, top: p.sy, transform: "translate(-50%,-100%)", zIndex: depth(f.x, f.y) * 2 + 4000, opacity: f.team !== focus ? 0.1 : 1 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`/sprites/props/${f.src}.png`} alt="" draggable={false} style={{ width: f.w, height: "auto", maxWidth: "none" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden" }} />
           </div>
