@@ -51,7 +51,7 @@ $SUDO apt-get install -y curl git build-essential postgresql postgresql-contrib 
 
 if ! command -v node >/dev/null || [ "$(node -v | cut -d. -f1 | tr -d v)" -lt 20 ]; then
   say "Installing Node 20"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO -E bash -
+  curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash -
   $SUDO apt-get install -y nodejs
 fi
 echo "node $(node -v) · npm $(npm -v)"
