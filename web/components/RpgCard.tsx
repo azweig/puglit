@@ -10,8 +10,10 @@ import { spriteFor } from "@/lib/sprite-alias"
 interface Stats { creativity: number; rigor: number; security: number; speed: number; depth: number }
 interface Agent {
   id: string; team: string; role: string; name: string; room: string; queen: boolean; stakeholder: boolean
+  persona?: string
   stats: Stats; temperature: number; level: number; xp: number; projects: number; wins: number; quality: number
 }
+const xpToReach = (lvl: number) => Math.floor(100 * Math.pow(lvl, 1.8))
 interface Diary { kind: string; entry: string; quality: number | null; created_at: string }
 
 const TEAM_TINT: Record<string, string> = { A: "#22c55e", B: "#38bdf8", C: "#f43f5e" }
@@ -56,6 +58,18 @@ export function RpgCard({ id, onClose }: { id: string; onClose?: () => void }) {
             <span className="rounded px-1.5 py-0.5 text-[9px] font-extrabold tracking-widest" style={{ background: tint, color: "#0b0b10" }}>{TEAM_LABEL[agent.team]}</span>
           </div>
           <p className="mt-0.5 text-[11px] uppercase tracking-widest text-white/40">{agent.role.replace(/-/g, " ")} · {agent.room}</p>
+          {agent.persona && <p className="mt-1 text-[11px] italic leading-snug text-white/45 line-clamp-2">“{agent.persona}”</p>}
+
+          {(() => {
+            const cur = xpToReach(agent.level), next = xpToReach(agent.level + 1)
+            const pct = Math.max(0, Math.min(100, ((agent.xp - cur) / Math.max(1, next - cur)) * 100))
+            return (
+              <div className="mt-2">
+                <div className="flex justify-between text-[9px] font-bold text-white/45"><span style={{ color: tint }}>NIVEL {agent.level}</span><span className="tabular-nums">{agent.xp.toLocaleString()} / {next.toLocaleString()} XP</span></div>
+                <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: tint }} /></div>
+              </div>
+            )
+          })()}
 
           <div className="mt-3 flex gap-3">
             <div className="relative grid h-[104px] w-[104px] shrink-0 place-items-center overflow-hidden rounded-xl border" style={{ borderColor: tint + "66", background: "#0a0911" }}>

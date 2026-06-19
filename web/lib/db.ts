@@ -40,8 +40,8 @@ function pool(): Pool {
 }
 
 /** Shared query helper (used by demo-auth too). */
-export async function query(text: string, params?: unknown[]): Promise<{ rows: any[]; rowCount: number | null }> {
-  return pool().query(text, params as never)
+export async function query<T = any>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }> {
+  return pool().query(text, params as never) as unknown as Promise<{ rows: T[]; rowCount: number | null }>
 }
 
 let initialized = process.env.NODE_ENV === "production"

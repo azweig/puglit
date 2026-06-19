@@ -102,12 +102,12 @@ Return ONLY JSON: {"product": "...", "entities": ["service","component",...], "s
   } catch { return "" }
 }
 
-export async function planBlueprint(config: DomainConfig, contracts: string, reference?: string, lens?: string): Promise<Blueprint> {
+export async function planBlueprint(config: DomainConfig, contracts: string, reference?: string, lens?: string, opts?: { model?: string; lessons?: string }): Promise<Blueprint> {
   const ents = (config.entities || []).map((e) => `${e.name}(${e.fields.map((f) => `${f.name}:${f.type}${f.required ? "!" : ""}`).join(", ")})`).join("; ")
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : JSON.stringify(config.identity.tagline)
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
-${lens ? `\n${lens}\nLet this philosophy genuinely shape your blueprint (table count, layering, route style) so it is DISTINCT from other approaches — but stay 100% on THIS product's domain (never invent unrelated entities like sports leagues in a status page).\n` : ""}
+${lens ? `\n${lens}\nLet this philosophy genuinely shape your blueprint (table count, layering, route style) so it is DISTINCT from other approaches — but stay 100% on THIS product's domain (never invent unrelated entities like sports leagues in a status page).\n` : ""}${opts?.lessons ? `\nLESSONS FROM YOUR TEAM'S PAST PROJECTS (apply them — this is how you improve and beat the other teams):\n${opts.lessons}\n` : ""}
 
 Think hard about the real user journeys. Examples of inference:
 - A Tinder-style used-goods marketplace ⇒ tables: items (owner, title, description, photo TEXT for data-url, city, status), swipes (user_id, item_id, liked), matches (user_a, user_b, item_a, item_b), messages (match_id, sender_id, body). Operations: publish item, get a swipe feed (others' items not yet swiped), record a swipe and DETECT a mutual match (when the owner of the liked item has also liked one of my items → create a match referencing both items), list my matches, send/list messages scoped to a match. Pages: feed/swipe (home), publish, matches list, chat per match. Anonymous: never expose email between users; show only first name/alias.
@@ -144,7 +144,7 @@ REFERENCE-PRODUCT DEPTH (critical — do NOT ship a toy): if the idea names or c
 
 SIZE TO THE PRODUCT, do not cap artificially: simple tools may need 3-5 tables; a deep product (sports/marketplace/social/aggregator) legitimately needs 8-15+ tables and many routes/pages — generate what the product GENUINELY requires to be a faithful, usable clone. Keep each file focused, but never sacrifice the product's real feature surface to hit a small number. Make tables, routes and pages mutually consistent (same table/column names everywhere). ALWAYS include the homepage at route "/" (app/page.tsx) as the product itself, plus a detail page for the product's primary entity (e.g. a match/profile/listing page) and a create page when users contribute content. Use the product's language for UI labels.` },
     { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n${reference ? `\nREFERENCE PRODUCT — the user is cloning this; you MUST reach this depth (model the entities + create the surfaces/pages listed; a blueprint that omits these is a failure):\n${reference}\n` : ""}\nCONTRACTS:\n${contracts}` },
-  ], { model: MODELS.premium, temperature: 0.3 })) as Partial<Blueprint>
+  ], { model: opts?.model || MODELS.premium, temperature: 0.3 })) as Partial<Blueprint>
 
   return {
     kind: out.kind === "public" ? "public" : "accounts",
