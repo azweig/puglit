@@ -24,16 +24,16 @@ const depth = (x: number, y: number) => Math.round(x + y)
 
 type RoomRel = { x: number; y: number; w: number; h: number; label: string; emoji: string; cols: number; furn: string; fw: number }
 const ROOMS_REL: Record<string, RoomRel> = {
-  ti:         { x: 0,   y: 0,   w: 360, h: 250, label: "INGENIERÍA", emoji: "💻", cols: 4, furn: "it-desk",         fw: 76 },
-  business:   { x: 380, y: 0,   w: 250, h: 250, label: "BUSINESS",   emoji: "📊", cols: 2, furn: "cubicle",         fw: 86 },
-  design:     { x: 0,   y: 270, w: 230, h: 210, label: "DISEÑO",     emoji: "🎨", cols: 2, furn: "easel",           fw: 70 },
-  management: { x: 250, y: 270, w: 380, h: 210, label: "DIRECCIÓN",  emoji: "👑", cols: 1, furn: "boardroom-table", fw: 156 },
+  ti:         { x: 0,   y: 0,   w: 380, h: 300, label: "INGENIERÍA", emoji: "💻", cols: 4, furn: "it-desk",         fw: 50 },
+  business:   { x: 400, y: 0,   w: 270, h: 300, label: "BUSINESS",   emoji: "📊", cols: 2, furn: "cubicle",         fw: 60 },
+  design:     { x: 0,   y: 320, w: 250, h: 230, label: "DISEÑO",     emoji: "🎨", cols: 2, furn: "easel",           fw: 54 },
+  management: { x: 270, y: 320, w: 400, h: 230, label: "DIRECCIÓN",  emoji: "👑", cols: 1, furn: "boardroom-table", fw: 140 },
 }
-const BUILD_W = 630, BUILD_H = 480
+const BUILD_W = 670, BUILD_H = 550
 const BUILDINGS: { team: TeamId; ox: number; oy: number }[] = [
   { team: "A", ox: 0,   oy: 0 },
-  { team: "B", ox: 800, oy: 0 },
-  { team: "C", ox: 400, oy: 600 },
+  { team: "B", ox: 860, oy: 0 },
+  { team: "C", ox: 430, oy: 690 },
 ]
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
@@ -106,8 +106,9 @@ export function CampusStage() {
     roster.forEach((a, i) => {
       const k = a.team + ":" + a.room; const di = (idx[k] = (idx[k] ?? -1) + 1)
       const arr = desks[k]; const d = arr[di] || arr[arr.length - 1]
-      // stand IN FRONT of the desk (offset toward the viewer) so the desk stays visible behind the agent
-      const h = { x: d.x, y: d.y + (a.room === "management" ? 56 : 26) }
+      // SEATED: queen stands in front of the boardroom table; everyone else sits just BEHIND
+      // their desk so the (front) desk occludes their legs via depth-sort → reads as seated.
+      const h = a.room === "management" ? { x: d.x, y: d.y + 64 } : { x: d.x, y: d.y - 8 }
       sim.current.set(a.id, { x: h.x, y: h.y, wx: h.x, wy: h.y, nextWander: 0, face: 1, seed: i * 1.3, home: h })
     })
     force((n) => n + 1)
