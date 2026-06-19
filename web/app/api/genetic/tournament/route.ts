@@ -8,8 +8,25 @@ import { NextRequest, NextResponse } from "next/server"
 import { generateConfig, type IntakeAnswers } from "@/lib/generate"
 import { studyReference } from "@/lib/app-builder"
 import { runDivergence } from "@/lib/tournament"
+import { query } from "@/lib/db"
 
 function jid() { return Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("") }
+
+/** GET — the latest tournament's iteration-1 rounds (for the visual). ?jobId= for a specific one. */
+export async function GET(request: NextRequest) {
+  try {
+    const jobId = request.nextUrl.searchParams.get("jobId")
+    const job = jobId || (await query(`SELECT job_id FROM puglit_rounds WHERE iteration=1 ORDER BY id DESC LIMIT 1`)).rows[0]?.job_id
+    if (!job) return NextResponse.json({ ok: true, jobId: null, teams: [] })
+    const { rows } = await query(
+      `SELECT team, score, winner, notes, artifacts->'metrics' AS metrics, artifacts->'blueprint'->'summary' AS summary,
+              (SELECT json_agg(t->>'name') FROM jsonb_array_elements(artifacts->'blueprint'->'tables') t) AS tables
+       FROM puglit_rounds WHERE job_id=$1 AND iteration=1 ORDER BY team`, [job])
+    return NextResponse.json({ ok: true, jobId: job, teams: rows })
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
