@@ -77,3 +77,18 @@ CREATE TABLE IF NOT EXISTS puglit_rounds (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_rounds_job ON puglit_rounds(job_id, iteration);
+
+-- ── Platform auth (passwordless magic-code). Multi-user beta. ──────────────────
+CREATE TABLE IF NOT EXISTS puglit_users (
+  email       VARCHAR(255) PRIMARY KEY,
+  name        VARCHAR(120),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  last_login  TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS puglit_login_codes (
+  email       VARCHAR(255) NOT NULL,
+  code_hash   VARCHAR(64) NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_login_codes_email ON puglit_login_codes(email, created_at DESC);
