@@ -44,6 +44,18 @@ export default function TournamentPage() {
     } catch { setBuilding(false) }
   }
 
+  // poll a running tournament's live phase until it finishes (used by launch AND reconnect)
+  const startPolling = useCallback((jobId: string) => {
+    poll.current && clearInterval(poll.current)
+    poll.current = setInterval(() => {
+      fetch(`/api/genetic/tournament?status=${jobId}`).then((r) => r.json()).then((s) => {
+        if (s.phase) setPhase(s.phase)
+        if (s.status === "done") { clearInterval(poll.current!); setStatus("done"); setResult(s.result || null) }
+        else if (s.status === "error") { clearInterval(poll.current!); setStatus("error"); setPhase(s.error || "error") }
+      }).catch(() => {})
+    }, 2000)
+  }, [])
+
   const loadLatest = useCallback(() => {
     fetch("/api/genetic/tournament").then((r) => r.json()).then((d) => {
       if (d.ok && d.teams?.length) {
@@ -53,21 +65,22 @@ export default function TournamentPage() {
       }
     }).catch(() => {})
   }, [])
-  useEffect(() => { loadLatest() }, [loadLatest])
+
+  // on mount: RECONNECT to a tournament already running on the server (you closed the tab +
+  // came back) so you see the live phase/clock again — else show the last result.
+  useEffect(() => {
+    fetch("/api/genetic/tournament?live").then((r) => r.json()).then((l) => {
+      if (l?.ok && l.status === "running" && l.jobId) { setStatus("running"); setPhase(l.phase || "corriendo…"); startPolling(l.jobId) }
+      else loadLatest()
+    }).catch(() => loadLatest())
+  }, [loadLatest, startPolling])
 
   function launch() {
     setStatus("running"); setResult(null); setPhase("Arrancando…")
     fetch("/api/genetic/tournament", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), what: what.trim(), audience: "usuarios", monetization: "free" }) })
       .then((r) => r.json()).then((d) => {
         if (!d.ok || !d.jobId) { setStatus("error"); setPhase(d.error || "no arrancó"); return }
-        poll.current && clearInterval(poll.current)
-        poll.current = setInterval(() => {
-          fetch(`/api/genetic/tournament?status=${d.jobId}`).then((r) => r.json()).then((s) => {
-            if (s.phase) setPhase(s.phase)
-            if (s.status === "done") { clearInterval(poll.current!); setStatus("done"); setResult(s.result || null) }
-            else if (s.status === "error") { clearInterval(poll.current!); setStatus("error"); setPhase(s.error || "error") }
-          }).catch(() => {})
-        }, 2000)
+        startPolling(d.jobId)
       }).catch(() => { setStatus("error"); setPhase("network error") })
   }
   useEffect(() => () => { poll.current && clearInterval(poll.current) }, [])
@@ -96,7 +109,7 @@ export default function TournamentPage() {
           <div className="mt-4 flex items-center gap-3 rounded-xl border border-violet/40 bg-violet/10 px-4 py-3">
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
             <span className="text-sm font-semibold">{phase}</span>
-            <span className="ml-auto text-[11px] text-white/40">corre en el server — podés cerrar esta pestaña</span>
+            <span className="ml-auto text-[11px] text-white/40">⏱ corre en el server — podés cerrar y volver cuando quieras</span>
           </div>
         )}
         {status === "error" && <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">Error: {phase}</div>}

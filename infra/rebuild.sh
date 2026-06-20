@@ -30,10 +30,16 @@ echo "BUILD_DONE rc=$?" >> /tmp/build.log
 nohup npm run start -- -p 3000 -H 0.0.0.0 > /tmp/puglit-prod.log 2>&1 &
 nohup env OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}" OLLAMA_FLASH_ATTENTION=1 OLLAMA_MAX_LOADED_MODELS=1 ollama serve > /tmp/ollama.log 2>&1 &
 
+# WATCHDOG: drive queued/running builds SERVER-SIDE every 45s, so a build keeps progressing
+# even when nobody has the /build page open (a build can take hours → the user must be able
+# to close the tab and come back). Without this, builds only advance while a browser polls.
+pkill -f "puglit-sweep-loop" 2>/dev/null || true
+nohup bash -c 'while true; do curl -s -o /dev/null --max-time 280 "http://localhost:3000/api/cron/sweep${CRON_SECRET:+?key=$CRON_SECRET}" 2>/dev/null; sleep 45; done # puglit-sweep-loop' > /tmp/puglit-sweep.log 2>&1 &
+
 # wait for the server to come up, then report
 for i in $(seq 1 40); do
   code=$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/api/doctor 2>/dev/null)
   [ "$code" = "200" ] && break
   sleep 3
 done
-echo "SERVE_READY http=$code" | tee -a /tmp/rebuild.log
+echo "SERVE_READY http=$code · watchdog ON" | tee -a /tmp/rebuild.log
