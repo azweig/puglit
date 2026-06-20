@@ -18,6 +18,7 @@
  */
 import { query } from "@/lib/db"
 import { writeAgentSheet } from "@/lib/obsidian"
+import { embed, cosine } from "@/lib/embed"
 
 export type Area = "data" | "dev" | "design" | "business"
 export const AREAS: Area[] = ["data", "dev", "design", "business"]
@@ -78,6 +79,7 @@ export async function awardRound(opts: {
   const { jobId, round, winner, areaScores, feedback } = opts
   const { rows } = await query<AgentRow>(`SELECT id,team,role,queen,stats,level,xp,quality_sum,quality_n FROM puglit_agents`)
   const leveledUp: { id: string; level: number }[] = []
+  const embCache = new Map<string, number[] | null>() // many agents share an identical lesson → embed each unique string once
 
   for (const a of rows) {
     const teamScores = areaScores[a.team]; if (!teamScores) continue
@@ -114,9 +116,12 @@ export async function awardRound(opts: {
     const entry = a.team === winner
       ? `Ganamos el round (${AREA_ES[area]} ${score}/100). ${fb || "Mantener este enfoque."}`
       : `Perdimos (${AREA_ES[area]} ${score}/100). A mejorar: ${fb || "subir fidelidad y completitud del área."}`
+    // embed the lesson (semantic "gene") so it can be retrieved by RELEVANCE later, not just recency
+    if (!embCache.has(entry)) embCache.set(entry, await embed(entry).catch(() => null))
+    const emb = embCache.get(entry) || null
     await query(
-      `INSERT INTO puglit_agent_diary (agent_id, job_id, kind, entry, quality) VALUES ($1,$2,$3,$4,$5)`,
-      [a.id, jobId, a.team === winner ? "win" : "critique", entry, score / 10],
+      `INSERT INTO puglit_agent_diary (agent_id, job_id, kind, entry, quality, embedding) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [a.id, jobId, a.team === winner ? "win" : "critique", entry, score / 10, emb ? JSON.stringify(emb) : null],
     ).catch(() => {})
   }
 
@@ -132,13 +137,31 @@ export async function recentLessons(agentId: string, n = 4): Promise<string[]> {
   return rows.map((r) => r.entry)
 }
 
-/** Team-level lesson digest (the architects' lessons) — injected when a team designs. */
+/** Team-level lesson digest (the architects' lessons) — RECENCY-ordered fallback. */
 export async function teamLessonDigest(team: string, n = 6): Promise<string> {
   const { rows } = await query<{ entry: string }>(
     `SELECT d.entry FROM puglit_agent_diary d JOIN puglit_agents a ON a.id=d.agent_id
      WHERE a.team=$1 ORDER BY d.created_at DESC LIMIT $2`, [team, n])
   if (!rows.length) return ""
   return rows.map((r) => `- ${r.entry}`).join("\n")
+}
+
+/** Team lessons most RELEVANT to the current task (semantic, via embeddings) — beats recency
+ *  so a team recalls the lesson that actually applies. Falls back to recency if embeddings
+ *  aren't available (no embed provider / no embedded lessons yet). */
+export async function relevantLessons(team: string, taskText: string, n = 6): Promise<string> {
+  const q = await embed(taskText).catch(() => null)
+  if (!q) return teamLessonDigest(team, n)
+  const { rows } = await query<{ entry: string; embedding: unknown }>(
+    `SELECT DISTINCT ON (d.entry) d.entry, d.embedding FROM puglit_agent_diary d JOIN puglit_agents a ON a.id=d.agent_id
+     WHERE a.team=$1 AND d.embedding IS NOT NULL ORDER BY d.entry, d.created_at DESC LIMIT 400`, [team])
+  if (!rows.length) return teamLessonDigest(team, n)
+  const scored = rows.map((r) => {
+    const v = Array.isArray(r.embedding) ? (r.embedding as number[]) : (() => { try { return JSON.parse(String(r.embedding)) as number[] } catch { return [] } })()
+    return { entry: r.entry, sim: v.length ? cosine(q, v) : -1 }
+  }).filter((s) => s.sim > -1).sort((a, b) => b.sim - a.sim)
+  if (!scored.length) return teamLessonDigest(team, n)
+  return scored.slice(0, n).map((s) => `- ${s.entry}`).join("\n")
 }
 
 /** Write every agent's current sheet to the Obsidian vault. */

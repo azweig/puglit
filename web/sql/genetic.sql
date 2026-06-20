@@ -45,9 +45,12 @@ CREATE TABLE IF NOT EXISTS puglit_agent_diary (
   kind        VARCHAR(16) NOT NULL DEFAULT 'lesson', -- lesson | win | critique | note
   entry       TEXT NOT NULL,
   quality     DOUBLE PRECISION,                   -- Queen's score for this contribution (0..10)
+  embedding   JSONB,                              -- lesson "gene" vector (nomic-embed) for relevance retrieval
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_diary_agent ON puglit_agent_diary(agent_id, created_at DESC);
+-- idempotent: add embedding to diaries created before this column existed
+ALTER TABLE puglit_agent_diary ADD COLUMN IF NOT EXISTS embedding JSONB;
 
 -- Per-project deliverable dependency graph (adjacency list; swap for Neo4j at scale).
 CREATE TABLE IF NOT EXISTS puglit_dep_graph (

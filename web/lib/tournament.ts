@@ -16,7 +16,7 @@ import { chatJSON, MODELS } from "@/lib/openai"
 import { query } from "@/lib/db"
 import { TEAMS, type TeamId } from "@/lib/roster"
 import type { DomainConfig } from "@/lib/domain-types"
-import { awardRound, teamLessonDigest, AREAS, type Area } from "@/lib/progression"
+import { awardRound, relevantLessons, AREAS, type Area } from "@/lib/progression"
 import { PLAYBOOK } from "@/lib/playbooks"
 
 export interface TeamDesign { team: TeamId; philosophy: string; model: string; blueprint: Blueprint; metrics: { tables: number; routes: number; pages: number } }
@@ -50,8 +50,10 @@ export type Progress = { label: string; stage: "study" | "design" | "judge"; tea
 
 export async function divergeBlueprints(config: DomainConfig, contracts: string, reference?: string, onProgress?: (p: Progress) => void): Promise<TeamDesign[]> {
   const out: TeamDesign[] = []
+  const taskText = `${config.identity.name} — ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""}`.trim()
   for (const t of TEAMS) {
-    const lessons = await teamLessonDigest(t.id).catch(() => "")
+    // retrieve the lessons most RELEVANT to THIS product (semantic), not just the recent ones
+    const lessons = await relevantLessons(t.id, taskText).catch(() => "")
     const wanted = TEAM_MODEL[t.id]
     onProgress?.({ label: `${t.label} diseñando con ${wanted.split("(")[0].trim()}…`, stage: "design", team: t.id, model: wanted })
     let bp: Blueprint | null = null, usedModel = wanted
