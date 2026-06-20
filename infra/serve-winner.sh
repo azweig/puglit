@@ -8,8 +8,12 @@
 # (2) runs build-local.mjs to drive that job to done, repair (tsc), load the SQL into the
 # pod's local Postgres, and `next dev` the app. Open it at the proxy on $PORT.
 #
+# BYO DEPLOY (optional, to YOUR own accounts — Puglit pays nothing, tokens never stored):
+#   GH_TOKEN=ghp_xxx bash infra/serve-winner.sh "MiApp" "..."            # → your GitHub repo (any app type)
+#   GH_TOKEN=ghp_xxx VERCEL_TOKEN=yyy bash infra/serve-winner.sh ...     # → repo + live Vercel URL (web only)
+#
 # NOTE: expose $PORT (default 4311) on the RunPod pod (Edit Pod → add HTTP port) so the
-# proxy can reach it. Needs the pod's local Postgres (setup-gpu-box.sh installs it on 5432).
+# proxy can reach the PREVIEW. Needs the pod's local Postgres (setup-gpu-box.sh installs it on 5432).
 set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAME="${1:-DuelDeck}"

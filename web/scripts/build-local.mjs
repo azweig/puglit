@@ -271,6 +271,14 @@ const ok = await repairTs().catch((e) => { log("repairTs error:", String(e.messa
 // write the app's DB env so it talks to the loaded schema
 fs.writeFileSync(path.join(DIR, ".env.local"), `POSTGRES_HOST=localhost\nPOSTGRES_PORT=${PG_PORT}\nPOSTGRES_DB=${APP_DB}\nPOSTGRES_USER=postgres\nPOSTGRES_PASSWORD=postgres\nPOSTGRES_SSL=disable\nPUGLIT_PROVIDER=ollama\n`)
 log(ok ? "RESULT: COMPILES ✓" : "RESULT: still failing (serving anyway)")
-log(`sirviendo en http://localhost:${PORT} …`)
+
+// BYO deploy to the USER's own GitHub (+ optional Vercel), if tokens are present. Tokens
+// come from env, are passed straight to infra/deploy.sh, and are NEVER persisted.
+if (process.env.GH_TOKEN || process.env.VERCEL_TOKEN) {
+  log("deploy BYO (a tu cuenta)…")
+  spawnSync("bash", [path.join(ROOT, "infra/deploy.sh"), DIR, `puglit-${SLUG}`], { stdio: "inherit", env: { ...process.env } })
+}
+
+log(`sirviendo preview en http://localhost:${PORT} …`)
 const srv = spawn("npx", ["next", "dev", "-p", PORT], { cwd: DIR, stdio: "inherit", env: { ...process.env } })
 process.on("SIGINT", () => { srv.kill(); process.exit(0) })
