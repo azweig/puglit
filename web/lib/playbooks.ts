@@ -20,13 +20,14 @@ const ARCHITECT = `SKILL — Spec-driven architecture: design spec-FIRST, not ta
 5) Location features → lat/lng DOUBLE PRECISION + Haversine ordered by distance.
 Self-check: can a real user use the product end-to-end with this model?`
 
-// distilled from systematic-debugging + TDD (Superpowers)
+// distilled from systematic-debugging + TDD (Superpowers) + ponytail (code minimalism)
 const DEV = `SKILL — Correctness over cleverness.
 1) Define the operation's CONTRACT before coding (inputs, outputs, error cases).
 2) One route = one clear responsibility.
 3) Parameterized SQL ALWAYS; never string-concat user input.
 4) Handle errors + edge cases explicitly; never assume the happy path.
-5) On failure, find ROOT CAUSE, not random patches.`
+5) On failure, find ROOT CAUSE, not random patches.
+6) MINIMAL CODE (decision ladder, before writing): does it need to exist (YAGNI)? → does stdlib / a native platform feature / an already-installed dep do it? → can it be ONE line? → only then write the minimum viable solution. NEVER add an npm dependency or an abstraction when a few lines of plain code work. This never lowers validation/security/error-handling.`
 
 // distilled from Anthropic frontend-design
 const DESIGN = `SKILL — Frontend design.
@@ -43,7 +44,8 @@ const REVIEW = `SKILL — Critical code/blueprint review. Judge on:
 2) Journey completeness — everything listable is creatable; no dead routes.
 3) Coherence — only this product's domain entities; zero contamination.
 4) Security — input validation, no secrets, auth where it belongs.
-5) Feasibility — buildable and right-sized (not bloated, not a toy).`
+5) Feasibility — buildable and right-sized (not bloated, not a toy).
+6) Over-engineering — flag needless dependencies, abstractions and boilerplate; the LEANEST correct solution wins (a native input over a library, a few lines over a framework).`
 
 // distilled from execution-planning (Superpowers) — for the Queen / orchestrator
 const QUEEN = `SKILL — Orchestration: plan the whole roadmap as verifiable steps, each with a
