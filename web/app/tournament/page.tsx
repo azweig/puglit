@@ -1,159 +1,131 @@
 "use client"
 /**
- * /tournament — the genetic tournament, visualized. Three competing team offices (Lean /
- * Enterprise / Hacker), each with its agents + the blueprint it designed + the judge's score;
- * and a central DECISION ROOM where the 3 Queens meet and the winner is crowned.
- * Reads the latest persisted tournament (or runs a new one) — real data from /api/genetic.
+ * /tournament — launch & watch the genetic tournament from the BROWSER (no terminal).
+ * Fire a tournament (runs in the background on the server), poll its live phase, then see
+ * the 3 teams' designs (model + philosophy + per-area jury scores), the winner, and which
+ * agents levelled up. Run it again to watch the teams LEARN.
  */
-import { useEffect, useState, useCallback } from "react"
-import { RpgCard } from "@/components/RpgCard"
+import { useCallback, useEffect, useRef, useState } from "react"
 
-interface AgentLite { id: string; team: string; role: string; name: string; queen: boolean }
-interface TeamRow { team: string; score: number | null; winner: boolean; notes: string; metrics: { tables: number; routes: number; pages: number } | null; summary: string | null; tables: string[] | null }
-const META = {
-  A: { tint: "#22c55e", label: "Equipo Lean", sub: "Pragmático · MVP" },
-  B: { tint: "#38bdf8", label: "Equipo Enterprise", sub: "Domain-Driven" },
-  C: { tint: "#f43f5e", label: "Equipo Hacker", sub: "Performance" },
+const TEAM = {
+  A: { tint: "#22c55e", label: "Equipo Lean", sub: "Pragmático · MVP-first" },
+  B: { tint: "#38bdf8", label: "Equipo Enterprise", sub: "Domain-Driven · por capas" },
+  C: { tint: "#f43f5e", label: "Equipo Hacker", sub: "Performance · ingenio" },
 } as const
-type TK = keyof typeof META
+type TeamId = keyof typeof TEAM
+interface Areas { data: number; dev: number; design: number; business: number; critique: string; overall: number }
+interface Design { team: TeamId; philosophy: string; model: string; metrics: { tables: number; routes: number; pages: number }; summary: string; areas?: Areas }
+interface Result { winner?: TeamId; leveledUp?: { id: string; level: number }[]; designs?: Design[]; error?: string }
 
-const DEMO = { name: "StatusGlass", what: "A public status & incident-history page like status.claude.com: live component statuses, 90-day uptime, incident timeline, scheduled maintenance. No login.", audience: "Users of an online service checking if it is up", benefits: ["Live component status", "90-day uptime history", "Incident timeline"], monetization: "free", price: 0, modules: [], languages: "en", color: "#16A34A", email: "demo@example.com", archetype: "status_monitoring" }
-
-function IsoOffice({ tk, agents, row, sel }: { tk: TK; agents: AgentLite[]; row?: TeamRow; sel: (id: string) => void }) {
-  const m = META[tk]
-  const win = row?.winner
-  const queen = agents.find((a) => a.queen)
-  const others = agents.filter((a) => !a.queen).slice(0, 12)
-  return (
-    <div className="relative flex-1 overflow-hidden rounded-2xl border-2 p-3" style={{ borderColor: win ? "#f5c518" : m.tint + "66", background: `${m.tint}0e`, boxShadow: win ? "0 0 30px rgba(245,197,24,.35)" : undefined }}>
-      {win && <div className="absolute right-2 top-2 z-10 rounded-md bg-[#f5c518] px-2 py-0.5 text-[10px] font-extrabold text-black">👑 GANADOR</div>}
-      <div className="flex items-center justify-between">
-        <div><div className="text-sm font-extrabold" style={{ color: m.tint }}>{m.label}</div><div className="text-[10px] uppercase tracking-widest text-white/40">{m.sub}</div></div>
-        {row?.score != null && <div className="text-right"><div className="text-2xl font-extrabold tabular-nums" style={{ color: win ? "#f5c518" : "#fff" }}>{row.score}</div><div className="text-[8px] tracking-widest text-white/40">SCORE</div></div>}
-      </div>
-      {/* iso floor with agents */}
-      <div className="relative mt-2 h-[150px] overflow-hidden rounded-xl border border-white/10" style={{ background: "linear-gradient(180deg,#0e1018,#0a0b11)" }}>
-        <div className="absolute inset-0 iso-floor opacity-50" />
-        {queen && (
-          <button onClick={() => sel(queen.id)} className="absolute left-1/2 top-2 -translate-x-1/2" title={queen.name}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/sprites/agents/${queen.role}.png`} alt="" className="h-12 w-12 object-contain drop-shadow-[0_0_8px_rgba(245,197,24,.6)]" onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")} />
-            <span className="absolute -left-1 -top-1 text-xs">👑</span>
-          </button>
-        )}
-        <div className="absolute inset-x-2 bottom-2 grid grid-cols-6 gap-1">
-          {others.map((a) => (
-            <button key={a.id} onClick={() => sel(a.id)} title={a.name} className="ag-idle" style={{ animationDelay: `${(a.role.length % 6) * 0.2}s` }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/sprites/agents/${a.role}.png`} alt="" className="h-8 w-8 object-contain hover:scale-110 transition-transform" onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")} />
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* the blueprint it designed */}
-      {row?.metrics && (
-        <div className="mt-2">
-          <div className="flex gap-2 text-[10px] font-bold text-white/60">
-            <span className="rounded bg-white/10 px-1.5 py-0.5">{row.metrics.tables} tablas</span>
-            <span className="rounded bg-white/10 px-1.5 py-0.5">{row.metrics.routes} rutas</span>
-            <span className="rounded bg-white/10 px-1.5 py-0.5">{row.metrics.pages} páginas</span>
-          </div>
-          {row.tables && <p className="mt-1 line-clamp-2 text-[10px] text-white/45">{row.tables.join(", ")}</p>}
-          {row.notes && <p className="mt-1 line-clamp-2 text-[10px] italic text-white/40">“{row.notes}”</p>}
-        </div>
-      )}
-    </div>
-  )
-}
+const EXAMPLES = [
+  { name: "DuelDeck", what: "juego de cartas coleccionables estilo Yu-Gi-Oh: construís mazos, duelás por turnos contra otros jugadores, cartas con ataque/defensa/atributo/tipo/nivel, torneos" },
+  { name: "StatusGlass", what: "un status page para un SaaS: componentes con uptime, historial de incidentes, mantenimientos programados, suscripción a avisos" },
+  { name: "Reseñas", what: "una app para descubrir y reseñar restaurantes cercanos con fotos, rating y filtros por tipo de cocina" },
+]
 
 export default function TournamentPage() {
-  const [agents, setAgents] = useState<AgentLite[]>([])
-  const [teams, setTeams] = useState<TeamRow[]>([])
-  const [sel, setSel] = useState<string | null>(null)
-  const [running, setRunning] = useState(false)
-  const [msg, setMsg] = useState("")
+  const [name, setName] = useState(EXAMPLES[0].name)
+  const [what, setWhat] = useState(EXAMPLES[0].what)
+  const [phase, setPhase] = useState("")
+  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle")
+  const [result, setResult] = useState<Result | null>(null)
+  const poll = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const load = useCallback(() => {
-    fetch("/api/genetic/agents").then((r) => r.json()).then((d) => d.ok && setAgents(d.agents)).catch(() => {})
-    fetch("/api/genetic/tournament").then((r) => r.json()).then((d) => d.ok && setTeams(d.teams || [])).catch(() => {})
+  const loadLatest = useCallback(() => {
+    fetch("/api/genetic/tournament").then((r) => r.json()).then((d) => {
+      if (d.ok && d.teams?.length) {
+        const designs: Design[] = d.teams.map((t: any) => ({ team: t.team, philosophy: "", model: t.model || "", metrics: t.metrics || {}, summary: t.summary || "", areas: t.areas }))
+        const winner = d.teams.find((t: any) => t.winner)?.team
+        setResult({ winner, designs }); setStatus((s) => (s === "running" ? s : "done"))
+      }
+    }).catch(() => {})
   }, [])
-  useEffect(() => { load() }, [load])
+  useEffect(() => { loadLatest() }, [loadLatest])
 
-  const run = async () => {
-    setRunning(true); setMsg("Las 3 oficinas están diseñando en paralelo… (qwen local, ~6-8 min)")
-    try {
-      const d = await fetch("/api/genetic/tournament", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(DEMO) }).then((r) => r.json())
-      if (d.ok) { setMsg(`El panel eligió Equipo ${d.winner}.`); load() } else setMsg("Error: " + (d.error || "?"))
-    } catch { setMsg("Error de red.") } finally { setRunning(false) }
+  function launch() {
+    setStatus("running"); setResult(null); setPhase("Arrancando…")
+    fetch("/api/genetic/tournament", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), what: what.trim(), audience: "usuarios", monetization: "free" }) })
+      .then((r) => r.json()).then((d) => {
+        if (!d.ok || !d.jobId) { setStatus("error"); setPhase(d.error || "no arrancó"); return }
+        poll.current && clearInterval(poll.current)
+        poll.current = setInterval(() => {
+          fetch(`/api/genetic/tournament?status=${d.jobId}`).then((r) => r.json()).then((s) => {
+            if (s.phase) setPhase(s.phase)
+            if (s.status === "done") { clearInterval(poll.current!); setStatus("done"); setResult(s.result || null) }
+            else if (s.status === "error") { clearInterval(poll.current!); setStatus("error"); setPhase(s.error || "error") }
+          }).catch(() => {})
+        }, 2000)
+      }).catch(() => { setStatus("error"); setPhase("network error") })
   }
+  useEffect(() => () => { poll.current && clearInterval(poll.current) }, [])
 
-  const byTeam = (t: string) => teams.find((x) => x.team === t)
-  const winner = teams.find((t) => t.winner)?.team
-  const decided = teams.length > 0
+  const designs = (result?.designs || []).slice().sort((a, b) => (b.areas?.overall || 0) - (a.areas?.overall || 0))
 
   return (
-    <main className="min-h-screen bg-[#0a0911] px-5 py-8 text-white">
-      <div className="mx-auto max-w-6xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-extrabold">Torneo genético · 3 equipos compiten</h1>
-            <p className="mt-1 text-sm text-white/50">Cada equipo diseña con su filosofía. El panel de reinas/stakeholders elige el mejor. {decided ? "Último torneo:" : "Sin torneos aún."}</p>
-          </div>
-          <button onClick={run} disabled={running} className="rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: "#7c3aed" }}>{running ? "Corriendo…" : "Correr torneo"}</button>
-        </div>
-        {msg && <p className="mt-2 text-xs text-violet-300">{msg}</p>}
+    <main className="min-h-screen bg-[#070a12] px-4 py-8 text-white">
+      <div className="mx-auto max-w-5xl">
+        <h1 className="text-2xl font-extrabold">🧬 Torneo genético</h1>
+        <p className="mb-5 mt-1 text-sm text-white/50">Los 3 equipos diseñan el mismo producto, cada uno con su modelo (Qwen / DeepSeek / Devstral) y su filosofía. El Gran Jurado puntúa por área y elige ganador. Corré de nuevo y van aprendiendo.</p>
 
-        {/* 3 competing offices */}
-        <div className="mt-5 flex flex-col gap-3 md:flex-row">
-          {(["A", "B", "C"] as TK[]).map((t) => (
-            <IsoOffice key={t} tk={t} agents={agents.filter((a) => a.team === t)} row={byTeam(t)} sel={setSel} />
-          ))}
+        <div className="rounded-2xl border border-white/10 bg-ink2 p-4">
+          <div className="mb-3 flex flex-wrap gap-2">
+            {EXAMPLES.map((e) => <button key={e.name} onClick={() => { setName(e.name); setWhat(e.what) }} className="rounded-lg border border-white/15 px-2.5 py-1 text-xs text-white/70 hover:border-violet/60">{e.name}</button>)}
+          </div>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del producto" className="mb-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm" />
+          <textarea value={what} onChange={(e) => setWhat(e.target.value)} rows={2} placeholder="Qué es / qué hace" className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm" />
+          <button onClick={launch} disabled={status === "running" || !name.trim()} className="mt-3 rounded-xl px-5 py-2.5 font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>
+            {status === "running" ? "Corriendo…" : "🧬 Lanzar torneo"}
+          </button>
+          <a href="/campus" className="ml-3 text-xs text-white/50 underline">ver el campus →</a>
         </div>
 
-        {/* central decision room */}
-        <div className="relative mt-3 overflow-hidden rounded-2xl border border-violet/40 p-4" style={{ background: "linear-gradient(180deg,rgba(124,58,237,.14),rgba(124,58,237,.04))" }}>
-          <div className="absolute inset-0 iso-floor opacity-40" />
-          <div className="relative flex items-center justify-between">
-            <div className="text-xs font-extrabold tracking-widest text-violet-200">🏛️ SALA DE DECISIÓN · las 3 reinas + stakeholders</div>
-            {decided && winner && <div className="text-xs font-bold text-[#f5c518]">Veredicto: gana {META[winner as TK].label}</div>}
+        {status === "running" && (
+          <div className="mt-4 flex items-center gap-3 rounded-xl border border-violet/40 bg-violet/10 px-4 py-3">
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            <span className="text-sm font-semibold">{phase}</span>
+            <span className="ml-auto text-[11px] text-white/40">corre en el server — podés cerrar esta pestaña</span>
           </div>
-          <div className="relative mt-3 flex items-end justify-center gap-8">
-            {(["A", "B", "C"] as TK[]).map((t) => {
-              const q = agents.find((a) => a.team === t && a.queen)
-              const w = byTeam(t)?.winner
-              return (
-                <div key={t} className="flex flex-col items-center">
-                  {q && (
-                    <button onClick={() => setSel(q.id)} className={w ? "scale-125" : "opacity-80"} title={`Reina ${META[t].label}`}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/sprites/agents/${q.role}.png`} alt="" className="h-14 w-14 object-contain" style={{ filter: w ? "drop-shadow(0 0 12px #f5c518)" : undefined }} onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = "hidden")} />
-                    </button>
-                  )}
-                  <span className="text-[10px] font-bold" style={{ color: w ? "#f5c518" : META[t].tint }}>{w ? "👑 " : ""}{META[t].label.replace("Equipo ", "")}</span>
-                  {byTeam(t)?.score != null && <span className="text-[10px] tabular-nums text-white/50">{byTeam(t)!.score}</span>}
-                </div>
-              )
-            })}
+        )}
+        {status === "error" && <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">Error: {phase}</div>}
+
+        {result && designs.length > 0 && (
+          <div className="mt-6">
+            {result.leveledUp && result.leveledUp.length > 0 && (
+              <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">⬆️ Subieron de nivel: {result.leveledUp.map((l) => `${l.id} (N${l.level})`).join(" · ")}</div>
+            )}
+            <div className="grid gap-4 md:grid-cols-3">
+              {designs.map((d) => {
+                const t = TEAM[d.team]; const win = d.team === result.winner
+                return (
+                  <div key={d.team} className="rounded-2xl border p-4" style={{ borderColor: win ? "#fbbf24" : t.tint + "55", background: t.tint + "0c", boxShadow: win ? "0 0 24px rgba(251,191,36,.25)" : undefined }}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-extrabold" style={{ color: t.tint }}>{t.label}</div>
+                      {win && <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-extrabold text-black">👑 GANA</span>}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[10px] text-white/45">{d.model || "—"}</div>
+                    {d.areas && (
+                      <div className="mt-2 space-y-1">
+                        {([["data", "Datos"], ["dev", "Dev"], ["design", "Diseño"], ["business", "Negocio"]] as const).map(([k, lbl]) => (
+                          <div key={k} className="flex items-center gap-2 text-[11px]">
+                            <span className="w-12 text-white/45">{lbl}</span>
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${d.areas![k]}%`, background: t.tint }} /></div>
+                            <span className="w-6 text-right tabular-nums text-white/70">{d.areas![k]}</span>
+                          </div>
+                        ))}
+                        <div className="pt-1 text-right text-xs font-bold" style={{ color: t.tint }}>overall {d.areas.overall}</div>
+                      </div>
+                    )}
+                    <div className="mt-2 flex gap-3 text-[10px] text-white/45">
+                      <span>{d.metrics?.tables ?? "—"} tablas</span><span>{d.metrics?.routes ?? "—"} rutas</span><span>{d.metrics?.pages ?? "—"} pages</span>
+                    </div>
+                    {d.areas?.critique && <p className="mt-2 text-[11px] italic text-white/50 line-clamp-3">“{d.areas.critique}”</p>}
+                  </div>
+                )
+              })}
+            </div>
           </div>
-          {decided && winner && <Confetti />}
-        </div>
-        <p className="mt-3 text-center text-[11px] text-white/35">Click en cualquier agente o reina → su ficha RPG. Iteración 1 (divergencia). Próximo: optimización cruzada + convergencia con los perdedores como QA.</p>
+        )}
       </div>
-
-      {sel && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={() => setSel(null)}>
-          <div onClick={(e) => e.stopPropagation()}><RpgCard id={sel} onClose={() => setSel(null)} /></div>
-        </div>
-      )}
     </main>
   )
-}
-
-function Confetti() {
-  const C = ["#f5c518", "#22c55e", "#38bdf8", "#f43f5e", "#a855f7", "#fff"]
-  return <div className="pointer-events-none absolute inset-0 overflow-hidden">
-    {Array.from({ length: 26 }).map((_, i) => (
-      <span key={i} className="absolute h-2 w-1.5 rounded-[1px]" style={{ left: `${(i * 67) % 100}%`, top: "-20px", background: C[i % C.length], animation: `confetti-fall ${2 + (i % 5) * 0.4}s linear ${(i % 10) * 0.2}s infinite` }} />
-    ))}
-  </div>
 }

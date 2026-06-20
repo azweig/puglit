@@ -45,11 +45,12 @@ const JUDGE_SCHEMA = {
 }
 
 /** Iteration 1: 3 philosophy- AND model-divergent blueprints (sequential on local 1-GPU). */
-export async function divergeBlueprints(config: DomainConfig, contracts: string, reference?: string): Promise<TeamDesign[]> {
+export async function divergeBlueprints(config: DomainConfig, contracts: string, reference?: string, onProgress?: (p: string) => void): Promise<TeamDesign[]> {
   const out: TeamDesign[] = []
   for (const t of TEAMS) {
     const lessons = await teamLessonDigest(t.id).catch(() => "")
     const wanted = TEAM_MODEL[t.id]
+    onProgress?.(`${t.label} diseñando con ${wanted.split("(")[0].trim()}…`)
     let bp: Blueprint | null = null, usedModel = wanted
     try {
       bp = await planBlueprint(config, contracts, reference, t.lens, { model: wanted, lessons })
@@ -102,9 +103,10 @@ Return ONLY JSON {"scores":[{"option":1,"data":0-100,"dev":0-100,"design":0-100,
 }
 
 /** Run + persist iteration 1: diverge → judge per-area → award XP/levels/lessons. */
-export async function runDivergence(jobId: string, config: DomainConfig, contracts: string, reference?: string) {
-  const designs = await divergeBlueprints(config, contracts, reference)
+export async function runDivergence(jobId: string, config: DomainConfig, contracts: string, reference?: string, onProgress?: (p: string) => void) {
+  const designs = await divergeBlueprints(config, contracts, reference, onProgress)
   if (!designs.length) return { ok: false as const, error: "no designs (¿modelos del council bajados?)" }
+  onProgress?.("El Gran Jurado evalúa los 3 diseños…")
   const { byTeam, winner } = await judgeBlueprints(config, designs)
 
   // distribute the evolutionary rewards (XP, level-ups, quality, diary lessons) + Obsidian
