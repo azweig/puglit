@@ -1133,6 +1133,11 @@ export interface EngineState {
 export function initEngineState(): EngineState {
   return { phase: "plan", blueprint: null, brief: "", ri: 0, pi: 0, files: [] }
 }
+/** Start the engine from an ALREADY-CHOSEN blueprint (the genetic tournament's winner),
+ *  skipping the plan phase so the winning team builds ITS design (iteration 3). */
+export function initEngineStateWith(blueprint: Blueprint): EngineState {
+  return { phase: "critique", blueprint, brief: "", ri: 0, pi: 0, files: [] }
+}
 
 /** Advance the build by ONE bounded unit so each fits a serverless time budget. The plan is
  *  split (blueprint / critique / brief) and routes+pages are one-at-a-time because a single

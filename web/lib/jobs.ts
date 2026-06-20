@@ -14,7 +14,7 @@ import { generateLogoSvg } from "@/lib/logo-gen"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
-import { buildAdvance, initEngineState, researchProduct, studyReference } from "@/lib/app-builder"
+import { buildAdvance, initEngineState, initEngineStateWith, researchProduct, studyReference } from "@/lib/app-builder"
 import { gameAdvance, initGameState, looksLikeGame } from "@/lib/game-builder"
 import { stakeholderAdvance, initStakeholderState } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
@@ -137,7 +137,7 @@ export function genErd(entities: Entity[]): string {
 
 interface JobRow { id: string; slug: string; name: string; email: string | null; status: string; answers: any; branding: any; config: DomainConfig | null; steps: Step[]; artifacts: any; completion?: number; error?: string }
 
-export async function createJob(input: { answers: IntakeAnswers; branding: any; chosenLanding?: string; creds?: any }): Promise<string> {
+export async function createJob(input: { answers: IntakeAnswers; branding: any; chosenLanding?: string; creds?: any; winnerBlueprint?: any }): Promise<string> {
   const id = randomBytes(8).toString("hex")
   let slug = slugify(input.answers.name)
   const { rows } = await query(`SELECT 1 FROM puglit_projects WHERE slug=$1`, [slug]).catch(() => ({ rows: [] as any[] }))
@@ -147,7 +147,7 @@ export async function createJob(input: { answers: IntakeAnswers; branding: any; 
   await query(
     `INSERT INTO puglit_jobs (id, slug, name, email, status, answers, branding, config, steps, artifacts, completion)
      VALUES ($1,$2,$3,$4,'queued',$5,$6,$7,$8,$9,0)`,
-    [id, slug, input.answers.name, input.answers.email || null, JSON.stringify(input.answers), JSON.stringify(input.branding || null), null, JSON.stringify(steps), JSON.stringify({ chosenLanding: input.chosenLanding || null, creds: input.creds || null })]
+    [id, slug, input.answers.name, input.answers.email || null, JSON.stringify(input.answers), JSON.stringify(input.branding || null), null, JSON.stringify(steps), JSON.stringify({ chosenLanding: input.chosenLanding || null, creds: input.creds || null, winnerBlueprint: input.winnerBlueprint || null })]
   )
   return id
 }
@@ -241,7 +241,9 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         return job
       }
 
-      const state = job.artifacts.engineState || initEngineState()
+      // iteration 3: if a genetic-tournament winning blueprint was injected, build THAT
+      // (skip planning) so the winning team's design becomes the real app.
+      const state = job.artifacts.engineState || (job.artifacts.winnerBlueprint ? initEngineStateWith(job.artifacts.winnerBlueprint) : initEngineState())
       const r = await buildAdvance(config, job.artifacts.contracts || "", job.artifacts.research || "", job.artifacts.reference || "", state)
       job.artifacts.engineState = r.state
       step.detail = r.detail

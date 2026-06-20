@@ -6,6 +6,7 @@
  * agents levelled up. Run it again to watch the teams LEARN.
  */
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 
 const TEAM = {
   A: { tint: "#22c55e", label: "Equipo Lean", sub: "Pragmático · MVP-first" },
@@ -30,6 +31,18 @@ export default function TournamentPage() {
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle")
   const [result, setResult] = useState<Result | null>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [building, setBuilding] = useState(false)
+  const router = useRouter()
+
+  // iteration 3: build the winning team's design into a real app
+  async function buildWinner() {
+    setBuilding(true)
+    try {
+      const d = await fetch("/api/genetic/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), what: what.trim(), audience: "usuarios", monetization: "free" }) }).then((r) => r.json())
+      if (d.ok && d.jobId) router.push(`/build/${d.jobId}`)
+      else { setBuilding(false); alert(d.error || "no se pudo crear el build") }
+    } catch { setBuilding(false) }
+  }
 
   const loadLatest = useCallback(() => {
     fetch("/api/genetic/tournament").then((r) => r.json()).then((d) => {
@@ -92,6 +105,12 @@ export default function TournamentPage() {
           <div className="mt-6">
             {result.leveledUp && result.leveledUp.length > 0 && (
               <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">⬆️ Subieron de nivel: {result.leveledUp.map((l) => `${l.id} (N${l.level})`).join(" · ")}</div>
+            )}
+            {result.winner && status === "done" && (
+              <div className="mb-4 flex items-center gap-3 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3">
+                <span className="text-sm text-white/80">Ganó <b style={{ color: TEAM[result.winner].tint }}>{TEAM[result.winner].label}</b>. Que construya su diseño:</span>
+                <button onClick={buildWinner} disabled={building} className="ml-auto rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-black disabled:opacity-50">{building ? "creando build…" : "🔨 Construir el ganador →"}</button>
+              </div>
             )}
             <div className="grid gap-4 md:grid-cols-3">
               {designs.map((d) => {
