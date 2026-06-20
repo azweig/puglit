@@ -42,4 +42,9 @@ for i in $(seq 1 40); do
   [ "$code" = "200" ] && break
   sleep 3
 done
-echo "SERVE_READY http=$code · watchdog ON" | tee -a /tmp/rebuild.log
+
+# SEED: create any new tables/columns (auth, scoping, embedding) + (re)seed the 75 agents.
+# Idempotent (preserves XP/level/diary). This makes "just rebuild" actually create the schema
+# so login + per-user projects work without extra manual steps.
+SEED=$(curl -s -X POST localhost:3000/api/genetic/seed 2>/dev/null | head -c 120)
+echo "SERVE_READY http=$code · watchdog ON · seed: $SEED" | tee -a /tmp/rebuild.log

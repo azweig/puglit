@@ -13,6 +13,9 @@ export async function POST() {
   try {
     const ddl = readFileSync(join(process.cwd(), "sql/genetic.sql"), "utf8")
     await query(ddl)
+    // multi-user scoping column lives in the main-app schema (db.ts SCHEMA_SQL), which
+    // ensureSchema skips in production — so add it here (guarded) when seeding the pod.
+    await query(`ALTER TABLE puglit_jobs ADD COLUMN IF NOT EXISTS user_email VARCHAR(255)`).catch(() => {})
     for (const t of TEAMS) {
       await query(
         `INSERT INTO puglit_teams (id,philosophy,label,description,queen_agent) VALUES ($1,$2,$3,$4,$5)
