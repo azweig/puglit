@@ -49,6 +49,12 @@ const STAKEHOLDERS = [
 function isoCircle(cx: number, cy: number, r: number, n = 44) {
   return Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2; return iso(cx + Math.cos(a) * r, cy + Math.sin(a) * r) })
 }
+// where each Queen stands when she walks to the decision room to present (front of the table)
+const QUEEN_CENTER: Record<TeamId, { x: number; y: number }> = {
+  A: { x: CENTER.cx - 64, y: CENTER.cy + 80 },
+  B: { x: CENTER.cx + 64, y: CENTER.cy + 80 },
+  C: { x: CENTER.cx, y: CENTER.cy + 104 },
+}
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 function grid(rx: number, ry: number, rw: number, rh: number, n: number, cols: number) {
@@ -85,6 +91,7 @@ export function CampusStage() {
   const sprRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const sim = useRef<Map<string, Sim>>(new Map())
   const working = useRef<Set<string>>(new Set())
+  const liveRef = useRef<{ stage?: string; status?: string } | null>(null)
   const view = useRef({ s: 0.62, x: 0, y: 0 })
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; moved: boolean } | null>(null)
 
@@ -146,7 +153,7 @@ export function CampusStage() {
       try {
         const l = await fetch("/api/genetic/tournament?live").then((r) => r.json())
         if (l?.ok && (l.status === "running" || l.status === "done")) {
-          setLive(l)
+          setLive(l); liveRef.current = l
           if (l.status === "running") {
             // the team currently designing → its agents work; in the judge stage everyone idles
             const w = new Set<string>()
@@ -161,7 +168,7 @@ export function CampusStage() {
           }
           return
         }
-        setLive(null)
+        setLive(null); liveRef.current = null
       } catch { /* ignore */ }
       // demo fallback (no tournament running)
       setProgress((p) => ({ A: Math.min(100, p.A + rnd(0.3, 1.4)), B: Math.min(100, p.B + rnd(0.2, 1.1)), C: Math.min(100, p.C + rnd(0.4, 1.6)) }))
@@ -206,9 +213,12 @@ export function CampusStage() {
       for (const a of roster) {
         const s = sim.current.get(a.id), node = wrapRefs.current.get(a.id), spr = sprRefs.current.get(a.id)
         if (!s || !node || !spr) continue
+        const lv = liveRef.current
+        const queenToCenter = a.queen && !!lv && (lv.stage === "judge" || lv.status === "done")
         const isWorking = working.current.has(a.id) || a.queen
         let tx: number, ty: number
-        if (isWorking) { tx = s.home.x; ty = s.home.y }
+        if (queenToCenter) { const q = QUEEN_CENTER[a.team]; tx = q.x; ty = q.y }
+        else if (isWorking) { tx = s.home.x; ty = s.home.y }
         else {
           const rr = roomRect(a.team, a.room)
           if (Math.hypot(s.wx - s.x, s.wy - s.y) < 4 && t > s.nextWander) { s.wx = rnd(rr.x + 34, rr.x + rr.w - 34); s.wy = rnd(rr.y + 56, rr.y + rr.h - 28); s.nextWander = t + 1500 + Math.random() * 3200 }
