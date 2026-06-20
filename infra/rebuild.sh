@@ -11,11 +11,15 @@ set -x
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT/web" || exit 1
 
-# free everything
+# free EVERYTHING that could conflict (stale builds, multiple rebuilds, old servers)
 pkill -9 -f "next" 2>/dev/null || true
+pkill -9 -f "npm run" 2>/dev/null || true
+pkill -9 -f "node .*\.next" 2>/dev/null || true
 lsof -ti:3000 2>/dev/null | xargs -r kill -9 2>/dev/null || true
 pkill -f "ollama serve" 2>/dev/null || true
-sleep 2
+# kill any OTHER running copy of this rebuild script (keep ourselves)
+for p in $(pgrep -f "rebuild.sh" 2>/dev/null); do [ "$p" != "$$" ] && kill -9 "$p" 2>/dev/null; done
+sleep 3
 
 # clean production build (memory-safe: ollama is down so the model isn't in RAM)
 rm -rf .next
