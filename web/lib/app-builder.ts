@@ -16,6 +16,7 @@
  */
 import { chatJSON, chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
+import { PLAYBOOK } from "@/lib/playbooks"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -107,6 +108,8 @@ export async function planBlueprint(config: DomainConfig, contracts: string, ref
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : JSON.stringify(config.identity.tagline)
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
+
+${PLAYBOOK.architect}
 ${lens ? `\n${lens}\nLet this philosophy genuinely shape your blueprint (table count, layering, route style) so it is DISTINCT from other approaches — but stay 100% on THIS product's domain (never invent unrelated entities like sports leagues in a status page).\n` : ""}${opts?.lessons ? `\nLESSONS FROM YOUR TEAM'S PAST PROJECTS (apply them — this is how you improve and beat the other teams):\n${opts.lessons}\n` : ""}
 
 Think hard about the real user journeys. Examples of inference:
@@ -225,6 +228,8 @@ async function genRouteFile(config: DomainConfig, bp: Blueprint, rf: RouteFile):
   const out = (await chatJSON([
     { role: "system", content: `You are a Backend Engineer. Write ONE Next.js 16 App Router route handler file at ${rf.path} implementing ALL the listed HTTP methods with REAL, working logic (no TODOs, no stubs). It must compile under tsc --noEmit.
 
+${PLAYBOOK.dev}
+
 ${RULES}
 ${SPINE_API}
 
@@ -286,6 +291,8 @@ async function genPage(config: DomainConfig, bp: Blueprint, p: PageSpec, brief: 
   const routeList = groupRoutes(bp.routes).map((rf) => `${[...rf.methods].join("/")} ${rf.path.replace(/^app/, "").replace(/\/route\.ts$/, "")} — ${rf.specs.map((s) => s.purpose).join("; ")}`).join("\n")
   const out = (await chatJSON([
     { role: "system", content: `You are a senior Frontend Engineer + Product Designer who ships interfaces at the level of Linear / Vercel / Airbnb. Write ONE Next.js 16 page (App Router) that is REAL and fully interactive (no placeholders/TODOs/lorem) AND visually premium. It MUST compile under tsc --noEmit and work against the listed APIs. The page should look like a designer obsessed over it — never an auto-generated CRUD form.
+
+${PLAYBOOK.design}
 
 ${RULES}
 

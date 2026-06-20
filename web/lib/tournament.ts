@@ -17,6 +17,7 @@ import { query } from "@/lib/db"
 import { TEAMS, type TeamId } from "@/lib/roster"
 import type { DomainConfig } from "@/lib/domain-types"
 import { awardRound, teamLessonDigest, AREAS, type Area } from "@/lib/progression"
+import { PLAYBOOK } from "@/lib/playbooks"
 
 export interface TeamDesign { team: TeamId; philosophy: string; model: string; blueprint: Blueprint; metrics: { tables: number; routes: number; pages: number } }
 
@@ -79,7 +80,11 @@ export async function judgeBlueprints(config: DomainConfig, designs: TeamDesign[
   let parsed: { scores?: { option: number; data: number; dev: number; design: number; business: number; critique: string }[]; winner?: number } = {}
   try {
     parsed = (await chatJSON([
-      { role: "system", content: `You are the Stakeholder Grand Jury (chairman + 4 specialists) judging candidate blueprints. Score EACH candidate 0-100 on FOUR disciplines, and give a one-sentence critique (the single most important thing to improve):
+      { role: "system", content: `You are the Stakeholder Grand Jury (chairman + 4 specialists) judging candidate blueprints.
+
+${PLAYBOOK.review}
+
+Score EACH candidate 0-100 on FOUR disciplines, and give a one-sentence critique (the single most important thing to improve):
 - data: the data model — right tables/relations for THIS product, no missing core entities, no unrelated/contaminating tables.
 - dev: the API/operations — every user journey has its routes (create + read + the product's core action), no dead ends.
 - design: the pages/UX — the screens a user needs to actually use the product end-to-end.
