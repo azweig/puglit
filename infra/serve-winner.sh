@@ -25,5 +25,10 @@ JOB_ID="$(echo "$RESP" | jq -r '.jobId // empty')"
 if [ -z "$JOB_ID" ]; then echo "✗ no se creó el job (¿corriste un torneo primero?). resp: $RESP"; exit 1; fi
 echo "→ job $JOB_ID · ganador: $(echo "$RESP" | jq -r '.builtFrom') · construyendo + sirviendo en :$PORT (paciencia: el build con el 32B tarda)"
 
+# $PORT is a single reusable "preview slot": free whatever app was served there before, so
+# every winner you build appears on the SAME stable URL (<podid>-$PORT.proxy.runpod.net).
+# Expose $PORT on RunPod ONCE; never again.
+lsof -ti:"$PORT" 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+
 JOB_ID="$JOB_ID" BASE="$BASE" PORT="$PORT" PG_PORT="$PG_PORT" MODEL="$MODEL" SLUG="winner-$JOB_ID" \
   node "$ROOT/web/scripts/build-local.mjs" "$ROOT"
