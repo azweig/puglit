@@ -11,6 +11,7 @@ import { generateConfig, slugify, type IntakeAnswers } from "@/lib/generate"
 import { applyBranding } from "@/lib/branding"
 import { designEntities } from "@/lib/entitygen"
 import { generateLogoSvg } from "@/lib/logo-gen"
+import { generateBrandLogo } from "@/lib/art-director"
 import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
@@ -300,11 +301,13 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
         break
       }
       case "brand": {
-        if (job.config && !job.config.identity.logoSvg) {
-          const svg = await generateLogoSvg(job.config)
-          if (svg) job.config.identity.logoSvg = svg
+        if (job.config && !job.config.identity.logoSvg && !job.config.identity.logoImage) {
+          // art-director first: a REAL logo image if an image provider is configured…
+          const img = await generateBrandLogo(job.config).catch(() => null)
+          if (img) job.config.identity.logoImage = img.dataUri
+          else { const svg = await generateLogoSvg(job.config); if (svg) job.config.identity.logoSvg = svg } // …else the SVG monogram
         }
-        step.detail = `Color ${job.config?.identity.brandColor}` + (job.config?.identity.logoSvg ? " · logo SVG" : "")
+        step.detail = `Color ${job.config?.identity.brandColor}` + (job.config?.identity.logoImage ? " · logo imagen 🎨" : job.config?.identity.logoSvg ? " · logo SVG" : "")
         break
       }
       case "design": {

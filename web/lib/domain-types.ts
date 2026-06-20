@@ -20,7 +20,7 @@ export interface LandingHero { headline: Localized; subheadline: Localized; ctaP
 export interface ValueProp { title: Localized; body: Localized }
 export interface FaqItem { q: Localized; a: Localized }
 export interface LandingConfig { hero: LandingHero; socialProof?: Localized; valueProps?: ValueProp[]; faq?: FaqItem[]; finalCta?: { headline: Localized; button: Localized } }
-export interface Identity { name: string; tagline: Localized; domain: string; languages: string[]; brandColor?: string; targetMarkets?: string[]; logoUrl?: string; logoSvg?: string; logoMonogram?: string; logoConcept?: string; secondaryColor?: string; accentColor?: string; palette?: { hex: string; label?: string }[] }
+export interface Identity { name: string; tagline: Localized; domain: string; languages: string[]; brandColor?: string; targetMarkets?: string[]; logoUrl?: string; logoSvg?: string; logoImage?: string; logoMonogram?: string; logoConcept?: string; secondaryColor?: string; accentColor?: string; palette?: { hex: string; label?: string }[] }
 export interface Compliance { notices?: string[]; ageGate?: number }
 export interface DomainConfig {
   identity: Identity; modules: Modules; entities: Entity[]; engine?: Engine
