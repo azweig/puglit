@@ -1,7 +1,7 @@
 "use client"
 /** /login — passwordless: email → 6-digit code → in. No password. */
-import { useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -10,8 +10,11 @@ export default function LoginPage() {
   const [msg, setMsg] = useState("")
   const [dev, setDev] = useState("")
   const [busy, setBusy] = useState(false)
+  const [next, setNext] = useState("/campus")
   const router = useRouter()
-  const next = useSearchParams().get("next") || "/campus"
+  // read ?next from the URL client-side (avoids useSearchParams, which needs a Suspense
+  // boundary and otherwise fails `next build`)
+  useEffect(() => { const n = new URLSearchParams(window.location.search).get("next"); if (n) setNext(n) }, [])
 
   async function request() {
     setBusy(true); setMsg(""); setDev("")
