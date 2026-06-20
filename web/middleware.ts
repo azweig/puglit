@@ -16,5 +16,5 @@ export function middleware(req: NextRequest) {
 
 // only the console pages — NOT the home, /login, or /api/* (auth endpoints stay public)
 export const config = {
-  matcher: ["/campus", "/campus/:path*", "/tournament", "/tournament/:path*", "/generate", "/generate/:path*", "/build/:path*", "/roster", "/roster/:path*"],
+  matcher: ["/campus", "/campus/:path*", "/tournament", "/tournament/:path*", "/generate", "/generate/:path*", "/build/:path*", "/roster", "/roster/:path*", "/projects", "/projects/:path*"],
 }

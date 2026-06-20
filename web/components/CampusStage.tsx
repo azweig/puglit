@@ -283,6 +283,7 @@ export function CampusStage() {
           </span>
         )}
         {live?.status === "done" && live.winner && <span className="rounded-lg bg-amber-400/20 px-2.5 py-1 text-xs font-bold text-amber-300">🏆 Ganó {TEAMS.find((t) => t.id === live.winner)?.label}</span>}
+        <a href="/projects" className="rounded-lg border border-white/20 px-2.5 py-1 text-xs font-bold text-white/80">📁 Mis proyectos</a>
         <span className="ml-auto text-[10px] text-white/35">click un edificio para zoom · arrastrá</span>
       </div>
 

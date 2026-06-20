@@ -149,8 +149,12 @@ CREATE TABLE IF NOT EXISTS puglit_jobs (
   completion INTEGER NOT NULL DEFAULT 0,
   error TEXT,
   lease_until TIMESTAMP WITH TIME ZONE,
+  user_email VARCHAR(255),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_puglit_jobs_status ON puglit_jobs(status, updated_at DESC);
+-- idempotent: owner scoping for multi-user (builds created before this column existed)
+ALTER TABLE puglit_jobs ADD COLUMN IF NOT EXISTS user_email VARCHAR(255);
+CREATE INDEX IF NOT EXISTS idx_puglit_jobs_user ON puglit_jobs(user_email, created_at DESC);
 `

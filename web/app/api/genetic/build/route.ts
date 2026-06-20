@@ -11,10 +11,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { createJob } from "@/lib/jobs"
 import { query } from "@/lib/db"
 import { isConfigured } from "@/lib/db"
+import { getSession } from "@/lib/auth"
 import type { IntakeAnswers } from "@/lib/generate"
 
 export async function POST(request: NextRequest) {
   if (!isConfigured()) return NextResponse.json({ ok: false, error: "db_not_configured" }, { status: 503 })
+  const session = await getSession()
+  if (!session) return NextResponse.json({ ok: false, error: "auth_required" }, { status: 401 })
   try {
     const a = (await request.json().catch(() => ({}))) as Partial<IntakeAnswers> & { jobId?: string }
     const { rows } = await query<{ team: string; artifacts: any }>(
@@ -39,7 +42,7 @@ export async function POST(request: NextRequest) {
       modules: [],
       email: String(a.email || "").slice(0, 255),
     }
-    const id = await createJob({ answers, branding: null, winnerBlueprint: bp })
+    const id = await createJob({ answers, branding: null, winnerBlueprint: bp, userEmail: session.email })
     return NextResponse.json({ ok: true, jobId: id, builtFrom: win.team, watch: `/build/${id}` })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })
