@@ -66,7 +66,17 @@ export function CampusStage() {
   const [sel, setSel] = useState<string | null>(null)
   const [focus, setFocus] = useState<TeamId | "center" | null>(null)
   const [progress, setProgress] = useState<Record<TeamId, number>>({ A: 6, B: 4, C: 9 })
+  const [live, setLive] = useState<{ status: string; stage?: string; team?: TeamId; phase?: string; model?: string; winner?: TeamId; leveledUp?: { id: string; level: number }[] } | null>(null)
+  const [launching, setLaunching] = useState(false)
   const [, force] = useState(0)
+
+  // launch a tournament from the campus (runs on the server; the poll below animates it)
+  const launchTournament = async () => {
+    setLaunching(true)
+    try {
+      await fetch("/api/genetic/tournament", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "DuelDeck", what: "juego de cartas estilo Yu-Gi-Oh: mazos, duelos por turnos, cartas con ataque/defensa/atributo/tipo/nivel, torneos", audience: "jugadores TCG", monetization: "free" }) })
+    } catch { /* ignore */ } finally { setTimeout(() => setLaunching(false), 1500) }
+  }
 
   const soloFurn = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("solo") === "furn"
   const containerRef = useRef<HTMLDivElement>(null)
@@ -128,16 +138,37 @@ export function CampusStage() {
     force((n) => n + 1)
   }, [roster, desks])
 
-  // demo driver: progress climbs; a rotating subset of agents is "working"
+  // driver: polls the LIVE tournament and animates it; falls back to a demo when idle.
   useEffect(() => {
     let alive = true
-    const tick = () => {
+    const tick = async () => {
       if (!alive) return
+      try {
+        const l = await fetch("/api/genetic/tournament?live").then((r) => r.json())
+        if (l?.ok && (l.status === "running" || l.status === "done")) {
+          setLive(l)
+          if (l.status === "running") {
+            // the team currently designing → its agents work; in the judge stage everyone idles
+            const w = new Set<string>()
+            if (l.stage === "design" && l.team) for (const a of roster) if (a.team === l.team) w.add(a.id)
+            working.current = w
+            // climb the active team's bar a bit so it reads as "in progress"
+            if (l.stage === "design" && l.team) { const tm = l.team as TeamId; setProgress((p) => ({ ...p, [tm]: Math.min(95, (p[tm] || 0) + rnd(1, 4)) })) }
+          } else if (l.status === "done" && Array.isArray(l.designs)) {
+            // final: bars = each team's overall score; nobody "working"
+            setProgress((p) => { const np = { ...p }; for (const d of l.designs) { const tm = d.team as TeamId; np[tm] = (d.areas?.overall as number) ?? p[tm] } return np })
+            working.current = new Set()
+          }
+          return
+        }
+        setLive(null)
+      } catch { /* ignore */ }
+      // demo fallback (no tournament running)
       setProgress((p) => ({ A: Math.min(100, p.A + rnd(0.3, 1.4)), B: Math.min(100, p.B + rnd(0.2, 1.1)), C: Math.min(100, p.C + rnd(0.4, 1.6)) }))
       const w = new Set<string>(); for (const a of roster) if (Math.random() < 0.4) w.add(a.id)
       working.current = w
     }
-    const id = setInterval(tick, 1600)
+    const id = setInterval(tick, 2200); tick()
     return () => { alive = false; clearInterval(id) }
   }, [roster])
 
@@ -231,11 +262,18 @@ export function CampusStage() {
 
   return (
     <div className="relative rounded-3xl border border-white/10 bg-[#070a12] overflow-hidden select-none" style={{ backgroundImage: "radial-gradient(circle at 30% 20%, rgba(80,90,160,.08), transparent 60%)" }}>
-      <div className="absolute inset-x-0 top-0 z-40 flex items-center gap-4 border-b border-white/10 bg-black/50 px-4 py-2 backdrop-blur">
-        <span className="text-sm font-extrabold tracking-wide text-white">🏛️ CAMPUS · enjambre genético</span>
-        <span className="text-xs text-white/55">AGENTES <b className="text-white">{roster.length}/75</b></span>
-        {focus && <button onClick={() => setFocus(null)} className="ml-2 rounded-lg bg-violet px-2.5 py-1 text-xs font-bold text-white">← Campus overview</button>}
-        <span className="ml-auto text-[10px] text-white/35">click un edificio para zoom · arrastrá · Ctrl+rueda</span>
+      <div className="absolute inset-x-0 top-0 z-40 flex items-center gap-3 border-b border-white/10 bg-black/50 px-4 py-2 backdrop-blur">
+        <span className="text-sm font-extrabold tracking-wide text-white">🏛️ CAMPUS</span>
+        <button onClick={launchTournament} disabled={launching || live?.status === "running"} className="rounded-lg bg-violet px-2.5 py-1 text-xs font-bold text-white disabled:opacity-50">{live?.status === "running" ? "torneo en curso…" : launching ? "lanzando…" : "🧬 Lanzar torneo"}</button>
+        {focus && <button onClick={() => setFocus(null)} className="rounded-lg border border-white/20 px-2.5 py-1 text-xs font-bold text-white/80">← overview</button>}
+        {/* live phase banner */}
+        {live?.status === "running" && (
+          <span className="flex items-center gap-2 rounded-lg bg-violet/15 px-2.5 py-1 text-xs font-semibold text-violet-bright">
+            <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />{live.phase}
+          </span>
+        )}
+        {live?.status === "done" && live.winner && <span className="rounded-lg bg-amber-400/20 px-2.5 py-1 text-xs font-bold text-amber-300">🏆 Ganó {TEAMS.find((t) => t.id === live.winner)?.label}</span>}
+        <span className="ml-auto text-[10px] text-white/35">click un edificio para zoom · arrastrá</span>
       </div>
 
       <div ref={containerRef} className="relative h-[640px] overflow-hidden cursor-grab active:cursor-grabbing"
@@ -293,11 +331,13 @@ export function CampusStage() {
         {/* building banners (outside world → constant size) */}
         {BUILDINGS.map((b) => {
           const box = buildBox(b.team); const team = TEAMS.find((t) => t.id === b.team)!
+          const isWinner = live?.status === "done" && live.winner === b.team
+          const isActive = live?.status === "running" && live.stage === "design" && live.team === b.team
           return (
             <button key={"ban" + b.team} onClick={(e) => { e.stopPropagation(); setFocus(focus === b.team ? null : b.team) }}
               className="absolute z-30 -translate-x-1/2 rounded-lg border px-3 py-1 text-center backdrop-blur transition"
-              style={{ left: ((box.minX + box.maxX) / 2) * cam.s + cam.x, top: box.minY * cam.s + cam.y - 6, borderColor: TEAM_COLOR[b.team] + "aa", background: TEAM_COLOR[b.team] + "1f", opacity: focus && focus !== b.team ? 0.25 : 1 }}>
-              <div className="text-xs font-extrabold" style={{ color: TEAM_COLOR[b.team] }}>{team.label}</div>
+              style={{ left: ((box.minX + box.maxX) / 2) * cam.s + cam.x, top: box.minY * cam.s + cam.y - 6, borderColor: isWinner ? "#fbbf24" : TEAM_COLOR[b.team] + "aa", background: isWinner ? "rgba(251,191,36,.18)" : TEAM_COLOR[b.team] + "1f", opacity: focus && focus !== b.team ? 0.25 : 1, boxShadow: isWinner ? "0 0 18px rgba(251,191,36,.5)" : isActive ? `0 0 16px ${TEAM_COLOR[b.team]}` : undefined }}>
+              <div className="text-xs font-extrabold" style={{ color: isWinner ? "#fbbf24" : TEAM_COLOR[b.team] }}>{isWinner ? "👑 " : ""}{team.label}{isActive ? " ✍️" : ""}</div>
               <div className="text-[9px] uppercase tracking-widest text-white/55">{cnt(b.team)} agentes · {Math.round(progress[b.team])}%</div>
             </button>
           )
@@ -321,6 +361,14 @@ export function CampusStage() {
           )
         })}
       </div>
+
+      {/* level-up toast when a tournament finishes */}
+      {live?.status === "done" && live.leveledUp && live.leveledUp.length > 0 && (
+        <div className="absolute bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-xl border border-amber-400/50 bg-amber-500/15 px-4 py-2 text-center backdrop-blur">
+          <div className="text-xs font-extrabold text-amber-300">⬆️ Subieron de nivel</div>
+          <div className="text-[11px] text-white/75">{live.leveledUp.map((l) => `${l.id} → N${l.level}`).join("  ·  ")}</div>
+        </div>
+      )}
 
       {/* agent RPG modal — PORTALED to <body> so no campus sprite/compositing layer can cover it */}
       {sel && typeof document !== "undefined" && createPortal(

@@ -17,9 +17,10 @@ import { query } from "@/lib/db"
 
 function jid() { return Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("") }
 
-type JobState = { status: "running" | "done" | "error"; phase: string; startedAt: number; result?: unknown; error?: string }
+type JobState = { status: "running" | "done" | "error"; phase: string; stage?: string; team?: string; model?: string; startedAt: number; result?: any; error?: string }
 // module-scoped: persists across requests within the single persistent `next start` process
 const JOBS: Map<string, JobState> = (globalThis as any).__puglitTournJobs || ((globalThis as any).__puglitTournJobs = new Map())
+let LAST_JOB: string | null = (globalThis as any).__puglitLastJob ?? null
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,6 +29,12 @@ export async function GET(request: NextRequest) {
     if (status) {
       const j = JOBS.get(status)
       return NextResponse.json(j ? { ok: true, jobId: status, ...j } : { ok: true, jobId: status, status: "unknown" })
+    }
+    // ?live — the most recent tournament's live state (for the 2.5D campus to animate)
+    if (sp.get("live") !== null) {
+      const id = (globalThis as any).__puglitLastJob || LAST_JOB
+      const j = id ? JOBS.get(id) : null
+      return NextResponse.json(j ? { ok: true, jobId: id, status: j.status, stage: j.stage || null, team: j.team || null, phase: j.phase, model: j.model || null, winner: j.result?.winner || null, leveledUp: j.result?.leveledUp || [], designs: j.result?.designs || [] } : { ok: true, status: "idle" })
     }
     const jobId = sp.get("jobId")
     const job = jobId || (await query<{ job_id: string }>(`SELECT job_id FROM puglit_rounds WHERE iteration=1 ORDER BY id DESC LIMIT 1`)).rows[0]?.job_id
@@ -47,18 +54,19 @@ export async function POST(request: NextRequest) {
     if (!a?.name) return NextResponse.json({ ok: false, error: "name required" }, { status: 400 })
     const config = generateConfig(a as IntakeAnswers)
     const jobId = a.jobId || jid()
-    JOBS.set(jobId, { status: "running", phase: "Estudiando el producto de referencia…", startedAt: Date.now() })
+    JOBS.set(jobId, { status: "running", phase: "Estudiando el producto de referencia…", stage: "study", startedAt: Date.now() })
+    LAST_JOB = jobId; (globalThis as any).__puglitLastJob = jobId
 
     // fire-and-forget — keeps running on the server even if the client disconnects
     void Promise.resolve().then(async () => {
       try {
         const reference = a.reference || (await studyReference(config).catch(() => "")) || ""
         const r = await runDivergence(jobId, config, "", reference, (p) => {
-          const j = JOBS.get(jobId); if (j) j.phase = p
+          const j = JOBS.get(jobId); if (j) { j.phase = p.label; j.stage = p.stage; j.team = p.team; j.model = p.model }
         })
-        JOBS.set(jobId, { status: "done", phase: "Terminado", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, referenceUsed: !!reference, ...r } })
+        JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, referenceUsed: !!reference, ...r } })
       } catch (e) {
-        JOBS.set(jobId, { status: "error", phase: "Error", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), error: (e as Error).message })
+        JOBS.set(jobId, { status: "error", phase: "Error", stage: "error", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), error: (e as Error).message })
       }
     })
 

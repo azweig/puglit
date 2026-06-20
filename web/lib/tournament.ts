@@ -45,12 +45,14 @@ const JUDGE_SCHEMA = {
 }
 
 /** Iteration 1: 3 philosophy- AND model-divergent blueprints (sequential on local 1-GPU). */
-export async function divergeBlueprints(config: DomainConfig, contracts: string, reference?: string, onProgress?: (p: string) => void): Promise<TeamDesign[]> {
+export type Progress = { label: string; stage: "study" | "design" | "judge"; team?: TeamId; model?: string }
+
+export async function divergeBlueprints(config: DomainConfig, contracts: string, reference?: string, onProgress?: (p: Progress) => void): Promise<TeamDesign[]> {
   const out: TeamDesign[] = []
   for (const t of TEAMS) {
     const lessons = await teamLessonDigest(t.id).catch(() => "")
     const wanted = TEAM_MODEL[t.id]
-    onProgress?.(`${t.label} diseñando con ${wanted.split("(")[0].trim()}…`)
+    onProgress?.({ label: `${t.label} diseñando con ${wanted.split("(")[0].trim()}…`, stage: "design", team: t.id, model: wanted })
     let bp: Blueprint | null = null, usedModel = wanted
     try {
       bp = await planBlueprint(config, contracts, reference, t.lens, { model: wanted, lessons })
@@ -103,10 +105,10 @@ Return ONLY JSON {"scores":[{"option":1,"data":0-100,"dev":0-100,"design":0-100,
 }
 
 /** Run + persist iteration 1: diverge → judge per-area → award XP/levels/lessons. */
-export async function runDivergence(jobId: string, config: DomainConfig, contracts: string, reference?: string, onProgress?: (p: string) => void) {
+export async function runDivergence(jobId: string, config: DomainConfig, contracts: string, reference?: string, onProgress?: (p: Progress) => void) {
   const designs = await divergeBlueprints(config, contracts, reference, onProgress)
   if (!designs.length) return { ok: false as const, error: "no designs (¿modelos del council bajados?)" }
-  onProgress?.("El Gran Jurado evalúa los 3 diseños…")
+  onProgress?.({ label: "El Gran Jurado evalúa los 3 diseños…", stage: "judge" })
   const { byTeam, winner } = await judgeBlueprints(config, designs)
 
   // distribute the evolutionary rewards (XP, level-ups, quality, diary lessons) + Obsidian
