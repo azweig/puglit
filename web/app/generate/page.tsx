@@ -305,6 +305,21 @@ export default function Generate() {
     } catch { setErr("Error de red iniciando el build.") }
   }
 
+  // launch the GENETIC tournament with this diagnosis → the 3 teams compete to design it,
+  // watched live in the 2.5D campus. (The interview/diagnosis is the "creation"; this is
+  // where it feeds the evolutionary council.)
+  async function startGeneticTournament() {
+    setErr("")
+    try {
+      const what = String(pendingAnswers.what || spec?.executiveSummary || "")
+      await fetch("/api/genetic/tournament", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), what, audience: String(pendingAnswers.audience || "usuarios"), monetization: String(pendingAnswers.monetization || "free") }),
+      })
+      router.push("/campus")
+    } catch { setErr("No se pudo lanzar el torneo genético.") }
+  }
+
   async function finalize(answers: Record<string, unknown>, landingHtml?: string) {
     setPhase("saving"); setBuildMsg("Assembling your config…")
     try {
@@ -588,7 +603,8 @@ export default function Generate() {
 
         {err && <p className="text-red-400 text-sm mt-4">{err}</p>}
         <div className="flex flex-wrap gap-3 mt-7">
-          {designs.length === 0 && <button onClick={() => startBuild()} className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Empezar a desarrollar →</button>}
+          <button onClick={startGeneticTournament} className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "linear-gradient(90deg,#7c3aed,#db2777)" }}>🧬 Competir — torneo genético →</button>
+          {designs.length === 0 && <button onClick={() => startBuild()} className="px-6 py-3 rounded-xl font-semibold text-white/70 border border-white/15">desarrollo simple (1 equipo)</button>}
           <button onClick={() => { setPhase("chat") }} className="px-6 py-3 rounded-xl font-semibold text-white/70 border border-white/15">Agregar más info</button>
         </div>
       </main>
