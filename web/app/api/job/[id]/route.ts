@@ -1,9 +1,11 @@
 /** GET /api/job/[id] — full job artifacts (SQL, ER diagram, links) for the build page. */
 import { NextRequest, NextResponse } from "next/server"
 import { getJob } from "@/lib/jobs"
+import { canAccessJob } from "@/lib/auth"
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  if (!(await canAccessJob(id, request))) return NextResponse.json({ error: "forbidden" }, { status: 403 })
   const job = await getJob(id)
   if (!job) return NextResponse.json({ error: "not_found" }, { status: 404 })
   return NextResponse.json({

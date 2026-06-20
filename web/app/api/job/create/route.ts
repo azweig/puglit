@@ -2,13 +2,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createJob } from "@/lib/jobs"
 import { isConfigured } from "@/lib/db"
-import { getSession } from "@/lib/auth"
+import { getSession, isServiceRequest } from "@/lib/auth"
 import type { IntakeAnswers } from "@/lib/generate"
 
 export async function POST(request: NextRequest) {
   if (!isConfigured()) return NextResponse.json({ error: "db_not_configured" }, { status: 503 })
   const session = await getSession()
-  if (!session) return NextResponse.json({ error: "auth_required" }, { status: 401 })
+  if (!session && !isServiceRequest(request)) return NextResponse.json({ error: "auth_required" }, { status: 401 })
   try {
     const a = await request.json()
     if (!a.name || !a.what) return NextResponse.json({ error: "missing" }, { status: 400 })
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       references: a.references ? String(a.references).slice(0, 8000) : undefined,
       archetype: a.archetype ? String(a.archetype).slice(0, 40) : undefined,
     }
-    const id = await createJob({ answers, branding: a.branding, chosenLanding: a.landingHtml, creds: a.creds, userEmail: session.email })
+    const id = await createJob({ answers, branding: a.branding, chosenLanding: a.landingHtml, creds: a.creds, userEmail: session?.email || a.userEmail || null })
     return NextResponse.json({ ok: true, id })
   } catch (e) {
     console.error("[job/create]", (e as Error).message)

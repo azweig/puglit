@@ -87,7 +87,7 @@ async function api(p, method = "GET") {
 async function createAndDrive() {
   let id = process.env.JOB_ID
   if (!id) {
-    const created = await fetch(`${BASE}/api/job/create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...IDEA }) }).then((r) => r.json())
+    const created = await fetch(`${BASE}/api/job/create`, { method: "POST", headers: { "Content-Type": "application/json", "x-puglit-service": process.env.PUGLIT_SERVICE_TOKEN || "puglit-local-service" }, body: JSON.stringify({ ...IDEA }) }).then((r) => r.json())
     if (!created.id) throw new Error("create failed: " + JSON.stringify(created))
     id = created.id
   }
@@ -98,7 +98,7 @@ async function createAndDrive() {
   const t0 = Date.now()
   for (let i = 0; i < 400; i++) {
     let job
-    try { job = await fetch(`${BASE}/api/job/${id}/advance`, { method: "POST" }).then((r) => r.json()) } catch { await new Promise((r) => setTimeout(r, 1500)); continue }
+    try { job = await fetch(`${BASE}/api/job/${id}/advance`, { method: "POST", headers: { "x-puglit-service": process.env.PUGLIT_SERVICE_TOKEN || "puglit-local-service" } }).then((r) => r.json()) } catch { await new Promise((r) => setTimeout(r, 1500)); continue }
     const run = (job.steps || []).find((s) => s.status === "running")
     const done = (job.steps || []).filter((s) => s.status === "done").length
     const total = (job.steps || []).length

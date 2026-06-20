@@ -40,6 +40,25 @@ export async function clearSessionCookie(): Promise<void> {
   const c = await cookies(); c.delete(COOKIE)
 }
 
+// ── job access control: a build is visible/drivable by its OWNER, or by an internal
+//    service caller (build-local.mjs drives /advance with no session). Override the token
+//    via PUGLIT_SERVICE_TOKEN for real isolation; the default keeps local dev working.
+const SERVICE_TOKEN = process.env.PUGLIT_SERVICE_TOKEN || "puglit-local-service"
+export function isServiceRequest(req: Request): boolean {
+  return req.headers.get("x-puglit-service") === SERVICE_TOKEN
+}
+async function userOwnsJob(jobId: string, email?: string | null): Promise<boolean> {
+  if (!email) return false
+  const { rows } = await query<{ user_email: string | null }>(`SELECT user_email FROM puglit_jobs WHERE id=$1`, [jobId])
+  if (!rows.length) return true // not found → let the handler 404 itself
+  return !rows[0].user_email || rows[0].user_email === email // legacy null-owner builds stay open
+}
+export async function canAccessJob(jobId: string, req: Request): Promise<boolean> {
+  if (isServiceRequest(req)) return true
+  const s = await getSession()
+  return userOwnsJob(jobId, s?.email)
+}
+
 const hashCode = (email: string, code: string) => createHash("sha256").update(`${email}:${code}:${SECRET}`).digest("hex")
 
 /** Generate + store a fresh login code for an email (returns it so the caller can email it). */

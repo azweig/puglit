@@ -11,15 +11,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { createJob } from "@/lib/jobs"
 import { query } from "@/lib/db"
 import { isConfigured } from "@/lib/db"
-import { getSession } from "@/lib/auth"
+import { getSession, isServiceRequest } from "@/lib/auth"
 import type { IntakeAnswers } from "@/lib/generate"
 
 export async function POST(request: NextRequest) {
   if (!isConfigured()) return NextResponse.json({ ok: false, error: "db_not_configured" }, { status: 503 })
   const session = await getSession()
-  if (!session) return NextResponse.json({ ok: false, error: "auth_required" }, { status: 401 })
+  const service = isServiceRequest(request) // serve-winner.sh runs in the terminal (no cookie)
+  if (!session && !service) return NextResponse.json({ ok: false, error: "auth_required" }, { status: 401 })
   try {
-    const a = (await request.json().catch(() => ({}))) as Partial<IntakeAnswers> & { jobId?: string }
+    const a = (await request.json().catch(() => ({}))) as Partial<IntakeAnswers> & { jobId?: string; userEmail?: string }
     const { rows } = await query<{ team: string; artifacts: any }>(
       `SELECT team, artifacts FROM puglit_rounds
        WHERE ${a.jobId ? "job_id=$1 AND " : ""}iteration=1 AND winner=true
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
       modules: [],
       email: String(a.email || "").slice(0, 255),
     }
-    const id = await createJob({ answers, branding: null, winnerBlueprint: bp, userEmail: session.email })
+    const id = await createJob({ answers, branding: null, winnerBlueprint: bp, userEmail: session?.email || a.userEmail || null })
     return NextResponse.json({ ok: true, jobId: id, builtFrom: win.team, watch: `/build/${id}` })
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 })

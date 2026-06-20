@@ -24,7 +24,8 @@ PG_PORT="${PG_PORT:-5432}"
 MODEL="${MODEL:-qwen2.5-coder:32b}"
 
 echo "→ creando job de build con el blueprint GANADOR…"
-RESP="$(curl -s -X POST "$BASE/api/genetic/build" -H 'content-type: application/json' -d "{\"name\":\"$NAME\",\"what\":\"$WHAT\"}")"
+SVC="${PUGLIT_SERVICE_TOKEN:-puglit-local-service}"
+RESP="$(curl -s -X POST "$BASE/api/genetic/build" -H 'content-type: application/json' -H "x-puglit-service: $SVC" -d "{\"name\":\"$NAME\",\"what\":\"$WHAT\"${EMAIL:+,\"userEmail\":\"$EMAIL\"}}")"
 JOB_ID="$(echo "$RESP" | jq -r '.jobId // empty')"
 if [ -z "$JOB_ID" ]; then echo "✗ no se creó el job (¿corriste un torneo primero?). resp: $RESP"; exit 1; fi
 echo "→ job $JOB_ID · ganador: $(echo "$RESP" | jq -r '.builtFrom') · construyendo + sirviendo en :$PORT (paciencia: el build con el 32B tarda)"
