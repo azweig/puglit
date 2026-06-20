@@ -22,7 +22,7 @@ import { execSync, spawnSync, spawn } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
-const ROOT = path.resolve(process.argv[2] || "/Users/alvaroz/projects/2026/puglit")
+const ROOT = path.resolve(process.argv[2] || process.env.PUGLIT_ROOT || "/Users/alvaroz/projects/2026/puglit")
 const SPINE = path.join(ROOT, "spine")
 const BASE = process.env.BASE || "http://localhost:3000"
 const SLUG = process.env.SLUG || "demo-local"
@@ -33,8 +33,9 @@ const APP_DB = `puglit_app_${SLUG.replace(/[^a-z0-9]/g, "_")}`
 const MAX_ROUNDS = parseInt(process.env.MAX_ROUNDS || "6")
 const OLLAMA = "http://localhost:11434/api/chat"
 const DIR = path.join("/tmp", `puglit-${SLUG}`)
-const PGBIN = "/opt/homebrew/opt/postgresql@16/bin"
-process.env.PATH = `${PGBIN}:${process.env.PATH}`
+// Mac uses Homebrew's keg path; on Linux/the pod psql is already on PATH. Only prepend if it exists.
+const PGBIN = process.env.PGBIN || "/opt/homebrew/opt/postgresql@16/bin"
+if (fs.existsSync(PGBIN)) process.env.PATH = `${PGBIN}:${process.env.PATH}`
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
 const stripFences = (s) => s.replace(/^\s*```[a-z]*\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim()
