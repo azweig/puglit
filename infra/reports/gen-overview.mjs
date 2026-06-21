@@ -51,7 +51,7 @@ const doc1 = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
   <div class="sub">Una fábrica genética de software: un enjambre de agentes de IA que construye, evoluciona y se auto-corrige — y arma cualquier producto componiendo módulos reutilizables.</div>
   <div class="meta">Documento de proyecto · para entender y criticar · 2026-06-21</div>
   <div style="margin-top:34px">
-    <span class="pill">49 módulos reutilizables</span><span class="pill">Enjambre genético multi-modelo</span>
+    <span class="pill">${mods.length} módulos reutilizables</span><span class="pill">Enjambre genético multi-modelo</span>
     <span class="pill">Registro vivo auto-mejorable</span><span class="pill">100% open-source / self-host</span>
     <span class="pill">Auto-repair en build-time</span>
   </div>
@@ -107,7 +107,7 @@ const doc1 = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 <p>Abstracción de proveedor <b>por tier</b>: codegen pesado en la A40 local; tiers livianos y boost vía <b>freellmapi</b> (16+ providers gratis, failover automático, da acceso a modelos más grandes de los que entran en la GPU: Qwen3-235B, DeepSeek V4). El <b>juez</b> se mantiene local y consistente.</p>
 
 <div class="page-break"></div>
-<h2>4 · El catálogo de módulos (49)</h2>
+<h2>4 · El catálogo de módulos (${mods.length})</h2>
 <p class="muted">Cada módulo se inyecta solo cuando el producto lo necesita (detección por keywords), sigue un patrón uniforme, y es liviano (cliente HTTP) o gateway-backed (el motor pesado corre en Docker aparte). Todos BYO-credentials.</p>
 ${moduleRows()}
 
@@ -143,8 +143,8 @@ fs.writeFileSync("/tmp/puglit-overview.html", doc1)
 const counts = order.map((c) => `<div class="stat"><div class="big">${mods.filter((m) => m.cat === c).length}</div><div class="muted">${catName[c]}</div></div>`).join("")
 const doc2 = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</style></head><body><div class="page">
 <h1>Puglit — Catálogo de módulos</h1>
-<p class="lead">Referencia rápida de los 49 building blocks que el enjambre compone automáticamente.</p>
-<div style="display:flex;justify-content:space-around;background:#faf9ff;border:1px solid #ece8ff;border-radius:12px;margin:16px 0">${counts}<div class="stat"><div class="big">49</div><div class="muted">TOTAL</div></div></div>
+<p class="lead">Referencia rápida de los ${mods.length} building blocks que el enjambre compone automáticamente.</p>
+<div style="display:flex;justify-content:space-around;background:#faf9ff;border:1px solid #ece8ff;border-radius:12px;margin:16px 0">${counts}<div class="stat"><div class="big">${mods.length}</div><div class="muted">TOTAL</div></div></div>
 ${moduleRows()}
 <div class="foot">Generado desde lib/module-registry.ts · cada módulo: lib/&lt;name&gt;-module.ts + inyector deterministicX + entrada en el catálogo.</div>
 </div></body></html>`

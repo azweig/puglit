@@ -19,7 +19,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 </div>
 
 <h2>El modelo mental en una frase</h2>
-<p>Un <b>enjambre de agentes rivales</b> que compiten, son juzgados, evolucionan (XP/niveles/diario), y construyen productos <b>componiendo 49 módulos reutilizables</b> de un <b>catálogo vivo</b> que ellos mismos extienden y reparan.</p>
+<p>Un <b>enjambre de agentes rivales</b> que compiten, son juzgados, evolucionan (XP/niveles/diario), y construyen productos <b>componiendo ${mods.length} módulos reutilizables</b> de un <b>catálogo vivo</b> que ellos mismos extienden y reparan.</p>
 
 <h2>Cómo construye una app (pipeline)</h2>
 <p><code>blueprint → critique → brief → routes → pages → finalize</code></p>
@@ -37,7 +37,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 <li><b>auto-repair:</b> ante tabla fantasma, infiere el schema del uso (LLM) y lo agrega a <code>app.sql</code>. Detecta → arregla → re-escanea.</li>
 </ul>
 
-<h2>El catálogo vivo (49 módulos)</h2>
+<h2>El catálogo vivo (${mods.length} módulos)</h2>
 <p>Los agentes lo <b>VEN</b> (catálogo en el prompt), lo <b>EXTIENDEN</b> (harvest), lo <b>SANAN</b> (registerModule + versión). Persistido en Postgres + espejo en <code>modules/</code> (git).</p>
 <div class="box"><b>Los 49:</b> ${names}.</div>
 <p>Cada módulo: <code>lib/&lt;name&gt;-module.ts</code> con un inyector <code>deterministicX(config, bp)</code> + entrada en el registro. Patrón uniforme; liviano (cliente HTTP) o gateway-backed (motor pesado en Docker aparte). Todos BYO-credentials.</p>
