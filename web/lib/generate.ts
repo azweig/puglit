@@ -128,7 +128,7 @@ export function generateConfig(a: IntakeAnswers): DomainConfig {
         ctaPrimary: L.cta,
         ctaSecondary: L.cta2,
       },
-      socialProof: a.audience.trim() ? L.proof(a.audience.trim()) : undefined,
+      socialProof: (a.audience || "").trim() ? L.proof((a.audience || "").trim()) : undefined,
       valueProps: benefits.map((b, i) => ({ title: b, body: vpBodies[i % vpBodies.length] })),
       faq: L.faq(name, price, a.monetization),
       finalCta: { headline: L.finalCta(name), button: L.finalBtn },

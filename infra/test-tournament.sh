@@ -9,7 +9,7 @@ NAME="${1:-SciCalc}"
 WHAT="${2:-calculadora cientifica online: operaciones sin/cos/tan/log/ln/raiz/potencia, historial de calculos, memoria M+/M-/MR, modo grados/radianes}"
 
 echo "→ lanzando torneo: $NAME"
-JID="$(curl -s -X POST "$B/api/genetic/tournament" -H 'content-type: application/json' -d "{\"name\":\"$NAME\",\"what\":\"$WHAT\"}" | jq -r '.jobId // empty')"
+JID="$(curl -s -X POST "$B/api/genetic/tournament" -H 'content-type: application/json' -d "{\"name\":\"$NAME\",\"what\":\"$WHAT\",\"audience\":\"usuarios\",\"monetization\":\"free\"}" | jq -r '.jobId // empty')"
 if [ -z "$JID" ]; then echo "✗ no arrancó (¿server arriba? probá: curl -s $B/api/doctor)"; exit 1; fi
 echo "  jobId: $JID — 3 equipos diseñan + 3 jueces votan (~5-8 min). Seguí las fases:"
 
