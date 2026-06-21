@@ -42,6 +42,7 @@ import { deterministicTwoFA } from "@/lib/twofa-module"
 import { deterministicSms } from "@/lib/sms-module"
 import { deterministicPush } from "@/lib/push-module"
 import { deterministicOcr } from "@/lib/ocr-module"
+import { deterministicDocparse } from "@/lib/docparse-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1296,6 +1297,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const sms = deterministicSms(config, bp); if (sms) { pushFiles(sms.files); addSql(/CREATE TABLE IF NOT EXISTS sms_codes\b/, "SMS verification codes (Puglit sms)", sms.extraSql) }
     const push = deterministicPush(config, bp); if (push) pushFiles(push.files)
     const ocr = deterministicOcr(config, bp); if (ocr) pushFiles(ocr.files)
+    const docparse = deterministicDocparse(config, bp); if (docparse) pushFiles(docparse.files)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)

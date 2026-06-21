@@ -133,6 +133,34 @@ def ocr(r: OcrReq):
         return {"error": str(e)}
 
 
+class ParseReq(BaseModel):
+    url: Optional[str] = None
+    data_b64: Optional[str] = None
+    filename: str = "doc"
+
+
+@app.post("/parse")
+def parse(r: ParseReq):
+    """Any document (PDF/docx/pptx/xlsx/html/image) → clean Markdown (microsoft/markitdown).
+    The bridge from files to RAG/LLM. For the docparse module."""
+    try:
+        from markitdown import MarkItDown
+        md = MarkItDown()
+        if r.url:
+            res = md.convert(r.url)
+        else:
+            import base64, tempfile, os
+            raw = base64.b64decode(r.data_b64 or "")
+            ext = os.path.splitext(r.filename)[1] or ".bin"
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
+                f.write(raw)
+                path = f.name
+            res = md.convert(path)
+        return {"markdown": res.text_content}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("SCRAPER_PORT", "8200")))
