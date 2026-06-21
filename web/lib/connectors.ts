@@ -1,5 +1,7 @@
 /**
  * connectors.ts — reusable messaging/email CHANNEL components the swarm injects into a
+ * generated app. WhatsApp talks to a self-hosted OpenWA gateway over HTTP (no heavy deps in
+ * the app); email is universal IMAP+SMTP; Telegram is zero-dep. One Channel interface for all.
  * generated app (the same pattern as deterministicGeo): when a product needs WhatsApp, email
  * or Telegram, we drop in a pre-built, battle-tested connector instead of letting the agents
  * reinvent it. All share ONE interface (Channel) so a JARVIS-class app just iterates over
@@ -98,19 +100,42 @@ export const emailChannel: Channel = {
 }
 `
 
-// WhatsApp — open-source via @open-wa/wa-automate (QR scan on first run; session saved).
-const WHATSAPP = `import { create, type Client } from "@open-wa/wa-automate"
-import type { Channel } from "./types"
-// No official API: first run prints a QR (scan with your phone); session persists in ./.wa-session.
-let client: Client | null = null
+// WhatsApp — via the self-hosted OpenWA gateway (github.com/rmyndharis/OpenWA), a separate
+// Docker service exposing a REST API + webhooks. Our app is a thin HTTP client → ZERO heavy
+// deps (the puppeteer/chromium engine runs in OpenWA's container, not here). Incoming messages
+// arrive via the webhook route below. env: OPENWA_URL, OPENWA_KEY, OPENWA_SESSION, PUBLIC_URL
+const WHATSAPP = `import type { Channel } from "./types"
+const base = () => (process.env.OPENWA_URL || "http://localhost:3001").replace(/\\/$/, "")
+const headers = () => ({ "X-API-Key": process.env.OPENWA_KEY || "", "Content-Type": "application/json" })
+const session = () => process.env.OPENWA_SESSION || "default"
 export const whatsappChannel: Channel = {
   name: "whatsapp",
-  async start(onMessage) {
-    client = await create({ sessionId: "app", headless: true, qrTimeout: 0, authTimeout: 0, sessionDataPath: "./.wa-session", multiDevice: true })
-    client.onMessage(async (m: any) => { if (m.body) await onMessage({ channel: "whatsapp", from: m.from, text: m.body, ts: m.t * 1000, raw: m }) })
+  async start() {
+    // tell OpenWA to push incoming messages to our webhook route. (Scan the QR once via OpenWA.)
+    const pub = process.env.PUBLIC_URL
+    if (!pub) { console.warn("[whatsapp] set PUBLIC_URL so OpenWA can push to /api/connectors/whatsapp/webhook"); return }
+    await fetch(\`\${base()}/api/sessions/\${session()}/webhooks\`, { method: "POST", headers: headers(), body: JSON.stringify({ url: pub.replace(/\\/$/, "") + "/api/connectors/whatsapp/webhook", events: ["message.received"] }) }).catch((e) => console.error("[whatsapp]", e))
   },
-  async send(to, text) { if (client) await client.sendText(to.includes("@") ? to : to + "@c.us", text) },
-  async stop() { if (client) await client.kill() },
+  async send(to, text) {
+    const chatId = to.includes("@") ? to : to + "@c.us"
+    await fetch(\`\${base()}/api/sessions/\${session()}/messages/send-text\`, { method: "POST", headers: headers(), body: JSON.stringify({ chatId, text }) })
+  },
+}
+`
+
+// Webhook receiver for OpenWA → persists inbound WhatsApp messages to the omnichannel inbox.
+const WA_WEBHOOK = `import { NextRequest, NextResponse } from "next/server"
+import { pool } from "@/lib/db"
+// OpenWA posts here on message.received (configure PUBLIC_URL). Shape: { data: { from, body } }.
+export async function POST(req: NextRequest) {
+  try {
+    const e = await req.json()
+    const m = e?.data || e?.payload || e?.message || e
+    const from = m?.from || m?.chatId || ""
+    const body = m?.body || m?.text || ""
+    if (from && body) await pool().query("INSERT INTO channel_messages (channel, sender, body) VALUES ('whatsapp', $1, $2)", [from, body])
+  } catch (err) { console.error("[whatsapp webhook]", err) }
+  return NextResponse.json({ ok: true })
 }
 `
 
@@ -147,7 +172,13 @@ export function deterministicConnectors(config: DomainConfig, bp: Blueprint): { 
   const deps: Record<string, string> = {}
   const imports: string[] = []
   const list: string[] = []
-  if (wa) { files.push({ path: "lib/connectors/whatsapp.ts", content: WHATSAPP }); deps["@open-wa/wa-automate"] = "^4.72.0"; imports.push(`import { whatsappChannel } from "./whatsapp"`); list.push("whatsappChannel") }
+  if (wa) {
+    // WhatsApp = thin HTTP client to the OpenWA gateway (separate Docker service) → no heavy
+    // deps in the app. Plus the webhook route that receives inbound messages.
+    files.push({ path: "lib/connectors/whatsapp.ts", content: WHATSAPP })
+    files.push({ path: "app/api/connectors/whatsapp/webhook/route.ts", content: WA_WEBHOOK })
+    imports.push(`import { whatsappChannel } from "./whatsapp"`); list.push("whatsappChannel")
+  }
   if (em) { files.push({ path: "lib/connectors/email.ts", content: EMAIL }); deps["imapflow"] = "^1.0.171"; deps["nodemailer"] = "^6.9.14"; imports.push(`import { emailChannel } from "./email"`); list.push("emailChannel") }
   if (tg) { files.push({ path: "lib/connectors/telegram.ts", content: TELEGRAM }); imports.push(`import { telegramChannel } from "./telegram"`); list.push("telegramChannel") }
 
