@@ -23,6 +23,8 @@ import { deterministicAgent } from "@/lib/agent-module"
 import { deterministicVoice } from "@/lib/voice-module"
 import { deterministicMaps } from "@/lib/maps-module"
 import { deterministicScraper } from "@/lib/scraper-module"
+import { deterministicPayments } from "@/lib/payments-module"
+import { deterministicSocialAuth } from "@/lib/social-auth-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1239,6 +1241,20 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // SCRAPER (Scrapling stealth + ScrapeGraph-ai LLM extract, via a gateway) — for LinkedIn/paywalls/monitoring.
     const scraper = deterministicScraper(config, bp)
     if (scraper) for (const f of scraper.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+    // PAYMENTS (Stripe / MercadoPago / PayU, by country) — the app just charges; module routes it.
+    const pay = deterministicPayments(config, bp)
+    if (pay) {
+      for (const f of pay.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+      const sqlF = files.find((f) => f.path === "sql/app.sql")
+      if (sqlF && !/CREATE TABLE IF NOT EXISTS payments\b/.test(sqlF.content)) sqlF.content += `\n\n-- payments (Stripe/MercadoPago/PayU) — Puglit payments module\n${pay.extraSql}\n`
+    }
+    // SOCIAL AUTH (login + API access: Facebook/Instagram/LinkedIn/TikTok/Google OAuth).
+    const social = deterministicSocialAuth(config, bp)
+    if (social) {
+      for (const f of social.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+      const sqlF = files.find((f) => f.path === "sql/app.sql")
+      if (sqlF && !/CREATE TABLE IF NOT EXISTS social_accounts\b/.test(sqlF.content)) sqlF.content += `\n\n-- social accounts (OAuth login + tokens) — Puglit social-auth module\n${social.extraSql}\n`
+    }
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
