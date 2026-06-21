@@ -35,7 +35,10 @@ process.env.PGPASSWORD = process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD
 const APP_DB = `puglit_app_${SLUG.replace(/[^a-z0-9]/g, "_")}`
 const MAX_ROUNDS = parseInt(process.env.MAX_ROUNDS || "6")
 const OLLAMA = "http://localhost:11434/api/chat"
-const DIR = path.join("/tmp", `puglit-${SLUG}`)
+// Build DIR lives next to the spine (SAME filesystem) so the node_modules symlink is valid
+// for Turbopack (a symlink crossing filesystems — e.g. /tmp → /workspace — makes it panic)
+// and we avoid a 300MB node_modules copy (matters when disk is tight).
+const DIR = process.env.BUILD_DIR || path.join(ROOT, ".builds", `puglit-${SLUG}`)
 // Mac uses Homebrew's keg path; on Linux/the pod psql is already on PATH. Only prepend if it exists.
 const PGBIN = process.env.PGBIN || "/opt/homebrew/opt/postgresql@16/bin"
 if (fs.existsSync(PGBIN)) process.env.PATH = `${PGBIN}:${process.env.PATH}`
@@ -149,10 +152,12 @@ function assemble({ config, appFiles, sql, seedSql }) {
   // copy spine app (exclude node_modules + the dropped template surfaces)
   execSync(`rsync -a --exclude node_modules ${SPINE}/ ${DIR}/`)
   for (const d of SPINE_DROP) execSync(`rm -rf ${path.join(DIR, d)}`)
-  // node_modules: a REAL dir (not a symlink — Turbopack rejects symlinks out of root).
-  // APFS clonefile (`cp -c`) is instant + no extra disk; fall back to symlink if it fails.
-  try { execSync(`cp -Rc ${SPINE}/node_modules ${DIR}/node_modules`) }
-  catch { try { execSync(`cp -R ${SPINE}/node_modules ${DIR}/node_modules`) } catch { fs.symlinkSync(path.join(SPINE, "node_modules"), path.join(DIR, "node_modules")) } }
+  // node_modules: symlink to the spine's. DIR is on the SAME filesystem as the spine now, so
+  // Turbopack accepts the symlink (it only rejects symlinks that cross filesystems) — instant,
+  // no 300MB copy, no disk pressure. APFS clonefile on Mac as a nicer alternative if it works.
+  fs.rmSync(path.join(DIR, "node_modules"), { recursive: true, force: true })
+  try { execSync(`cp -Rc ${SPINE}/node_modules ${DIR}/node_modules 2>/dev/null`) }
+  catch { fs.symlinkSync(path.join(SPINE, "node_modules"), path.join(DIR, "node_modules"), "dir") }
   // spine SQL migrations
   execSync(`mkdir -p ${path.join(DIR, "sql")}`)
   for (const f of ["001_core.sql", "002_auth.sql", "003_records.sql"]) {

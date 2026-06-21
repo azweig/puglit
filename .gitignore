@@ -15,3 +15,5 @@ coverage/
 *.tsbuildinfo
 .turbo/
 generated/
+/web/.builds/
+/.builds/
