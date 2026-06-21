@@ -29,6 +29,9 @@ const SLUG = process.env.SLUG || "demo-local"
 const PORT = process.env.PORT || "4311"
 const MODEL = process.env.MODEL || "qwen2.5-coder:7b"
 const PG_PORT = process.env.PG_PORT || "5433"
+// psql/createdb/dropdb need a password non-interactively (the pod's postgres requires one) —
+// otherwise they hang on a "Password:" prompt. Default to the local/pod convention.
+process.env.PGPASSWORD = process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || "postgres"
 const APP_DB = `puglit_app_${SLUG.replace(/[^a-z0-9]/g, "_")}`
 const MAX_ROUNDS = parseInt(process.env.MAX_ROUNDS || "6")
 const OLLAMA = "http://localhost:11434/api/chat"
