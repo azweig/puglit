@@ -18,6 +18,7 @@ import { chatJSON, chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
 import { PLAYBOOK } from "@/lib/playbooks"
 import { deterministicConnectors } from "@/lib/connectors"
+import { deterministicIntegrations } from "@/lib/integrations"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -1222,6 +1223,9 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
       if (sqlF && !/channel_messages/.test(sqlF.content)) sqlF.content += `\n\n-- omnichannel inbox (Puglit connectors)\n${conn.extraSql}\n`
       s.connectorDeps = conn.deps // surfaced to the package.json assembler
     }
+    // OAuth/SaaS integration plumbing (Nango) — reused so the app never reinvents OAuth.
+    const integ = deterministicIntegrations(config, bp)
+    if (integ) for (const f of integ.files) if (!files.some((x) => x.path === f.path)) files.push(f)
     reconcilePageRoutes(files)
     integratePageRoutes(files)
     if (bp.kind === "accounts") {
