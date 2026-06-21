@@ -16,9 +16,10 @@ import type { Blueprint } from "@/lib/app-builder"
 type AppFile = { path: string; content: string }
 
 const TYPES = `// Uniform channel interface — every connector implements this, so an app can treat
-// WhatsApp / email / Telegram identically (a JARVIS-style "omnichannel inbox").
+// WhatsApp / email / Telegram / Slack / Discord / Teams identically (a JARVIS-style
+// "omnichannel inbox"). Add a channel here and it just works across the app.
 export interface IncomingMessage {
-  channel: "whatsapp" | "email" | "telegram"
+  channel: "whatsapp" | "email" | "telegram" | "slack" | "discord" | "teams"
   from: string
   text: string
   subject?: string
@@ -139,6 +140,70 @@ export async function POST(req: NextRequest) {
 }
 `
 
+// Slack — bidirectional. send via chat.postMessage (bot token); receive via Events API webhook.
+const SLACK = `import type { Channel } from "./types"
+export const slackChannel: Channel = {
+  name: "slack",
+  async start() {
+    if (!process.env.SLACK_BOT_TOKEN) console.warn("[slack] set SLACK_BOT_TOKEN + point the Events API at /api/connectors/slack/webhook")
+  },
+  async send(to, text) {
+    await fetch("https://slack.com/api/chat.postMessage", { method: "POST", headers: { Authorization: "Bearer " + process.env.SLACK_BOT_TOKEN, "Content-Type": "application/json" }, body: JSON.stringify({ channel: to, text }) })
+  },
+}
+`
+const SLACK_WEBHOOK = `import { NextRequest, NextResponse } from "next/server"
+import { pool } from "@/lib/db"
+// Slack Events API receiver → persists inbound messages. Handles the URL-verification handshake.
+export async function POST(req: NextRequest) {
+  const b = await req.json().catch(() => ({} as any))
+  if (b.type === "url_verification") return NextResponse.json({ challenge: b.challenge })
+  const e = b.event
+  if (e?.type === "message" && e.text && !e.bot_id) {
+    try { await pool().query("INSERT INTO channel_messages (channel, sender, body) VALUES ('slack', $1, $2)", [e.user || e.channel, e.text]) } catch (err) { console.error("[slack]", err) }
+  }
+  return NextResponse.json({ ok: true })
+}
+`
+
+// Discord — send-only via an Incoming Webhook URL (no bot needed; for receiving run a gateway bot).
+const DISCORD = `import type { Channel } from "./types"
+export const discordChannel: Channel = {
+  name: "discord",
+  async start() {},
+  async send(_to, text) {
+    const url = process.env.DISCORD_WEBHOOK_URL
+    if (!url) { console.warn("[discord] set DISCORD_WEBHOOK_URL"); return }
+    await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: text }) })
+  },
+}
+`
+
+// Teams — send via an Incoming Webhook (Connector) URL.
+const TEAMS = `import type { Channel } from "./types"
+export const teamsChannel: Channel = {
+  name: "teams",
+  async start() {},
+  async send(_to, text) {
+    const url = process.env.TEAMS_WEBHOOK_URL
+    if (!url) { console.warn("[teams] set TEAMS_WEBHOOK_URL"); return }
+    await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })
+  },
+}
+`
+
+// Apprise — ONE notify() fans out to 80+ platforms (Discord, Teams, Slack, SMS, email, Matrix…)
+// via a self-hosted apprise-api gateway (Docker: caronc/apprise). The outbound "alert anywhere".
+const APPRISE = `// env: APPRISE_URL (apprise-api), APPRISE_KEY (saved config id, default "puglit")
+export async function notify(message: string, opts?: { title?: string; tags?: string }) {
+  const url = (process.env.APPRISE_URL || "http://localhost:8000").replace(/\\/$/, "")
+  const key = process.env.APPRISE_KEY || "puglit"
+  try {
+    await fetch(\`\${url}/notify/\${key}\`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: message, title: opts?.title, tag: opts?.tags }) })
+  } catch (e) { console.error("[apprise]", (e as Error).message) }
+}
+`
+
 /** Unified inbox table — every channel's messages land here (omnichannel). */
 const MESSAGES_SQL = `CREATE TABLE IF NOT EXISTS channel_messages (
   id BIGSERIAL PRIMARY KEY,
@@ -163,10 +228,16 @@ export function deterministicConnectors(config: DomainConfig, bp: Blueprint): { 
   const wantsWA = /whatsapp|wpp|wa[\s_-]?bot|openwa/.test(hay)
   const wantsEmail = /email|e-mail|correo|mail|imap|smtp|gmail|outlook|bandeja|inbox/.test(hay)
   const wantsTg = /telegram/.test(hay)
-  // a generic "messaging / assistant / notifications / chief of staff" product → give all 3
-  const wantsAll = /mensajer|messaging|asistente|assistant|chief of staff|jarvis|omnichannel|notif/.test(hay)
+  const wantsSlack = /slack/.test(hay)
+  const wantsDiscord = /discord/.test(hay)
+  const wantsTeams = /teams|microsoft teams/.test(hay)
+  const wantsNotify = /notif|alert|aviso|apprise/.test(hay)
+  // a generic "messaging / assistant / chief of staff" product → wire ALL channels + notify
+  const wantsAll = /mensajer|messaging|asistente|assistant|chief of staff|jarvis|omnichannel/.test(hay)
   const wa = wantsWA || wantsAll, em = wantsEmail || wantsAll, tg = wantsTg || wantsAll
-  if (!wa && !em && !tg) return null
+  const sl = wantsSlack || wantsAll, dc = wantsDiscord || wantsAll, tm = wantsTeams || wantsAll
+  const ap = wantsNotify || wantsAll
+  if (!wa && !em && !tg && !sl && !dc && !tm && !ap) return null
 
   const files: AppFile[] = [{ path: "lib/connectors/types.ts", content: TYPES }]
   const deps: Record<string, string> = {}
@@ -181,11 +252,21 @@ export function deterministicConnectors(config: DomainConfig, bp: Blueprint): { 
   }
   if (em) { files.push({ path: "lib/connectors/email.ts", content: EMAIL }); deps["imapflow"] = "^1.0.171"; deps["nodemailer"] = "^6.9.14"; imports.push(`import { emailChannel } from "./email"`); list.push("emailChannel") }
   if (tg) { files.push({ path: "lib/connectors/telegram.ts", content: TELEGRAM }); imports.push(`import { telegramChannel } from "./telegram"`); list.push("telegramChannel") }
+  if (sl) {
+    files.push({ path: "lib/connectors/slack.ts", content: SLACK })
+    files.push({ path: "app/api/connectors/slack/webhook/route.ts", content: SLACK_WEBHOOK })
+    imports.push(`import { slackChannel } from "./slack"`); list.push("slackChannel")
+  }
+  if (dc) { files.push({ path: "lib/connectors/discord.ts", content: DISCORD }); imports.push(`import { discordChannel } from "./discord"`); list.push("discordChannel") }
+  if (tm) { files.push({ path: "lib/connectors/teams.ts", content: TEAMS }); imports.push(`import { teamsChannel } from "./teams"`); list.push("teamsChannel") }
+  // Apprise notifier (outbound fan-out to 80+ platforms) — exported alongside the channels.
+  const notifyExport = ap ? `\nexport { notify } from "./apprise"` : ""
+  if (ap) files.push({ path: "lib/connectors/apprise.ts", content: APPRISE })
 
   // index that wires the included channels into one array + a startAll() helper
   files.push({
     path: "lib/connectors/index.ts",
-    content: `import type { Channel, IncomingMessage } from "./types"\n${imports.join("\n")}\nexport type { Channel, IncomingMessage }\nexport const channels: Channel[] = [${list.join(", ")}]\n/** Start every channel; each inbound message is persisted to channel_messages + handed to onMessage. */\nexport async function startAll(onMessage: (m: IncomingMessage) => void | Promise<void>) {\n  await Promise.all(channels.map((c) => c.start(onMessage).catch((e) => console.error("[" + c.name + "]", e))))\n}\n`,
+    content: `import type { Channel, IncomingMessage } from "./types"\n${imports.join("\n")}\nexport type { Channel, IncomingMessage }${notifyExport}\nexport const channels: Channel[] = [${list.join(", ")}]\n/** Start every channel; each inbound message is persisted to channel_messages + handed to onMessage. */\nexport async function startAll(onMessage: (m: IncomingMessage) => void | Promise<void>) {\n  await Promise.all(channels.map((c) => c.start(onMessage).catch((e) => console.error("[" + c.name + "]", e))))\n}\n`,
   })
   return { files, extraSql: MESSAGES_SQL, deps }
 }
