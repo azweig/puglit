@@ -26,6 +26,16 @@ import { deterministicScraper } from "@/lib/scraper-module"
 import { deterministicPayments } from "@/lib/payments-module"
 import { deterministicSocialAuth } from "@/lib/social-auth-module"
 import { deterministicCrypto, cryptoFiles } from "@/lib/crypto-module"
+import { deterministicStorage } from "@/lib/storage-module"
+import { deterministicQueue } from "@/lib/queue-module"
+import { deterministicSearch } from "@/lib/search-module"
+import { deterministicRealtime } from "@/lib/realtime-module"
+import { deterministicPdf } from "@/lib/pdf-module"
+import { deterministicMedia } from "@/lib/media-module"
+import { deterministicBilling } from "@/lib/billing-module"
+import { deterministicLlm } from "@/lib/llm-module"
+import { deterministicRag } from "@/lib/rag-module"
+import { deterministicImageGen } from "@/lib/imagegen-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1260,6 +1270,20 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // tokens & secrets aren't plaintext, or on its own when the product handles secrets/PII.
     const crypto = deterministicCrypto(config, bp) || (pay || social ? cryptoFiles() : null)
     if (crypto) for (const f of crypto.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+    // ── the 10 foundational modules: each injects files (+ optional SQL appended to app.sql) ──
+    const appSql = () => files.find((f) => f.path === "sql/app.sql")
+    const addSql = (marker: RegExp, label: string, sql: string) => { const f = appSql(); if (f && !marker.test(f.content)) f.content += `\n\n-- ${label}\n${sql}\n` }
+    const pushFiles = (fs: { path: string; content: string }[]) => { for (const f of fs) if (!files.some((x) => x.path === f.path)) files.push(f) }
+    const storage = deterministicStorage(config, bp); if (storage) pushFiles(storage.files)
+    const queue = deterministicQueue(config, bp); if (queue) { pushFiles(queue.files); addSql(/CREATE TABLE IF NOT EXISTS jobs\b/, "background jobs (Puglit queue)", queue.extraSql) }
+    const search = deterministicSearch(config, bp); if (search) pushFiles(search.files)
+    const realtime = deterministicRealtime(config, bp); if (realtime) pushFiles(realtime.files)
+    const pdf = deterministicPdf(config, bp); if (pdf) pushFiles(pdf.files)
+    const media = deterministicMedia(config, bp); if (media) pushFiles(media.files)
+    const billing = deterministicBilling(config, bp); if (billing) { pushFiles(billing.files); addSql(/CREATE TABLE IF NOT EXISTS subscriptions\b/, "subscriptions + usage (Puglit billing)", billing.extraSql) }
+    const llm = deterministicLlm(config, bp); if (llm) pushFiles(llm.files)
+    const rag = deterministicRag(config, bp); if (rag) { pushFiles(rag.files); addSql(/CREATE TABLE IF NOT EXISTS rag_documents\b/, "pgvector RAG store (Puglit rag)", rag.extraSql) }
+    const imagegen = deterministicImageGen(config, bp); if (imagegen) pushFiles(imagegen.files)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)

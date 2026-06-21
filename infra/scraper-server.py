@@ -58,6 +58,58 @@ def extract(r: ExtractReq):
         return {"error": str(e)}
 
 
+class PdfReq(BaseModel):
+    html: str
+    landscape: bool = False
+    format: str = "A4"
+
+
+@app.post("/pdf")
+def pdf(r: PdfReq):
+    """HTML → PDF via the same Playwright/chromium (for the pdf module)."""
+    try:
+        from playwright.sync_api import sync_playwright
+        from fastapi import Response
+        with sync_playwright() as p:
+            b = p.chromium.launch()
+            page = b.new_page()
+            page.set_content(r.html, wait_until="networkidle")
+            data = page.pdf(format=r.format, landscape=r.landscape, print_background=True)
+            b.close()
+        return Response(content=data, media_type="application/pdf")
+    except Exception as e:
+        return {"error": str(e)}
+
+
+class ImageReq(BaseModel):
+    url: Optional[str] = None
+    data_b64: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    quality: int = 82
+    fmt: str = "webp"
+
+
+@app.post("/image")
+def image(r: ImageReq):
+    """Resize/optimize an image (for the media module). Returns base64 of the result."""
+    try:
+        import base64, io, urllib.request
+        from PIL import Image
+        if r.url:
+            raw = urllib.request.urlopen(r.url, timeout=20).read()
+        else:
+            raw = base64.b64decode(r.data_b64 or "")
+        im = Image.open(io.BytesIO(raw))
+        if r.width or r.height:
+            im.thumbnail((r.width or im.width, r.height or im.height))
+        out = io.BytesIO()
+        im.save(out, format=r.fmt.upper(), quality=r.quality)
+        return {"data_b64": base64.b64encode(out.getvalue()).decode(), "format": r.fmt, "width": im.width, "height": im.height}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("SCRAPER_PORT", "8200")))
