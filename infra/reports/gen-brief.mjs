@@ -39,7 +39,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 
 <h2>El catálogo vivo (${mods.length} módulos)</h2>
 <p>Los agentes lo <b>VEN</b> (catálogo en el prompt), lo <b>EXTIENDEN</b> (harvest), lo <b>SANAN</b> (registerModule + versión). Persistido en Postgres + espejo en <code>modules/</code> (git).</p>
-<div class="box"><b>Los 49:</b> ${names}.</div>
+<div class="box"><b>Los ${mods.length}:</b> ${names}.</div>
 <p>Cada módulo: <code>lib/&lt;name&gt;-module.ts</code> con un inyector <code>deterministicX(config, bp)</code> + entrada en el registro. Patrón uniforme; liviano (cliente HTTP) o gateway-backed (motor pesado en Docker aparte). Todos BYO-credentials.</p>
 
 <h2>Infra & principios</h2>

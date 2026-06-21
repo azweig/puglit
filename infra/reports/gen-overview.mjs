@@ -60,7 +60,7 @@ const doc1 = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 <h2>1 · El pitch en 60 segundos</h2>
 <p class="lead">La mayoría de los generadores de apps hacen CRUDs de molde. <b>Puglit apunta a construir cualquier producto</b> — juegos, marketplaces, asistentes omnicanal, fintech — haciéndolo de a poco y mejor en cada intento.</p>
 <p>La idea central: <b>no un agente, sino un enjambre genético</b>. Tres equipos rivales (Lean, Enterprise, Hacker), cada uno con un modelo distinto, diseñan el mismo producto en paralelo. Un <b>panel de jueces (triunvirato)</b> vota al ganador. El ganador <b>gana XP, sube de nivel y escribe un diario</b> de lecciones que aplica en la próxima ronda. El sistema <b>evoluciona</b>.</p>
-<p>Encima de eso hay una <b>fábrica de módulos</b>: 49 building blocks (pagos, omnicanal, auth social, voz, RAG, scraping, mapas, etc.) que el enjambre <b>inyecta automáticamente</b> según lo que el producto necesita — y que <b>crece sola</b>: si el enjambre construye algo nuevo y reutilizable, lo cosecha al catálogo; si encuentra un bug, sube la mejora.</p>
+<p>Encima de eso hay una <b>fábrica de módulos</b>: ${mods.length} building blocks (pagos, omnicanal, auth social, voz, RAG, scraping, mapas, etc.) que el enjambre <b>inyecta automáticamente</b> según lo que el producto necesita — y que <b>crece sola</b>: si el enjambre construye algo nuevo y reutilizable, lo cosecha al catálogo; si encuentra un bug, sube la mejora.</p>
 <div class="box ok"><b>La tesis:</b> con un catálogo lo bastante rico, construir software complejo se vuelve <b>componer módulos que ya existen + pegar la lógica del dominio</b>. Cada proyecto deja la fábrica más capaz que antes.</div>
 
 <h2>2 · ¿Por qué importa?</h2>
@@ -68,7 +68,7 @@ const doc1 = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 <div class="box"><b>Soberanía & costo</b><br>Todo es open-source y self-host (LLMs locales en una GPU A40 + un proxy de tiers gratuitos con ~1.7B tokens/mes). Sin lock-in, sin facturas por token, los datos no salen.</div>
 <div class="box"><b>BYO credentials</b><br>Nunca se guardan tokens de terceros: GitHub/Vercel/APIs se pasan por request. La seguridad es un principio de diseño, no un parche.</div>
 <div class="box"><b>Se auto-mejora</b><br>El registro vivo + el loop de XP + el auto-repair hacen que la calidad suba con el uso, no que se degrade.</div>
-<div class="box"><b>Cobertura real</b><br>49 módulos cubren SaaS, marketplace, fintech, social, B2B, AI y omnicanal — no un nicho.</div>
+<div class="box"><b>Cobertura real</b><br>${mods.length} módulos cubren SaaS, marketplace, fintech, social, B2B, AI y omnicanal — no un nicho.</div>
 </div>
 
 <div class="page-break"></div>
