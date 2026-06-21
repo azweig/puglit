@@ -110,6 +110,29 @@ def image(r: ImageReq):
         return {"error": str(e)}
 
 
+class OcrReq(BaseModel):
+    url: Optional[str] = None
+    data_b64: Optional[str] = None
+    lang: str = "eng+spa"
+
+
+@app.post("/ocr")
+def ocr(r: OcrReq):
+    """Image/scan → text (for the ocr module). Needs tesseract + pytesseract installed."""
+    try:
+        import base64, io, urllib.request
+        import pytesseract
+        from PIL import Image
+        if r.url:
+            raw = urllib.request.urlopen(r.url, timeout=20).read()
+        else:
+            raw = base64.b64decode(r.data_b64 or "")
+        text = pytesseract.image_to_string(Image.open(io.BytesIO(raw)), lang=r.lang)
+        return {"text": text.strip()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("SCRAPER_PORT", "8200")))
