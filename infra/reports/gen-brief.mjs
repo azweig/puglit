@@ -30,12 +30,25 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 <li><b>finalize:</b> inyección determinista de módulos (por keywords) + harvest de módulos nuevos + quality-gate.</li>
 </ul>
 
-<h2>El quality-gate (se auto-corrige)</h2>
+<h2>El quality-gate (se auto-corrige + RUNTIME GATE)</h2>
 <ul>
+<li><b>capability planner:</b> antes de inyectar, un LLM lee el producto + el catálogo y nombra las capacidades que necesita (caza lo que la regex no ve, ej. "ERP hospitalario").</li>
+<li><b>dependency graph:</b> cada módulo declara <code>requires</code>; el resolver auto-inyecta dependencias duras (social-auth→crypto) → ningún build sale roto por falta del módulo base.</li>
 <li><b>securityScan:</b> secrets hardcodeados, eval/exec, SQL injection, XSS.</li>
 <li><b>consistencyScan:</b> tablas fantasma (SQL→tabla nunca declarada) + imports inexistentes.</li>
-<li><b>auto-repair:</b> ante tabla fantasma, infiere el schema del uso (LLM) y lo agrega a <code>app.sql</code>. Detecta → arregla → re-escanea.</li>
+<li><b>auto-repair:</b> reconcilia la tabla fantasma contra la INTENCIÓN del arquitecto (no solo el uso, que puede estar mal) + backup. Detecta → arregla → re-escanea.</li>
+<li><b>runtime gate:</b> levanta la app y le pega a cada página (GET) — falla si hay 5xx/crash. <b>Static scan ≠ software que funciona.</b></li>
 </ul>
+
+<h2>Cómo se mide (evidencia, no mecanismo)</h2>
+<p>El KPI no es XP ni módulos creados, sino: <b>build_success_rate</b>, <b>smoke_pass_rate</b>, <b>acuerdo inter-juez</b> y la <b>ablación</b> (torneo vs un solo agente). Tabla <code>puglit_metrics</code> + <code>scorecard()</code>. Si el torneo no le gana al agente solo, sobra complejidad — y ahora se mide.</p>
+
+<h2>Quick start (el journey)</h2>
+<ol>
+<li>El usuario escribe: <i>"Quiero un SaaS de newsletter con Stripe y emails"</i>.</li>
+<li>Puglit: blueprint → planner de capacidades → torneo → finalize (inyección + deps + gate + runtime) → <code>generated/projects/&lt;user&gt;/001-newsletter/</code>.</li>
+<li>El usuario corre <code>docker-compose up</code> → app en localhost:3000.</li>
+</ol>
 
 <h2>El catálogo vivo (${mods.length} módulos)</h2>
 <p>Los agentes lo <b>VEN</b> (catálogo en el prompt), lo <b>EXTIENDEN</b> (harvest), lo <b>SANAN</b> (registerModule + versión). Persistido en Postgres + espejo en <code>modules/</code> (git).</p>
@@ -52,15 +65,10 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 <li><b>Gateways:</b> <code>setup-gateways.sh</code> levanta MinIO, Meilisearch, apprise, n8n, Nango, scraper-server (scrape/pdf/image/ocr/parse/docgen), pgvector, freellmapi.</li>
 </ul>
 
-<h2>Para criticarlo, atacá acá</h2>
-<ul>
-<li>Techo de modelos locales (no frontier); freellmapi sin SLA.</li>
-<li>Reverse-APIs (scraper/LinkedIn) = riesgo de ban.</li>
-<li>Inyección por keywords puede sobre/sub-disparar.</li>
-<li>Carga operativa de los gateways Docker.</li>
-<li>Auto-repair solo cubre tablas fantasma (security solo se flaggea).</li>
-<li>Prueba de fuego real: ¿cada app generada corre 100% siempre?</li>
-</ul>
+<h2>Críticas — resueltas (v2) vs. abiertas</h2>
+<p><b>Resueltas tras la ronda de crítica:</b> runtime gate (ya se ejecuta la app), inyección frágil → capability planner, falta de grafo de deps → <code>requires</code>+resolver, auto-repair que persistía alucinaciones → reconcilia contra intención + backup, sin métricas → <code>puglit_metrics</code>+scorecard, catalog rot → ciclo de promoción, contaminación de lecciones → relevance-floor + decay, jurado caído → circuit breaker (draft mode), rúbrica del juez ambigua → anclas explícitas + voto por diseño completo.</p>
+<p><b>Aclaraciones:</b> el juez vota el DISEÑO COMPLETO de un equipo (no ensambla piezas Frankenstein); "BYO credentials" (creds de servicio en runtime, nunca persistidas) y "crypto AES-256-GCM" (PII del usuario final) son cosas distintas, no contradicción.</p>
+<p><b>Abiertas (honestas):</b> el techo lo manda el modelo base local (no-frontier) + juez local ruidoso; freellmapi sin SLA (free-tiers frágiles); reverse-APIs (scraper/LinkedIn) = riesgo de ban; barrera de entrada alta (GPU seria + ~8 containers); falta la ablación medida que pruebe que el torneo le gana a un agente solo (ahora instrumentada, falta correrla).</p>
 
 <div class="foot">Puglit Master Brief · generado desde el repo · 2026-06-21</div>
 </div></body></html>`

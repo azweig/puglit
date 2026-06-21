@@ -83,13 +83,14 @@ const doc1 = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 <p><code>blueprint → critique → brief → routes → pages → finalize</code></p>
 <ul>
 <li><b>blueprint:</b> el arquitecto diseña tablas, operaciones y páginas reales del producto (no un admin CRUD). <b>Ve el catálogo de módulos</b> en su prompt y reusa en vez de reinventar.</li>
-<li><b>finalize:</b> inyección determinista de módulos (detección por keywords), <b>harvest</b> de módulos nuevos, y el <b>quality gate</b> (abajo).</li>
+<li><b>finalize:</b> <b>capability planner</b> (LLM nombra capacidades) → inyección determinista de módulos + <b>resolver de dependencias</b> (auto-inyecta <code>requires</code>) → <b>harvest</b> → <b>quality gate + runtime gate</b> (abajo).</li>
 </ul>
-<h3>3.3 · El quality gate (swarm-checks + auto-repair)</h3>
+<h3>3.3 · El quality gate (swarm-checks + auto-repair + runtime gate)</h3>
 <ul>
 <li><b>securityScan</b> (estilo SkillSpector): secrets hardcodeados, <code>eval</code>/exec, SQL injection, XSS.</li>
-<li><b>consistencyScan</b> (estilo codegraph): <b>tablas fantasma</b> — SQL que referencia tablas nunca declaradas (el bug recurrente de "schema alucinado") + imports a archivos inexistentes.</li>
-<li><b>auto-repair:</b> ante tablas fantasma, el swarm <b>infiere el schema faltante del uso</b> (LLM) y lo agrega a <code>app.sql</code> automáticamente. El loop se cierra: detecta → arregla → re-escanea.</li>
+<li><b>consistencyScan</b> (estilo codegraph): <b>tablas fantasma</b> — SQL que referencia tablas nunca declaradas + imports a archivos inexistentes.</li>
+<li><b>auto-repair:</b> reconcilia las tablas fantasma contra la <b>intención del arquitecto</b> (no solo el uso) + backup. Detecta → arregla → re-escanea.</li>
+<li><b>runtime gate:</b> levanta la app y le pega a cada página — <b>falla si hay 5xx/crash.</b> La prueba de que de verdad corre.</li>
 </ul>
 
 <h3>3.4 · El registro vivo de módulos</h3>
@@ -112,25 +113,39 @@ const doc1 = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
 ${moduleRows()}
 
 <div class="page-break"></div>
-<h2>5 · Cómo criticarlo (debilidades honestas)</h2>
-<div class="box warn"><b>Esta sección es para que el lector ataque el proyecto.</b> Son los riesgos reales que conocemos.</div>
+<h2>5 · Crítica: resueltas (v2) vs. abiertas</h2>
+<div class="box ok"><b>Tras una ronda de crítica adversaria (4 revisores), se implementaron estos fixes.</b> Esta sección es para que el lector verifique y siga atacando.</div>
+<h3>Resueltas en v2</h3>
 <ul>
-<li><b>Modelos locales = techo.</b> qwen2.5-coder:32B es bueno pero no frontier. freellmapi ayuda pero sin SLA y degradando al pegar caps. ¿La calidad de generación alcanza para productos serios sin un modelo frontier?</li>
-<li><b>Reverse-APIs (scraper/LinkedIn) = zona gris.</b> Riesgo de ban de cuenta/IP. Útiles pero no "production-safe" sin cuidado constante.</li>
-<li><b>Inyección por keywords.</b> La detección determinista puede sobre/sub-disparar (un "store" que no es e-commerce). ¿Conviene un router por LLM en vez de regex?</li>
-<li><b>Carga operativa de gateways.</b> 14 módulos dependen de servicios Docker (MinIO/Meili/n8n/scraper-server/etc.). "Código listo" ≠ "todo corriendo". setup-gateways.sh ayuda pero es superficie de fallo.</li>
-<li><b>Auto-repair parcial.</b> Hoy arregla tablas fantasma; security issues solo se flaggean (no se auto-corrigen por riesgo de romper el build).</li>
-<li><b>Verificación end-to-end.</b> ¿Cada app generada corre 100% siempre? El swarm-checks sube la confianza pero la prueba de fuego sigue siendo levantarla y usarla.</li>
-<li><b>Calidad dispar de módulos.</b> Algunos son clientes finos que dependen de un servicio externo + keys; no todos son "plug and play".</li>
-<li><b>Evaluación del juez.</b> El panel vota, pero ¿los criterios son consistentes y resistentes a "lo que suena bien" vs lo que funciona?</li>
+<li><b>Nada ejecutaba la app → runtime gate.</b> Tras el build se levanta la app y se le pega a cada página (GET); falla si hay 5xx/crash. Static scan ya no se confunde con "funciona".</li>
+<li><b>Inyección por keywords frágil → capability planner.</b> Un LLM nombra las capacidades necesarias del catálogo (caza "ERP hospitalario" sin keywords) y aumenta la detección.</li>
+<li><b>Sin grafo de dependencias → <code>requires</code> + resolver.</b> social-auth→crypto, inappnotify→realtime, etc. se auto-inyectan; no más builds rotos por falta del módulo base.</li>
+<li><b>Auto-repair persistía alucinaciones → reconcilia contra INTENCIÓN.</b> Mapea tablas fantasma a las declaradas por el arquitecto (typos) antes de inventar, + backup auditable.</li>
+<li><b>Se medía el mecanismo → se mide evidencia.</b> <code>puglit_metrics</code>: build_success, smoke_pass, acuerdo inter-juez, ablación. scorecard().</li>
+<li><b>Catalog rot → ciclo de promoción.</b> harvest entra como experimental; solo stable/core se auto-inyecta.</li>
+<li><b>Lecciones contaminantes → relevance-floor + recency decay.</b> una lección de fintech no se fuerza en una de health; lo viejo pesa menos.</li>
+<li><b>Jurado caído bloqueaba → circuit breaker.</b> degrada a draft mode (mejor blueprint) en vez de frenar.</li>
+<li><b>Juez ambiguo → rúbrica con anclas + voto por diseño COMPLETO</b> (nunca ensambla piezas Frankenstein).</li>
+</ul>
+<h3>Aclaraciones (malentendidos de los críticos)</h3>
+<ul>
+<li><b>No hay "código Frankenstein":</b> el ganador es UN equipo con su blueprint completo, no piezas de distintos.</li>
+<li><b>BYO ≠ crypto:</b> BYO = creds de servicio en runtime (nunca persistidas); crypto AES-256-GCM = PII del usuario final. No es contradicción.</li>
+</ul>
+<h3>Abiertas (siguen siendo válidas)</h3>
+<ul>
+<li><b>El techo es el modelo base local</b> (no-frontier) + juez local ruidoso. La maquinaria no sube por encima de eso. freellmapi ayuda pero sin SLA (free-tiers frágiles, ToS gris).</li>
+<li><b>Falta correr la ablación</b> torneo-vs-agente-solo (ya instrumentada). Hasta tenerla, el valor del torneo es hipótesis.</li>
+<li><b>Reverse-APIs (scraper/LinkedIn)</b> = riesgo de ban. <b>Barrera de entrada alta</b> (GPU seria + ~8 containers).</li>
+<li><b>Enjambre compartido</b> = posible poisoning cross-tenant de lecciones (mitigado por relevance-floor; falta namespacing por tenant).</li>
 </ul>
 
 <h2>6 · Roadmap</h2>
 <ul>
-<li>Auto-repair extendido a SQL-injection/secrets (no solo tablas).</li>
-<li>codegraph como MCP para que el critic entienda el código en profundidad.</li>
-<li>vLLM + LMCache para acelerar el enjambre; medir tokens/seg.</li>
-<li>Interop con el estándar Agent Skills (anthropics/skills) — exportar/consumir skills del ecosistema.</li>
+<li>Correr la ablación (single vs torneo vs torneo+evolución) y publicar el scorecard.</li>
+<li>Auto-repair extendido a SQL-injection/secrets (hoy se reparan tablas; security se flaggea).</li>
+<li>Namespacing por-tenant de la memoria evolutiva (anti-poisoning duro).</li>
+<li>Reframe: <b>Living Software Genome</b> — el catálogo (el ADN) es el moat, el torneo es implementación.</li>
 <li>JARVIS: el asistente omnicanal como composición de módulos (agente+canales+voz+memorygraph+tools).</li>
 </ul>
 
