@@ -59,6 +59,14 @@ import { deterministicModeration } from "@/lib/moderation-module"
 import { deterministicMultitenancy } from "@/lib/multitenancy-module"
 import { deterministicSeo } from "@/lib/seo-module"
 import { deterministicDocgen } from "@/lib/docgen-module"
+import { deterministicApi } from "@/lib/api-module"
+import { deterministicEntitlements } from "@/lib/entitlements-module"
+import { deterministicErrorTracking } from "@/lib/errortracking-module"
+import { deterministicMigrations } from "@/lib/migrations-module"
+import { deterministicWallet } from "@/lib/wallet-module"
+import { deterministicValidation } from "@/lib/validation-module"
+import { deterministicForms } from "@/lib/forms-module"
+import { deterministicAdmin } from "@/lib/admin-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables } from "@/lib/swarm-repair"
@@ -1333,6 +1341,14 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const mt = deterministicMultitenancy(config, bp); if (mt) { pushFiles(mt.files); addSql(/CREATE TABLE IF NOT EXISTS orgs\b/, "multitenancy orgs/teams (Puglit)", mt.extraSql) }
     const seo = deterministicSeo(config, bp); if (seo) pushFiles(seo.files)
     const dg = deterministicDocgen(config, bp); if (dg) pushFiles(dg.files)
+    const api = deterministicApi(config, bp); if (api) pushFiles(api.files)
+    const ent = deterministicEntitlements(config, bp); if (ent) { pushFiles(ent.files); addSql(/CREATE TABLE IF NOT EXISTS plan_features\b/, "entitlements (Puglit)", ent.extraSql) }
+    const et = deterministicErrorTracking(config, bp); if (et) { pushFiles(et.files); addSql(/CREATE TABLE IF NOT EXISTS errors\b/, "error tracking (Puglit)", et.extraSql) }
+    const mig = deterministicMigrations(config, bp); if (mig) pushFiles(mig.files)
+    const wal = deterministicWallet(config, bp); if (wal) { pushFiles(wal.files); addSql(/CREATE TABLE IF NOT EXISTS wallet_ledger\b/, "wallet/credits ledger (Puglit)", wal.extraSql) }
+    const val = deterministicValidation(config, bp); if (val) pushFiles(val.files)
+    const frm = deterministicForms(config, bp); if (frm) { pushFiles(frm.files); addSql(/CREATE TABLE IF NOT EXISTS forms\b/, "dynamic forms (Puglit)", frm.extraSql) }
+    const adm = deterministicAdmin(config, bp); if (adm) pushFiles(adm.files)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
