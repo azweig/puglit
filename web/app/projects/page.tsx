@@ -2,7 +2,13 @@
 /** /projects — the user's own project history (their builds). */
 import { useEffect, useState } from "react"
 
-interface Job { id: string; name: string; status: string; completion: number; error: string | null; created_at: string }
+interface Job { id: string; name: string; status: string; completion: number; error: string | null; created_at: string; logoImage?: string | null; logoSvg?: string | null }
+
+function Logo({ j }: { j: Job }) {
+  if (j.logoImage) return <img src={j.logoImage} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+  if (j.logoSvg) return <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: j.logoSvg }} />
+  return <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet/25 text-sm font-extrabold text-violet-bright">{(j.name[0] || "·").toUpperCase()}</div>
+}
 const STATUS: Record<string, { label: string; tint: string }> = {
   done: { label: "listo", tint: "#22c55e" }, running: { label: "construyendo", tint: "#a78bfa" },
   queued: { label: "en cola", tint: "#fbbf24" }, error: { label: "error", tint: "#f43f5e" },
@@ -40,6 +46,7 @@ export default function ProjectsPage() {
             const st = STATUS[j.status] || { label: j.status, tint: "#94a3b8" }
             return (
               <a key={j.id} href={`/build/${j.id}`} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink2 px-4 py-3 transition hover:border-violet/50">
+                <Logo j={j} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{j.name}</div>
                   <div className="text-[11px] text-white/40">{new Date(j.created_at).toLocaleString()}</div>

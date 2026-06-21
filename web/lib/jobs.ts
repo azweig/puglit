@@ -156,12 +156,14 @@ export async function createJob(input: { answers: IntakeAnswers; branding: any; 
   return id
 }
 
-export interface UserJobRow { id: string; name: string; slug: string; status: string; completion: number; created_at: string; error: string | null }
-/** A user's own builds, newest first — for the "my projects" history. */
+export interface UserJobRow { id: string; name: string; slug: string; status: string; completion: number; created_at: string; error: string | null; logoImage?: string | null; logoSvg?: string | null }
+/** A user's own builds, newest first — for the "my projects" dashboard (incl. the logo). */
 export async function listUserJobs(email: string, limit = 50): Promise<UserJobRow[]> {
   const { rows } = await query<UserJobRow>(
-    `SELECT id, name, slug, status, completion, error, created_at FROM puglit_jobs
-     WHERE user_email=$1 ORDER BY created_at DESC LIMIT $2`, [email, limit])
+    `SELECT id, name, slug, status, completion, error, created_at,
+            config->'identity'->>'logoImage' AS "logoImage",
+            config->'identity'->>'logoSvg'   AS "logoSvg"
+     FROM puglit_jobs WHERE user_email=$1 ORDER BY created_at DESC LIMIT $2`, [email, limit])
   return rows
 }
 
