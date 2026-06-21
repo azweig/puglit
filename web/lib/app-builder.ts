@@ -67,6 +67,10 @@ import { deterministicWallet } from "@/lib/wallet-module"
 import { deterministicValidation } from "@/lib/validation-module"
 import { deterministicForms } from "@/lib/forms-module"
 import { deterministicAdmin } from "@/lib/admin-module"
+import { deterministicShipping } from "@/lib/shipping-module"
+import { deterministicFlights } from "@/lib/flights-module"
+import { deterministicStats } from "@/lib/stats-module"
+import { deterministicCharts } from "@/lib/charts-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables } from "@/lib/swarm-repair"
@@ -1349,6 +1353,10 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const val = deterministicValidation(config, bp); if (val) pushFiles(val.files)
     const frm = deterministicForms(config, bp); if (frm) { pushFiles(frm.files); addSql(/CREATE TABLE IF NOT EXISTS forms\b/, "dynamic forms (Puglit)", frm.extraSql) }
     const adm = deterministicAdmin(config, bp); if (adm) pushFiles(adm.files)
+    const ship = deterministicShipping(config, bp); if (ship) pushFiles(ship.files)
+    const fly = deterministicFlights(config, bp); if (fly) pushFiles(fly.files)
+    const st = deterministicStats(config, bp); if (st) pushFiles(st.files)
+    const ch = deterministicCharts(config, bp); if (ch) pushFiles(ch.files)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
