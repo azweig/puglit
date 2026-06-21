@@ -47,6 +47,18 @@ import { deterministicMemoryGraph } from "@/lib/memorygraph-module"
 import { deterministicSocialSearch } from "@/lib/socialsearch-module"
 import { deterministicForecast } from "@/lib/forecast-module"
 import { deterministicCompress } from "@/lib/compress-module"
+import { deterministicFeatureFlags } from "@/lib/featureflags-module"
+import { deterministicAuditLog } from "@/lib/auditlog-module"
+import { deterministicWebhooksOut } from "@/lib/webhooksout-module"
+import { deterministicBooking } from "@/lib/booking-module"
+import { deterministicReviews } from "@/lib/reviews-module"
+import { deterministicComments } from "@/lib/comments-module"
+import { deterministicInAppNotify } from "@/lib/inappnotify-module"
+import { deterministicReferrals } from "@/lib/referrals-module"
+import { deterministicModeration } from "@/lib/moderation-module"
+import { deterministicMultitenancy } from "@/lib/multitenancy-module"
+import { deterministicSeo } from "@/lib/seo-module"
+import { deterministicDocgen } from "@/lib/docgen-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables } from "@/lib/swarm-repair"
@@ -1309,6 +1321,18 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const socialsearch = deterministicSocialSearch(config, bp); if (socialsearch) pushFiles(socialsearch.files)
     const forecast = deterministicForecast(config, bp); if (forecast) pushFiles(forecast.files)
     const compress = deterministicCompress(config, bp); if (compress) pushFiles(compress.files)
+    const ff = deterministicFeatureFlags(config, bp); if (ff) { pushFiles(ff.files); addSql(/CREATE TABLE IF NOT EXISTS feature_flags\b/, "feature flags (Puglit)", ff.extraSql) }
+    const al = deterministicAuditLog(config, bp); if (al) { pushFiles(al.files); addSql(/CREATE TABLE IF NOT EXISTS audit_log\b/, "audit log (Puglit)", al.extraSql) }
+    const wo = deterministicWebhooksOut(config, bp); if (wo) { pushFiles(wo.files); addSql(/CREATE TABLE IF NOT EXISTS webhook_subs\b/, "outbound webhooks (Puglit)", wo.extraSql) }
+    const bk = deterministicBooking(config, bp); if (bk) { pushFiles(bk.files); addSql(/CREATE TABLE IF NOT EXISTS bookings\b/, "booking/scheduling (Puglit)", bk.extraSql) }
+    const rv = deterministicReviews(config, bp); if (rv) { pushFiles(rv.files); addSql(/CREATE TABLE IF NOT EXISTS reviews\b/, "reviews & ratings (Puglit)", rv.extraSql) }
+    const cm = deterministicComments(config, bp); if (cm) { pushFiles(cm.files); addSql(/CREATE TABLE IF NOT EXISTS comments\b/, "comments (Puglit)", cm.extraSql) }
+    const ian = deterministicInAppNotify(config, bp); if (ian) { pushFiles(ian.files); addSql(/CREATE TABLE IF NOT EXISTS notifications\b/, "in-app notifications (Puglit)", ian.extraSql) }
+    const rf = deterministicReferrals(config, bp); if (rf) { pushFiles(rf.files); addSql(/CREATE TABLE IF NOT EXISTS referral_codes\b/, "referrals (Puglit)", rf.extraSql) }
+    const md = deterministicModeration(config, bp); if (md) pushFiles(md.files)
+    const mt = deterministicMultitenancy(config, bp); if (mt) { pushFiles(mt.files); addSql(/CREATE TABLE IF NOT EXISTS orgs\b/, "multitenancy orgs/teams (Puglit)", mt.extraSql) }
+    const seo = deterministicSeo(config, bp); if (seo) pushFiles(seo.files)
+    const dg = deterministicDocgen(config, bp); if (dg) pushFiles(dg.files)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)

@@ -161,6 +161,40 @@ def parse(r: ParseReq):
         return {"error": str(e)}
 
 
+class DocgenReq(BaseModel):
+    kind: str  # docx | xlsx
+    title: Optional[str] = None
+    paragraphs: Optional[list] = None      # for docx
+    rows: Optional[list] = None            # for xlsx (list of lists)
+
+
+@app.post("/docgen")
+def docgen(r: DocgenReq):
+    """Generate Office documents (inspired by anthropics/skills docx/xlsx). Returns base64."""
+    try:
+        import base64, io
+        if r.kind == "xlsx":
+            from openpyxl import Workbook
+            wb = Workbook(); ws = wb.active
+            if r.title:
+                ws.title = r.title[:31]
+            for row in (r.rows or []):
+                ws.append(row)
+            out = io.BytesIO(); wb.save(out)
+            return {"data_b64": base64.b64encode(out.getvalue()).decode(), "ext": "xlsx"}
+        # default docx
+        from docx import Document
+        doc = Document()
+        if r.title:
+            doc.add_heading(r.title, 0)
+        for p in (r.paragraphs or []):
+            doc.add_paragraph(p)
+        out = io.BytesIO(); doc.save(out)
+        return {"data_b64": base64.b64encode(out.getvalue()).decode(), "ext": "docx"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("SCRAPER_PORT", "8200")))
