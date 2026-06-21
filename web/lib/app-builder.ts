@@ -71,6 +71,26 @@ import { deterministicShipping } from "@/lib/shipping-module"
 import { deterministicFlights } from "@/lib/flights-module"
 import { deterministicStats } from "@/lib/stats-module"
 import { deterministicCharts } from "@/lib/charts-module"
+import { deterministicCrm } from "@/lib/crm-module"
+import { deterministicHelpdesk } from "@/lib/helpdesk-module"
+import { deterministicMarketing } from "@/lib/marketing-module"
+import { deterministicKnowledgeBase } from "@/lib/knowledgebase-module"
+import { deterministicEsign } from "@/lib/esign-module"
+import { deterministicEcommerce } from "@/lib/ecommerce-module"
+import { deterministicPim } from "@/lib/pim-module"
+import { deterministicWms } from "@/lib/wms-module"
+import { deterministicInventory } from "@/lib/inventory-module"
+import { deterministicPos } from "@/lib/pos-module"
+import { deterministicInvoicing } from "@/lib/invoicing-module"
+import { deterministicObservability } from "@/lib/observability-module"
+import { deterministicUptime } from "@/lib/uptime-module"
+import { deterministicStatusPage } from "@/lib/statuspage-module"
+import { deterministicProductAnalytics } from "@/lib/productanalytics-module"
+import { deterministicLogs } from "@/lib/logs-module"
+import { deterministicSso } from "@/lib/sso-module"
+import { deterministicBi } from "@/lib/bi-module"
+import { deterministicProjectMgmt } from "@/lib/projectmgmt-module"
+import { deterministicDms } from "@/lib/dms-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables, repairSecurityWithFrontier } from "@/lib/swarm-repair"
@@ -1383,6 +1403,27 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const fly = deterministicFlights(config, bp); if (fly) pushFiles(fly.files)
     const st = deterministicStats(config, bp); if (st) pushFiles(st.files)
     const ch = deterministicCharts(config, bp); if (ch) pushFiles(ch.files)
+    // ── enterprise / retail / ops connectors (gateway-backed thin clients + a few PG-native) ──
+    const crm = deterministicCrm(config, bp); if (crm) pushFiles(crm.files)
+    const hd = deterministicHelpdesk(config, bp); if (hd) pushFiles(hd.files)
+    const mk = deterministicMarketing(config, bp); if (mk) pushFiles(mk.files)
+    const kb = deterministicKnowledgeBase(config, bp); if (kb) pushFiles(kb.files)
+    const es = deterministicEsign(config, bp); if (es) pushFiles(es.files)
+    const ec = deterministicEcommerce(config, bp); if (ec) pushFiles(ec.files)
+    const pim = deterministicPim(config, bp); if (pim) pushFiles(pim.files)
+    const wms = deterministicWms(config, bp); if (wms) pushFiles(wms.files)
+    const invm = deterministicInventory(config, bp); if (invm) { pushFiles(invm.files); addSql(/CREATE TABLE IF NOT EXISTS stock_ledger\b/, "inventory (Puglit)", invm.extraSql) }
+    const pos = deterministicPos(config, bp); if (pos) { pushFiles(pos.files); addSql(/CREATE TABLE IF NOT EXISTS pos_sales\b/, "POS (Puglit)", pos.extraSql) }
+    const invo = deterministicInvoicing(config, bp); if (invo) pushFiles(invo.files)
+    const obs = deterministicObservability(config, bp); if (obs) pushFiles(obs.files)
+    const upt = deterministicUptime(config, bp); if (upt) { pushFiles(upt.files); addSql(/CREATE TABLE IF NOT EXISTS monitors\b/, "uptime (Puglit)", upt.extraSql) }
+    const stp = deterministicStatusPage(config, bp); if (stp) { pushFiles(stp.files); addSql(/CREATE TABLE IF NOT EXISTS status_components\b/, "status page (Puglit)", stp.extraSql) }
+    const pa = deterministicProductAnalytics(config, bp); if (pa) pushFiles(pa.files)
+    const lg = deterministicLogs(config, bp); if (lg) pushFiles(lg.files)
+    const sso = deterministicSso(config, bp); if (sso) pushFiles(sso.files)
+    const bi = deterministicBi(config, bp); if (bi) pushFiles(bi.files)
+    const pm = deterministicProjectMgmt(config, bp); if (pm) pushFiles(pm.files)
+    const dms = deterministicDms(config, bp); if (dms) pushFiles(dms.files)
     // DEPENDENCY RESOLVER (crítica: dependency graph) — force-inject hard requirements (e.g.
     // social-auth → crypto, inappnotify → realtime) so no keyword-triggered module ships broken.
     const addedDeps = resolveDeps(files)
