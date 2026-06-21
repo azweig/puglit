@@ -17,6 +17,7 @@
 import { chatJSON, chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
 import { PLAYBOOK } from "@/lib/playbooks"
+import { deterministicConnectors } from "@/lib/connectors"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -1129,6 +1130,7 @@ export interface EngineState {
   ri: number
   pi: number
   files: AppFile[]
+  connectorDeps?: Record<string, string> // extra npm deps from injected connectors (whatsapp/email/telegram)
 }
 export function initEngineState(): EngineState {
   return { phase: "plan", blueprint: null, brief: "", ri: 0, pi: 0, files: [] }
@@ -1211,6 +1213,15 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     }
     const seed = await genCatalogSeed(config, bp, research).catch(() => null)
     if (seed) { files.push(seed); const ingest = research ? await genIngestionCron(config, bp, research).catch(() => null) : null; files.push(ingest || refreshCron(config)) }
+    // reusable channel connectors (WhatsApp / email / Telegram) — injected pre-built when the
+    // product needs messaging, so the swarm reuses them instead of regenerating an IMAP client.
+    const conn = deterministicConnectors(config, bp)
+    if (conn) {
+      for (const f of conn.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+      const sqlF = files.find((f) => f.path === "sql/app.sql")
+      if (sqlF && !/channel_messages/.test(sqlF.content)) sqlF.content += `\n\n-- omnichannel inbox (Puglit connectors)\n${conn.extraSql}\n`
+      s.connectorDeps = conn.deps // surfaced to the package.json assembler
+    }
     reconcilePageRoutes(files)
     integratePageRoutes(files)
     if (bp.kind === "accounts") {
