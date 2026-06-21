@@ -19,6 +19,7 @@ import type { DomainConfig } from "@/lib/domain-types"
 import { PLAYBOOK } from "@/lib/playbooks"
 import { deterministicConnectors } from "@/lib/connectors"
 import { deterministicIntegrations } from "@/lib/integrations"
+import { deterministicAgent } from "@/lib/agent-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1229,6 +1230,13 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // OAuth/SaaS integration plumbing (Nango) — reused so the app never reinvents OAuth.
     const integ = deterministicIntegrations(config, bp)
     if (integ) for (const f of integ.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+    // AGENT brain (JARVIS pattern) — omnichannel AI assistant with identity mapping + memory.
+    const agent = deterministicAgent(config, bp)
+    if (agent) {
+      for (const f of agent.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+      const sqlF = files.find((f) => f.path === "sql/app.sql")
+      if (sqlF && !/agent_contacts/.test(sqlF.content)) sqlF.content += `\n\n-- AI agent (identity + memory) — Puglit JARVIS brain\n${agent.extraSql}\n`
+    }
     // CUSTOM modules the swarm built in past projects → reuse their code if this product matches.
     const need = `${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`
     for (const cm of await findCustomModulesFor(need).catch(() => [])) for (const f of cm.files || []) if (!files.some((x) => x.path === f.path)) files.push(f)

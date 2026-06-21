@@ -38,6 +38,7 @@ export const BUILTIN_MODULES: Module[] = [
   { name: "teams", category: "channel", description: "Microsoft Teams — send via an incoming webhook.", whenToUse: "the product posts to Teams", envVars: ["TEAMS_WEBHOOK_URL"] },
   { name: "apprise", category: "util", description: "Apprise notify() — ONE call fans out to 80+ platforms (SMS/push/chat/email).", whenToUse: "the product sends alerts/notifications", gateway: "apprise-api (Docker)", envVars: ["APPRISE_URL"] },
   { name: "nango", category: "integration", description: "Nango OAuth proxy — connect to 100s of SaaS (Salesforce/Jira/Notion/Google/GitHub) without ever touching tokens.", whenToUse: "the product integrates with external SaaS over OAuth", gateway: "Nango (Docker)", envVars: ["NANGO_HOST", "NANGO_SECRET_KEY"] },
+  { name: "agent", category: "agent", description: "The JARVIS brain (NanoClaw pattern) — turns the omnichannel connectors into ONE AI assistant with cross-channel identity mapping + persistent memory. startAgent() runs the loop.", whenToUse: "the product is an AI assistant / chief-of-staff / chatbot across channels", envVars: ["AGENT_MODEL", "AGENT_BASE_URL", "AGENT_SYSTEM"] },
 ]
 
 const DIR = join(process.cwd(), "modules")
