@@ -32,7 +32,10 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-extrabold">Mis proyectos</h1>
             {email && <p className="mt-0.5 text-sm text-white/45">{email}</p>}
           </div>
-          <a href="/generate" className="rounded-xl px-4 py-2 text-sm font-bold text-white" style={{ background: "var(--violet)" }}>+ Nuevo</a>
+          <div className="flex items-center gap-2">
+            <button onClick={() => fetch("/api/auth/me", { method: "POST" }).then(() => (window.location.href = "/login"))} className="rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-white/60">Salir</button>
+            <a href="/generate" className="rounded-xl px-4 py-2 text-sm font-bold text-white" style={{ background: "var(--violet)" }}>+ Nuevo</a>
+          </div>
         </div>
 
         {jobs === null && <p className="text-white/40">Cargando…</p>}
