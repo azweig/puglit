@@ -91,6 +91,8 @@ import { deterministicSso } from "@/lib/sso-module"
 import { deterministicBi } from "@/lib/bi-module"
 import { deterministicProjectMgmt } from "@/lib/projectmgmt-module"
 import { deterministicDms } from "@/lib/dms-module"
+import { deterministicObsidian } from "@/lib/obsidian-module"
+import { deterministicGraphify } from "@/lib/graphify-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables, repairSecurityWithFrontier } from "@/lib/swarm-repair"
@@ -1424,6 +1426,8 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const bi = deterministicBi(config, bp); if (bi) pushFiles(bi.files)
     const pm = deterministicProjectMgmt(config, bp); if (pm) pushFiles(pm.files)
     const dms = deterministicDms(config, bp); if (dms) pushFiles(dms.files)
+    const obs2 = deterministicObsidian(config, bp); if (obs2) pushFiles(obs2.files)
+    const gfy = deterministicGraphify(config, bp); if (gfy) { pushFiles(gfy.files); addSql(/CREATE TABLE IF NOT EXISTS kg_nodes\b/, "knowledge graph (Puglit graphify)", gfy.extraSql) }
     // DEPENDENCY RESOLVER (crítica: dependency graph) — force-inject hard requirements (e.g.
     // social-auth → crypto, inappnotify → realtime) so no keyword-triggered module ships broken.
     const addedDeps = resolveDeps(files)
