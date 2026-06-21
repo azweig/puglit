@@ -49,6 +49,7 @@ import { deterministicForecast } from "@/lib/forecast-module"
 import { deterministicCompress } from "@/lib/compress-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
+import { repairPhantomTables } from "@/lib/swarm-repair"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -1332,13 +1333,18 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
       const si = files.findIndex((f) => f.path === shell.path)
       if (si >= 0) files[si] = shell; else files.push(shell)
     }
-    // SWARM quality gate — security + consistency scan over the generated code (surfaced to the
-    // build log + the critic so the swarm can self-correct: hardcoded secrets, SQL injection,
-    // phantom tables / hallucinated schema, missing imports).
-    const checks = runSwarmChecks(files, (bp.tables || []).map((t) => t.name))
+    // SWARM quality gate — security + consistency scan over the generated code.
+    const declaredTables = (bp.tables || []).map((t) => t.name)
+    let checks = runSwarmChecks(files, declaredTables)
+    // CLOSE THE LOOP: auto-repair phantom tables (the recurring hallucinated-schema bug), then re-scan.
+    let repaired = 0
+    if (checks.issues.some((i) => i.kind === "phantom-table")) {
+      repaired = await repairPhantomTables(files, checks.issues, declaredTables).catch(() => 0)
+      if (repaired) checks = runSwarmChecks(files, declaredTables)
+    }
     if (checks.issues.length) { s.qualityIssues = checks.issues; console.warn("[swarm-checks]", checks.summary) }
     s.phase = "done"
-    return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}` }
+    return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}${repaired ? ` · auto-fixed ${repaired} table(s)` : ""}` }
   }
   return { state: s, done: true, detail: "done" }
 }
