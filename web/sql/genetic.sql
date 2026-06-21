@@ -92,3 +92,20 @@ CREATE TABLE IF NOT EXISTS puglit_login_codes (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_login_codes_email ON puglit_login_codes(email, created_at DESC);
+
+-- ── Module registry: the living directory the swarm reads/reuses/extends ───────
+CREATE TABLE IF NOT EXISTS puglit_modules (
+  name        VARCHAR(64) PRIMARY KEY,
+  category    VARCHAR(24) NOT NULL,        -- channel | integration | util | agent
+  description TEXT NOT NULL,
+  when_to_use TEXT,
+  env_vars    JSONB,                       -- string[]
+  deps        JSONB,                       -- { pkg: version }
+  gateway     VARCHAR(120),                -- docker service it needs, if any
+  files       JSONB NOT NULL,              -- [{ path, content }]
+  version     INTEGER NOT NULL DEFAULT 1,
+  status      VARCHAR(16) NOT NULL DEFAULT 'stable', -- stable | new | improved
+  created_by  VARCHAR(64),                 -- which agent/team created/improved it
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);

@@ -19,6 +19,7 @@ import type { DomainConfig } from "@/lib/domain-types"
 import { PLAYBOOK } from "@/lib/playbooks"
 import { deterministicConnectors } from "@/lib/connectors"
 import { deterministicIntegrations } from "@/lib/integrations"
+import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -108,10 +109,12 @@ Return ONLY JSON: {"product": "...", "entities": ["service","component",...], "s
 export async function planBlueprint(config: DomainConfig, contracts: string, reference?: string, lens?: string, opts?: { model?: string; lessons?: string }): Promise<Blueprint> {
   const ents = (config.entities || []).map((e) => `${e.name}(${e.fields.map((f) => `${f.name}:${f.type}${f.required ? "!" : ""}`).join(", ")})`).join("; ")
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : JSON.stringify(config.identity.tagline)
+  const catalog = await moduleCatalog().catch(() => "")
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
 
 ${PLAYBOOK.architect}
+${catalog ? `\nREUSABLE MODULES already in the factory (if the product needs one of these, REUSE it — do NOT design it from scratch; just note it in the blueprint):\n${catalog}\n` : ""}
 ${lens ? `\n${lens}\nLet this philosophy genuinely shape your blueprint (table count, layering, route style) so it is DISTINCT from other approaches — but stay 100% on THIS product's domain (never invent unrelated entities like sports leagues in a status page).\n` : ""}${opts?.lessons ? `\nLESSONS FROM YOUR TEAM'S PAST PROJECTS (apply them — this is how you improve and beat the other teams):\n${opts.lessons}\n` : ""}
 
 Think hard about the real user journeys. Examples of inference:
@@ -1226,6 +1229,12 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // OAuth/SaaS integration plumbing (Nango) — reused so the app never reinvents OAuth.
     const integ = deterministicIntegrations(config, bp)
     if (integ) for (const f of integ.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+    // CUSTOM modules the swarm built in past projects → reuse their code if this product matches.
+    const need = `${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`
+    for (const cm of await findCustomModulesFor(need).catch(() => [])) for (const f of cm.files || []) if (!files.some((x) => x.path === f.path)) files.push(f)
+    // HARVEST: register any reusable connector/integration the agents wrote that's new → the
+    // module directory GROWS from the swarm's own work, available to every future project.
+    await harvestModules(files, bp.kind).catch(() => {})
     reconcilePageRoutes(files)
     integratePageRoutes(files)
     if (bp.kind === "accounts") {

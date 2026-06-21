@@ -1,0 +1,116 @@
+/**
+ * module-registry.ts — the LIVING module directory.
+ *
+ *  - Agents SEE it: moduleCatalog() is injected into their prompts so they reuse what exists.
+ *  - Agents EXTEND it: when a build produces a reusable connector/integration that isn't in
+ *    the catalog, harvestModules() registers it → the directory GROWS.
+ *  - Agents HEAL it: registerModule() upserts (version bump) → improvements/fixes flow back.
+ *
+ * Builtins (telegram/email/whatsapp/slack/discord/teams/apprise/nango) keep their code in
+ * connectors.ts / integrations.ts; their metadata is catalogued here. Swarm-created modules
+ * live in Postgres (puglit_modules) + are mirrored to modules/<name>/ for git review.
+ */
+import { query } from "@/lib/db"
+import { writeFileSync, mkdirSync } from "node:fs"
+import { join, basename } from "node:path"
+
+export interface ModuleFile { path: string; content: string }
+export interface Module {
+  name: string
+  category: "channel" | "integration" | "util" | "agent"
+  description: string
+  whenToUse?: string
+  envVars?: string[]
+  deps?: Record<string, string>
+  gateway?: string
+  files?: ModuleFile[]
+  version?: number
+  status?: string
+}
+
+/** Metadata for the builtin modules (their code is injected by connectors.ts / integrations.ts). */
+export const BUILTIN_MODULES: Module[] = [
+  { name: "telegram", category: "channel", description: "Telegram bot — bidirectional, zero deps (Bot API + long polling).", whenToUse: "the product sends/receives Telegram messages", envVars: ["TELEGRAM_BOT_TOKEN"] },
+  { name: "email", category: "channel", description: "Universal email — IMAP read + SMTP send, ANY provider (Gmail/Outlook/custom).", whenToUse: "the product reads/sends email", envVars: ["EMAIL_USER", "EMAIL_PASS", "IMAP_HOST", "SMTP_HOST"], deps: { imapflow: "^1", nodemailer: "^6" } },
+  { name: "whatsapp", category: "channel", description: "WhatsApp via the OpenWA gateway — thin HTTP client + webhook (no puppeteer in-app).", whenToUse: "the product uses WhatsApp", gateway: "OpenWA (Docker)", envVars: ["OPENWA_URL", "OPENWA_KEY"] },
+  { name: "slack", category: "channel", description: "Slack — bidirectional (Events API webhook + chat.postMessage).", whenToUse: "the product uses Slack", envVars: ["SLACK_BOT_TOKEN"] },
+  { name: "discord", category: "channel", description: "Discord — send via an incoming webhook.", whenToUse: "the product posts to Discord", envVars: ["DISCORD_WEBHOOK_URL"] },
+  { name: "teams", category: "channel", description: "Microsoft Teams — send via an incoming webhook.", whenToUse: "the product posts to Teams", envVars: ["TEAMS_WEBHOOK_URL"] },
+  { name: "apprise", category: "util", description: "Apprise notify() — ONE call fans out to 80+ platforms (SMS/push/chat/email).", whenToUse: "the product sends alerts/notifications", gateway: "apprise-api (Docker)", envVars: ["APPRISE_URL"] },
+  { name: "nango", category: "integration", description: "Nango OAuth proxy — connect to 100s of SaaS (Salesforce/Jira/Notion/Google/GitHub) without ever touching tokens.", whenToUse: "the product integrates with external SaaS over OAuth", gateway: "Nango (Docker)", envVars: ["NANGO_HOST", "NANGO_SECRET_KEY"] },
+]
+
+const DIR = join(process.cwd(), "modules")
+
+/** Swarm-created/improved modules (DB-backed). */
+export async function customModules(): Promise<Module[]> {
+  try {
+    const { rows } = await query<{ name: string; category: Module["category"]; description: string; when_to_use: string | null; env_vars: string[] | null; deps: Record<string, string> | null; gateway: string | null; files: ModuleFile[] | null; version: number; status: string }>(
+      `SELECT name, category, description, when_to_use, env_vars, deps, gateway, files, version, status FROM puglit_modules ORDER BY name`)
+    return rows.map((r) => ({ name: r.name, category: r.category, description: r.description, whenToUse: r.when_to_use || undefined, envVars: r.env_vars || [], deps: r.deps || {}, gateway: r.gateway || undefined, files: r.files || [], version: r.version, status: r.status }))
+  } catch { return [] }
+}
+
+/** Builtins + custom (a custom module overrides a builtin of the same name = an improvement). */
+export async function allModules(): Promise<Module[]> {
+  const custom = await customModules()
+  const overridden = new Set(custom.map((m) => m.name))
+  return [...BUILTIN_MODULES.filter((m) => !overridden.has(m.name)), ...custom]
+}
+
+/** Compact catalog injected into agent prompts — so they SEE what exists and reuse it. */
+export async function moduleCatalog(): Promise<string> {
+  const mods = await allModules()
+  if (!mods.length) return ""
+  return mods.map((m) => `- ${m.name} (${m.category}): ${m.description}${m.whenToUse ? ` — use when ${m.whenToUse}` : ""}${m.gateway ? ` [needs ${m.gateway}]` : ""}`).join("\n")
+}
+
+/** Custom modules relevant to a product (for injecting their code into the build). */
+export async function findCustomModulesFor(text: string): Promise<Module[]> {
+  const t = text.toLowerCase()
+  return (await customModules()).filter((m) => {
+    const words = `${m.name} ${m.description} ${m.whenToUse || ""}`.toLowerCase().split(/\W+/).filter((w) => w.length > 4)
+    return words.some((w) => t.includes(w))
+  })
+}
+
+/** Register a NEW module or an IMPROVEMENT (upsert + version bump). DB + git-trackable mirror. */
+export async function registerModule(m: Module & { createdBy?: string }): Promise<void> {
+  await query(
+    `INSERT INTO puglit_modules (name, category, description, when_to_use, env_vars, deps, gateway, files, version, status, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10)
+     ON CONFLICT (name) DO UPDATE SET
+       category=EXCLUDED.category, description=EXCLUDED.description, when_to_use=EXCLUDED.when_to_use,
+       env_vars=EXCLUDED.env_vars, deps=EXCLUDED.deps, gateway=EXCLUDED.gateway, files=EXCLUDED.files,
+       version=puglit_modules.version+1, status='improved', updated_at=NOW()`,
+    [m.name, m.category, m.description, m.whenToUse || null, JSON.stringify(m.envVars || []), JSON.stringify(m.deps || {}), m.gateway || null, JSON.stringify(m.files || []), m.status || "new", m.createdBy || null],
+  ).catch((e) => console.error("[modules]", (e as Error).message))
+  try {
+    const dir = join(DIR, m.name.replace(/[^a-z0-9_-]/gi, "_"))
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "module.json"), JSON.stringify({ name: m.name, category: m.category, description: m.description, whenToUse: m.whenToUse, envVars: m.envVars, deps: m.deps, gateway: m.gateway, files: (m.files || []).map((f) => f.path) }, null, 2))
+    for (const f of m.files || []) writeFileSync(join(dir, basename(f.path)), f.content)
+  } catch { /* mirror is best-effort */ }
+}
+
+const BUILTIN_NAMES = new Set(BUILTIN_MODULES.map((m) => m.name))
+
+/** HARVEST: after a build, register any reusable connector/integration the agents wrote that
+ *  isn't already a module → the directory GROWS from the swarm's own work. */
+export async function harvestModules(files: ModuleFile[], createdBy?: string): Promise<string[]> {
+  const harvested: string[] = []
+  for (const f of files) {
+    const m = f.path.match(/^lib\/(connectors|integrations)\/([a-z0-9_-]+)\.ts$/i)
+    if (!m) continue
+    const name = m[2].toLowerCase()
+    if (name === "types" || name === "index" || BUILTIN_NAMES.has(name)) continue
+    if ((await customModules()).some((x) => x.name === name)) continue
+    await registerModule({
+      name, category: m[1] === "connectors" ? "channel" : "integration",
+      description: `Auto-harvested ${m[1] === "connectors" ? "channel" : "integration"} connector from a generated app.`,
+      whenToUse: `the product uses ${name}`, files: [f], status: "new", createdBy,
+    })
+    harvested.push(name)
+  }
+  return harvested
+}
