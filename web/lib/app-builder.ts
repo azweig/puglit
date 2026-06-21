@@ -21,6 +21,7 @@ import { deterministicConnectors } from "@/lib/connectors"
 import { deterministicIntegrations } from "@/lib/integrations"
 import { deterministicAgent } from "@/lib/agent-module"
 import { deterministicVoice } from "@/lib/voice-module"
+import { deterministicMaps } from "@/lib/maps-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1231,6 +1232,9 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // OAuth/SaaS integration plumbing (Nango) — reused so the app never reinvents OAuth.
     const integ = deterministicIntegrations(config, bp)
     if (integ) for (const f of integ.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+    // MAPS / LOCATION (Leaflet + OSM map UI, IP geolocation, Nominatim geocoding) — open-source.
+    const maps = deterministicMaps(config, bp)
+    if (maps) for (const f of maps.files) if (!files.some((x) => x.path === f.path)) files.push(f)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
