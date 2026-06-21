@@ -43,6 +43,10 @@ import { deterministicSms } from "@/lib/sms-module"
 import { deterministicPush } from "@/lib/push-module"
 import { deterministicOcr } from "@/lib/ocr-module"
 import { deterministicDocparse } from "@/lib/docparse-module"
+import { deterministicMemoryGraph } from "@/lib/memorygraph-module"
+import { deterministicSocialSearch } from "@/lib/socialsearch-module"
+import { deterministicForecast } from "@/lib/forecast-module"
+import { deterministicCompress } from "@/lib/compress-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1298,6 +1302,10 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const push = deterministicPush(config, bp); if (push) pushFiles(push.files)
     const ocr = deterministicOcr(config, bp); if (ocr) pushFiles(ocr.files)
     const docparse = deterministicDocparse(config, bp); if (docparse) pushFiles(docparse.files)
+    const memgraph = deterministicMemoryGraph(config, bp); if (memgraph) { pushFiles(memgraph.files); addSql(/CREATE TABLE IF NOT EXISTS kg_nodes\b/, "knowledge-graph memory (Puglit memorygraph)", memgraph.extraSql) }
+    const socialsearch = deterministicSocialSearch(config, bp); if (socialsearch) pushFiles(socialsearch.files)
+    const forecast = deterministicForecast(config, bp); if (forecast) pushFiles(forecast.files)
+    const compress = deterministicCompress(config, bp); if (compress) pushFiles(compress.files)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
