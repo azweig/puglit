@@ -58,6 +58,7 @@ const QUEUE_SQL = `CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs(status, run_at);`
 
+export function queueFiles(): { files: AppFile[]; extraSql: string } { return { files: [{ path: "lib/queue.ts", content: QUEUE }], extraSql: QUEUE_SQL } }
 export function deterministicQueue(config: DomainConfig, bp: Blueprint): { files: AppFile[]; extraSql: string } | null {
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
   const hay = `${config.identity.name} ${tagline} ${bp.summary} ${bp.tables.map((t) => t.name).join(" ")}`.toLowerCase()

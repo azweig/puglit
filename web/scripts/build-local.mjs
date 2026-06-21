@@ -301,3 +301,32 @@ if (process.env.EXPORT_ONLY) { if (!process.env.GH_TOKEN && !process.env.VERCEL_
 log(`sirviendo preview en http://localhost:${PORT} …`)
 const srv = spawn("npx", ["next", "dev", "-p", PORT], { cwd: DIR, stdio: "inherit", env: { ...process.env } })
 process.on("SIGINT", () => { srv.kill(); process.exit(0) })
+
+// ── RUNTIME GATE (crítica: "nada ejecuta la app") ─────────────────────────────
+// Static scans ≠ working software. Boot the app, hit every static page (GET, side-effect-free)
+// and assert no 5xx / no runtime crash. This is the real "does it actually run?" check.
+async function smokeTest() {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+  let ready = false
+  for (let i = 0; i < 40; i++) { try { const r = await fetch(`http://localhost:${PORT}/`); if (r.status < 500) { ready = true; break } } catch {} await wait(2000) }
+  if (!ready) { log("SMOKE: ✗ la app no respondió / crash de runtime — RUNTIME GATE FAIL"); try { writeStatus({ smoke: false, reason: "no-boot" }) } catch {} ; return }
+  // collect static page routes from the generated app/ tree
+  const targets = new Set(["/"])
+  const appDir = path.join(DIR, "app")
+  const walk = (dir, base = "") => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) { if (e.name.startsWith("[") || e.name.startsWith("(") || e.name === "api") continue; walk(path.join(dir, e.name), base + "/" + e.name) }
+      else if (e.name === "page.tsx" || e.name === "page.jsx") targets.add(base || "/")
+    }
+  }
+  try { walk(appDir) } catch {}
+  let pass = 0, fail = 0; const bad = []
+  for (const t of [...targets].slice(0, 20)) {
+    try { const r = await fetch(`http://localhost:${PORT}${t}`); if (r.status >= 500) { fail++; bad.push(`${t}→${r.status}`) } else pass++ }
+    catch { fail++; bad.push(`${t}→ERR`) }
+  }
+  const okGate = fail === 0
+  log(`SMOKE: ${okGate ? "✓ PASS" : "✗ FAIL"} — RUNTIME GATE (${pass} ok, ${fail} 5xx${bad.length ? ": " + bad.join(", ") : ""})`)
+  try { writeStatus({ smoke: okGate, pagesOk: pass, pagesFail: fail, failing: bad }) } catch {}
+}
+smokeTest()

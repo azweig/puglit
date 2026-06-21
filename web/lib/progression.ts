@@ -146,21 +146,28 @@ export async function teamLessonDigest(team: string, n = 6): Promise<string> {
   return rows.map((r) => `- ${r.entry}`).join("\n")
 }
 
-/** Team lessons most RELEVANT to the current task (semantic, via embeddings) — beats recency
- *  so a team recalls the lesson that actually applies. Falls back to recency if embeddings
- *  aren't available (no embed provider / no embedded lessons yet). */
+/** Team lessons most RELEVANT to the current task (semantic, via embeddings). Hardened per the
+ *  critiques: (a) a RELEVANCE FLOOR so a loosely-related lesson from another domain (fintech →
+ *  health) can't be force-applied; (b) RECENCY DECAY so newer lessons outweigh stale ones (no
+ *  contradictory advice from old app versions); (c) returns nothing rather than noise when no
+ *  lesson clears the floor. Falls back to recency if embeddings aren't available. */
 export async function relevantLessons(team: string, taskText: string, n = 6): Promise<string> {
   const q = await embed(taskText).catch(() => null)
   if (!q) return teamLessonDigest(team, n)
-  const { rows } = await query<{ entry: string; embedding: unknown }>(
-    `SELECT DISTINCT ON (d.entry) d.entry, d.embedding FROM puglit_agent_diary d JOIN puglit_agents a ON a.id=d.agent_id
+  const { rows } = await query<{ entry: string; embedding: unknown; created_at: Date }>(
+    `SELECT DISTINCT ON (d.entry) d.entry, d.embedding, d.created_at FROM puglit_agent_diary d JOIN puglit_agents a ON a.id=d.agent_id
      WHERE a.team=$1 AND d.embedding IS NOT NULL ORDER BY d.entry, d.created_at DESC LIMIT 400`, [team])
   if (!rows.length) return teamLessonDigest(team, n)
+  const now = Date.now()
+  const RELEVANCE_FLOOR = 0.35 // below this, the lesson is from a different domain → ignore it
   const scored = rows.map((r) => {
     const v = Array.isArray(r.embedding) ? (r.embedding as number[]) : (() => { try { return JSON.parse(String(r.embedding)) as number[] } catch { return [] } })()
-    return { entry: r.entry, sim: v.length ? cosine(q, v) : -1 }
-  }).filter((s) => s.sim > -1).sort((a, b) => b.sim - a.sim)
-  if (!scored.length) return teamLessonDigest(team, n)
+    const sim = v.length ? cosine(q, v) : -1
+    const ageDays = (now - new Date(r.created_at).getTime()) / 86400000
+    const decay = Math.exp(-ageDays / 45) // half-life ~31 days → recent lessons weigh more
+    return { entry: r.entry, sim, score: sim * (0.6 + 0.4 * decay) }
+  }).filter((s) => s.sim >= RELEVANCE_FLOOR).sort((a, b) => b.score - a.score)
+  if (!scored.length) return "" // nothing relevant enough → no advice beats wrong advice
   return scored.slice(0, n).map((s) => `- ${s.entry}`).join("\n")
 }
 

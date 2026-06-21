@@ -52,6 +52,7 @@ export function histogram(a: number[], buckets = 10) {
 export function movingAvg(a: number[], window = 7) { return a.map((_, i) => mean(a.slice(Math.max(0, i - window + 1), i + 1))) }
 `
 
+export function statsFiles(): { files: AppFile[] } { return { files: [{ path: "lib/stats.ts", content: STATS }] } }
 export function deterministicStats(config: DomainConfig, bp: Blueprint): { files: AppFile[] } | null {
   const hay = `${config.identity.name} ${bp.summary} ${bp.tables.map((t) => t.name).join(" ")}`.toLowerCase()
   const wants = /stat|estad[ií]stic|m[eé]trica|metric|dashboard|analytic|kpi|report|reporte|chart|gr[aá]fico|aggregat|average|promedio|sum|correlat|trend|insight|operac|finance|datos/.test(hay)

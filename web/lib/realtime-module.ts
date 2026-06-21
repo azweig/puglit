@@ -43,6 +43,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cha
 }
 `
 
+export function realtimeFiles(): { files: AppFile[] } { return { files: [{ path: "lib/realtime.ts", content: BUS }, { path: "app/api/realtime/[channel]/route.ts", content: SSE_ROUTE }] } }
 export function deterministicRealtime(config: DomainConfig, bp: Blueprint): { files: AppFile[] } | null {
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
   const hay = `${config.identity.name} ${tagline} ${bp.summary} ${bp.tables.map((t) => t.name).join(" ")}`.toLowerCase()

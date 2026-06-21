@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
 }
 `
 
+export function storageFiles(): { files: AppFile[] } { return { files: [{ path: "lib/storage.ts", content: STORAGE }, { path: "app/api/upload/route.ts", content: UPLOAD_ROUTE }] } }
 export function deterministicStorage(config: DomainConfig, bp: Blueprint): { files: AppFile[] } | null {
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
   const hay = `${config.identity.name} ${tagline} ${bp.summary} ${bp.tables.map((t) => t.name).join(" ")}`.toLowerCase()

@@ -31,6 +31,7 @@ export function validate(schema: Schema, data: Record<string, unknown>): { ok: b
 }
 `
 
+export function validationFiles(): { files: AppFile[] } { return { files: [{ path: "lib/validation.ts", content: VAL }] } }
 export function deterministicValidation(config: DomainConfig, bp: Blueprint): { files: AppFile[] } | null {
   const hay = `${config.identity.name} ${bp.summary} ${bp.tables.map((t) => t.name).join(" ")}`.toLowerCase()
   const wants = /valid|form|formulario|input|submit|registro|signup|checkout|onboarding|data quality|schema/.test(hay)

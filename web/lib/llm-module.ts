@@ -39,6 +39,7 @@ export async function summarize(text: string, sentences = 3): Promise<string> {
 }
 `
 
+export function llmFiles(): { files: AppFile[] } { return { files: [{ path: "lib/llm.ts", content: LLM }] } }
 export function deterministicLlm(config: DomainConfig, bp: Blueprint): { files: AppFile[] } | null {
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
   const hay = `${config.identity.name} ${tagline} ${bp.summary} ${bp.tables.map((t) => t.name).join(" ")}`.toLowerCase()

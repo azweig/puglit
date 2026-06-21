@@ -109,3 +109,13 @@ CREATE TABLE IF NOT EXISTS puglit_modules (
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ── Metrics: measure Puglit by evidence (build/smoke/judge-agreement/ablation) ──
+CREATE TABLE IF NOT EXISTS puglit_metrics (
+  id BIGSERIAL PRIMARY KEY,
+  name  VARCHAR(48) NOT NULL,
+  value DOUBLE PRECISION NOT NULL,
+  meta  JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_metrics_name ON puglit_metrics(name, created_at DESC);

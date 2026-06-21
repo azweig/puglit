@@ -74,6 +74,8 @@ import { deterministicCharts } from "@/lib/charts-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables } from "@/lib/swarm-repair"
+import { planCapabilities, resolveDeps } from "@/lib/swarm-planner"
+import { recordMetric } from "@/lib/swarm-metrics"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -1272,6 +1274,11 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     }
     const seed = await genCatalogSeed(config, bp, research).catch(() => null)
     if (seed) { files.push(seed); const ingest = research ? await genIngestionCron(config, bp, research).catch(() => null) : null; files.push(ingest || refreshCron(config)) }
+    // CAPABILITY PLANNER (crítica: keyword injection is fragile) — the LLM names the capabilities
+    // the product needs from the catalog; we append them to the detection text so the deterministic
+    // injectors below also fire for capabilities the keywords would miss (e.g. "ERP hospitalario").
+    const planned = await planCapabilities(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`, await moduleCatalog().catch(() => "")).catch(() => [] as string[])
+    if (planned.length) bp.summary += ` [capabilities: ${planned.join(" ")}]`
     // reusable channel connectors (WhatsApp / email / Telegram) — injected pre-built when the
     // product needs messaging, so the swarm reuses them instead of regenerating an IMAP client.
     const conn = deterministicConnectors(config, bp)
@@ -1357,6 +1364,10 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const fly = deterministicFlights(config, bp); if (fly) pushFiles(fly.files)
     const st = deterministicStats(config, bp); if (st) pushFiles(st.files)
     const ch = deterministicCharts(config, bp); if (ch) pushFiles(ch.files)
+    // DEPENDENCY RESOLVER (crítica: dependency graph) — force-inject hard requirements (e.g.
+    // social-auth → crypto, inappnotify → realtime) so no keyword-triggered module ships broken.
+    const addedDeps = resolveDeps(files)
+    if (addedDeps.length) console.log("[deps] auto-injected:", addedDeps.join(", "))
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
@@ -1387,10 +1398,13 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // CLOSE THE LOOP: auto-repair phantom tables (the recurring hallucinated-schema bug), then re-scan.
     let repaired = 0
     if (checks.issues.some((i) => i.kind === "phantom-table")) {
-      repaired = await repairPhantomTables(files, checks.issues, declaredTables).catch(() => 0)
+      repaired = await repairPhantomTables(files, checks.issues, declaredTables, bp.tables as any).catch(() => 0)
       if (repaired) checks = runSwarmChecks(files, declaredTables)
     }
     if (checks.issues.length) { s.qualityIssues = checks.issues; console.warn("[swarm-checks]", checks.summary) }
+    // METRICS (crítica: medir por evidencia) — record a build-quality signal per generation.
+    const highIssues = checks.issues.filter((i) => i.severity === "high").length
+    void recordMetric("build_success", highIssues === 0 ? 1 : 0, { files: files.length, issues: checks.issues.length, high: highIssues, repaired }).catch(() => {})
     s.phase = "done"
     return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}${repaired ? ` · auto-fixed ${repaired} table(s)` : ""}` }
   }

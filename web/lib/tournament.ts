@@ -18,6 +18,7 @@ import { TEAMS, type TeamId } from "@/lib/roster"
 import type { DomainConfig } from "@/lib/domain-types"
 import { awardRound, relevantLessons, AREAS, type Area } from "@/lib/progression"
 import { PLAYBOOK } from "@/lib/playbooks"
+import { recordMetric } from "@/lib/swarm-metrics"
 
 export interface TeamDesign { team: TeamId; philosophy: string; model: string; blueprint: Blueprint; metrics: { tables: number; routes: number; pages: number } }
 
@@ -95,7 +96,7 @@ Score EACH candidate 0-100 on FOUR disciplines, and give a one-sentence critique
 - dev: the API/operations — every user journey has its routes (create + read + the product's core action), no dead ends.
 - design: the pages/UX — the screens a user needs to actually use the product end-to-end.
 - business: product fidelity + feature completeness + a coherent money model (no pricing if free, no signup if public).
-Be critical and DISCRIMINATING; do not tie. Pick the best overall as winner. Judge only on merit, ignore house style.
+Apply this rubric explicitly (anchors, not vibes): 90-100 = ships as-is; 70-89 = minor fixes; 50-69 = missing a core piece; <50 = broken/incoherent. Penalize: hallucinated/unused tables, dead-end routes, missing the product's core action, insecure patterns (SQL built by string concat, secrets in code). Judge the WHOLE design of each candidate (never mix pieces across candidates). Be critical and DISCRIMINATING; do not tie. Pick the best overall as winner. Judge only on merit, ignore house style.
 Return ONLY JSON {"scores":[{"option":1,"data":0-100,"dev":0-100,"design":0-100,"business":0-100,"critique":"..."}],"winner":<best option number>}.` },
       { role: "user", content: `Product: ${config.identity.name} — ${tagline}\n\n${designs.map(card).join("\n\n")}` },
     ], { model, temperature: 0.2, schema: JUDGE_SCHEMA })) as typeof parsed
@@ -117,6 +118,21 @@ export async function judgeBlueprints(config: DomainConfig, designs: TeamDesign[
   const jury = JURY_MODELS.length ? JURY_MODELS : [MODELS.premium]
   const verdicts: { byTeam: Record<string, AreaScore>; winner: TeamId }[] = []
   for (const m of jury) { const v = await judgeOnce(config, designs, m).catch(() => null); if (v) verdicts.push(v) } // sequential: 1 GPU swaps
+  // CIRCUIT BREAKER (crítica: graceful degradation) — if the whole jury failed, don't block the
+  // pipeline: degrade to "draft mode" and pick the team with the most complete blueprint.
+  if (!verdicts.length) {
+    void recordMetric("judge_failed", 1).catch(() => {})
+    const winner = designs.slice().sort((a, b) => ((b.blueprint?.routes?.length || 0) + (b.blueprint?.tables?.length || 0)) - ((a.blueprint?.routes?.length || 0) + (a.blueprint?.tables?.length || 0)))[0]?.team || designs[0]?.team
+    const byTeam: Record<string, AreaScore> = {}
+    for (const d of designs) byTeam[d.team] = { data: 60, dev: 60, design: 60, business: 60, critique: "draft mode (jurado no disponible)", overall: 60 }
+    return { byTeam, winner }
+  }
+  // INTER-JUDGE AGREEMENT (crítica: ¿le creemos al juez?) — fraction of jurors that picked the
+  // eventual majority winner. Low agreement = noisy fitness signal → recorded for the scorecard.
+  const winnerVotes: Record<string, number> = {}
+  for (const v of verdicts) if (v.winner) winnerVotes[v.winner] = (winnerVotes[v.winner] || 0) + 1
+  const topAgree = Math.max(0, ...Object.values(winnerVotes))
+  void recordMetric("judge_agreement", verdicts.length > 1 ? topAgree / verdicts.length : 1, { jurors: verdicts.length }).catch(() => {})
 
   const byTeam: Record<string, AreaScore> = {}
   for (const d of designs) {

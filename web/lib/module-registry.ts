@@ -25,7 +25,36 @@ export interface Module {
   gateway?: string
   files?: ModuleFile[]
   version?: number
-  status?: string
+  status?: string // experimental | candidate | stable | core (harvest lifecycle)
+  requires?: string[] // hard module dependencies — auto-injected with this one (crítica: dep graph)
+  tier?: "core" | "infra" | "integration" | "business" | "meta" // for cognitive grouping
+}
+
+// Hard dependency graph (crítica #2: billing→storage, etc.). Used to auto-inject requirements
+// so a keyword that triggers a dependent never ships a broken build missing its base module.
+export const MODULE_REQUIRES: Record<string, string[]> = {
+  "social-auth": ["crypto"],
+  billing: ["crypto"],
+  payments: ["crypto"],
+  inappnotify: ["realtime"],
+  moderation: ["llm"],
+  rag: ["llm"],
+  agent: ["llm", "crypto"],
+  charts: ["stats"],
+  forms: ["validation"],
+  webhooksout: ["crypto", "queue"],
+  imagegen: ["storage"],
+  media: ["storage"],
+}
+/** Transitive closure of module dependencies. */
+export function dependencyClosure(names: string[]): string[] {
+  const seen = new Set<string>(names)
+  const stack = [...names]
+  while (stack.length) {
+    const n = stack.pop()!
+    for (const dep of MODULE_REQUIRES[n] || []) if (!seen.has(dep)) { seen.add(dep); stack.push(dep) }
+  }
+  return [...seen]
 }
 
 /** Metadata for the builtin modules (their code is injected by connectors.ts / integrations.ts). */
@@ -118,13 +147,20 @@ export async function moduleCatalog(): Promise<string> {
   return mods.map((m) => `- ${m.name} (${m.category}): ${m.description}${m.whenToUse ? ` — use when ${m.whenToUse}` : ""}${m.gateway ? ` [needs ${m.gateway}]` : ""}`).join("\n")
 }
 
-/** Custom modules relevant to a product (for injecting their code into the build). */
+/** Custom modules relevant to a product — ONLY promoted ones (stable/core) are auto-injected, so
+ *  raw harvested modules can't contaminate real builds (crítica: catalog rot / harvest governance). */
 export async function findCustomModulesFor(text: string): Promise<Module[]> {
   const t = text.toLowerCase()
   return (await customModules()).filter((m) => {
+    if (!["stable", "core"].includes(m.status || "")) return false // experimental/candidate stay out
     const words = `${m.name} ${m.description} ${m.whenToUse || ""}`.toLowerCase().split(/\W+/).filter((w) => w.length > 4)
     return words.some((w) => t.includes(w))
   })
+}
+
+/** Promote a harvested module along the lifecycle: experimental → candidate → stable → core. */
+export async function promoteModule(name: string, to: "candidate" | "stable" | "core"): Promise<void> {
+  await query("UPDATE puglit_modules SET status=$2, updated_at=NOW() WHERE name=$1", [name, to]).catch(() => {})
 }
 
 /** Register a NEW module or an IMPROVEMENT (upsert + version bump). DB + git-trackable mirror. */
@@ -161,7 +197,7 @@ export async function harvestModules(files: ModuleFile[], createdBy?: string): P
     await registerModule({
       name, category: m[1] === "connectors" ? "channel" : "integration",
       description: `Auto-harvested ${m[1] === "connectors" ? "channel" : "integration"} connector from a generated app.`,
-      whenToUse: `the product uses ${name}`, files: [f], status: "new", createdBy,
+      whenToUse: `the product uses ${name}`, files: [f], status: "experimental", createdBy,
     })
     harvested.push(name)
   }
