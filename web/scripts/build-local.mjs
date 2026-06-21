@@ -274,10 +274,21 @@ log(ok ? "RESULT: COMPILES ✓" : "RESULT: still failing (serving anyway)")
 
 // BYO deploy to the USER's own GitHub (+ optional Vercel), if tokens are present. Tokens
 // come from env, are passed straight to infra/deploy.sh, and are NEVER persisted.
+const STATUS = process.env.EXPORT_STATUS_FILE // set by the "Compilar y exportar" endpoint
+const writeStatus = (o) => { if (STATUS) try { fs.writeFileSync(STATUS, JSON.stringify(o)) } catch {} }
 if (process.env.GH_TOKEN || process.env.VERCEL_TOKEN) {
   log("deploy BYO (a tu cuenta)…")
-  spawnSync("bash", [path.join(ROOT, "infra/deploy.sh"), DIR, `puglit-${SLUG}`], { stdio: "inherit", env: { ...process.env } })
+  writeStatus({ status: "deploying", compiles: ok })
+  const dep = spawnSync("bash", [path.join(ROOT, "infra/deploy.sh"), DIR, `puglit-${process.env.EXPORT_REPO || SLUG}`], { encoding: "utf8", env: { ...process.env } })
+  const out = (dep.stdout || "") + (dep.stderr || ""); console.log(out)
+  const githubUrl = (out.match(/GitHub:\s*(https:\/\/\S+)/) || [])[1] || null
+  const vercelUrl = (out.match(/Vercel:\s*(https:\/\/\S+)/) || [])[1] || null
+  writeStatus({ status: "done", compiles: ok, githubUrl, vercelUrl })
+  log(`export listo · github=${githubUrl || "-"} · vercel=${vercelUrl || "-"}`)
 }
+
+// EXPORT_ONLY: compile + export, then exit (no preview server). Used by the browser button.
+if (process.env.EXPORT_ONLY) { if (!process.env.GH_TOKEN && !process.env.VERCEL_TOKEN) writeStatus({ status: "done", compiles: ok, note: "sin tokens — nada que exportar" }); process.exit(0) }
 
 log(`sirviendo preview en http://localhost:${PORT} …`)
 const srv = spawn("npx", ["next", "dev", "-p", PORT], { cwd: DIR, stdio: "inherit", env: { ...process.env } })

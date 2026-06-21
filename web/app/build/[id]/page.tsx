@@ -82,7 +82,9 @@ export default function BuildPage() {
     <main className="max-w-5xl mx-auto px-5 py-12">
       <Link href="/" className="flex items-center gap-2 text-violet-bright mb-6"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
       <h1 className="text-3xl font-extrabold">{done ? "✅ " : job?.status === "queued" ? "⏳ " : ""}Construyendo {job?.name || "tu proyecto"}…</h1>
-      <p className="text-white/60 mt-2 mb-6">{done ? "Listo. Tu app fue generada y entregada." : job?.status === "queued" ? "En cola — esperando un cupo de agentes. Esto sigue solo aunque cierres la pestaña (el watchdog lo continúa)." : job?.status === "error" ? "Hubo un error; el watchdog reintentará los pasos trabados." : "Los agentes están trabajando. Podés cerrar esta pestaña — te avisamos por mail si dejaste tu email."}</p>
+      <p className="text-white/60 mt-2 mb-6">{done ? "Listo. El código fue entregado (sin compilar). Compilá y exportalo a TU cuenta abajo." : job?.status === "queued" ? "En cola — esperando un cupo de agentes. Esto sigue solo aunque cierres la pestaña (el watchdog lo continúa)." : job?.status === "error" ? "Hubo un error; el watchdog reintentará los pasos trabados." : "Los agentes están trabajando. Podés cerrar esta pestaña — te avisamos por mail si dejaste tu email."}</p>
+
+      {done && <ExportPanel jobId={id} />}
 
       <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-6"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: "var(--violet)" }} /></div>
 
@@ -170,5 +172,54 @@ export default function BuildPage() {
         </div>
       )}
     </main>
+  )
+}
+
+/** Compile & export the delivered code to the USER's own GitHub / Vercel (BYO tokens). */
+function ExportPanel({ jobId }: { jobId: string }) {
+  const [open, setOpen] = useState(false)
+  const [gh, setGh] = useState("")
+  const [vc, setVc] = useState("")
+  const [st, setSt] = useState<{ status?: string; githubUrl?: string | null; vercelUrl?: string | null; note?: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const poll = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => () => { poll.current && clearInterval(poll.current) }, [])
+
+  async function run() {
+    if (!gh.trim() && !vc.trim()) { setSt({ note: "Pegá al menos un token (GitHub y/o Vercel)." }); return }
+    setBusy(true); setSt({ status: "starting" })
+    const d = await fetch("/api/genetic/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId, githubToken: gh.trim() || undefined, vercelToken: vc.trim() || undefined }) }).then((r) => r.json()).catch(() => ({}))
+    if (!d.ok) { setBusy(false); setSt({ note: d.error || "no arrancó" }); return }
+    poll.current = setInterval(async () => {
+      const s = await fetch(`/api/genetic/export?jobId=${jobId}`).then((r) => r.json()).catch(() => null)
+      if (s) { setSt(s); if (s.status === "done" || s.status === "error") { clearInterval(poll.current!); setBusy(false) } }
+    }, 3000)
+  }
+
+  const done = st?.status === "done"
+  return (
+    <div className="mb-6 rounded-2xl border border-emerald-400/30 bg-emerald-500/[0.06] p-4">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="rounded-xl bg-emerald-500 px-5 py-2.5 font-bold text-black">🚀 Compilar y exportar →</button>
+      ) : (
+        <div>
+          <div className="mb-1 font-bold text-white">Compilar y exportar a TU cuenta</div>
+          <p className="mb-3 text-xs text-white/55">Pegá tu token de GitHub (cualquier app) y/o Vercel (solo apps web). Se usan una vez y <b>nunca se guardan</b>. Puglit no paga nada — es tu deploy.</p>
+          <input value={gh} onChange={(e) => setGh(e.target.value)} placeholder="GitHub token (ghp_…) — opcional" className="mb-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm" />
+          <input value={vc} onChange={(e) => setVc(e.target.value)} placeholder="Vercel token — opcional" className="mb-3 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm" />
+          <button onClick={run} disabled={busy} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-black disabled:opacity-50">{busy ? "compilando + exportando…" : "Exportar"}</button>
+          {st?.status && st.status !== "done" && st.status !== "error" && <span className="ml-3 text-xs text-white/60">⏱ {st.status === "deploying" ? "compilando y subiendo…" : "arrancando…"} (podés cerrar, sigue en el server)</span>}
+          {st?.note && <p className="mt-2 text-xs text-amber-300">{st.note}</p>}
+          {done && (
+            <div className="mt-3 space-y-1 text-sm">
+              {st?.githubUrl && <div>✅ GitHub: <a href={st.githubUrl} target="_blank" rel="noreferrer" className="text-violet-bright underline">{st.githubUrl}</a></div>}
+              {st?.vercelUrl && <div>✅ Vercel: <a href={st.vercelUrl} target="_blank" rel="noreferrer" className="text-violet-bright underline">{st.vercelUrl}</a></div>}
+              {!st?.githubUrl && !st?.vercelUrl && <div className="text-amber-300">Terminó pero sin URLs — revisá los tokens.</div>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
