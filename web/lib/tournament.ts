@@ -19,6 +19,7 @@ import type { DomainConfig } from "@/lib/domain-types"
 import { awardRound, relevantLessons, AREAS, type Area } from "@/lib/progression"
 import { PLAYBOOK } from "@/lib/playbooks"
 import { recordMetric } from "@/lib/swarm-metrics"
+import { objectiveScore } from "@/lib/swarm-fitness"
 
 export interface TeamDesign { team: TeamId; philosophy: string; model: string; blueprint: Blueprint; metrics: { tables: number; routes: number; pages: number } }
 
@@ -142,7 +143,11 @@ export async function judgeBlueprints(config: DomainConfig, designs: TeamDesign[
     const data = avg("data"), dev = avg("dev"), design = avg("design"), business = avg("business")
     // keep the critiques from each juror (deduped) so the diary/UI sees the panel's view
     const crit = [...new Set(ss.map((x) => x.critique).filter(Boolean))].slice(0, 3).join(" · ")
-    byTeam[d.team] = { data, dev, design, business, critique: crit, overall: Math.round((data + dev + design + business) / 4) }
+    const judgeOverall = Math.round((data + dev + design + business) / 4)
+    // OBJECTIVE FITNESS (crítica: el juez es ruidoso) — blend the LLM verdict with a deterministic,
+    // measurable blueprint score so selection isn't purely subjective. 60% judge / 40% objective.
+    const obj = objectiveScore(d.blueprint as any)
+    byTeam[d.team] = { data, dev, design, business, critique: crit, overall: Math.round(0.6 * judgeOverall + 0.4 * obj) }
   }
 
   // winner = majority vote across jurors; tie → highest aggregate overall (the "desempate")

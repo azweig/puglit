@@ -154,9 +154,12 @@ export async function teamLessonDigest(team: string, n = 6): Promise<string> {
 export async function relevantLessons(team: string, taskText: string, n = 6): Promise<string> {
   const q = await embed(taskText).catch(() => null)
   if (!q) return teamLessonDigest(team, n)
+  // anti-poisoning: only recall lessons from decent-quality rounds (a bad/poisoned round's
+  // lesson has low quality) and never an explicitly gate-FAILED one. Uses existing signals.
   const { rows } = await query<{ entry: string; embedding: unknown; created_at: Date }>(
     `SELECT DISTINCT ON (d.entry) d.entry, d.embedding, d.created_at FROM puglit_agent_diary d JOIN puglit_agents a ON a.id=d.agent_id
-     WHERE a.team=$1 AND d.embedding IS NOT NULL ORDER BY d.entry, d.created_at DESC LIMIT 400`, [team])
+     WHERE a.team=$1 AND d.embedding IS NOT NULL AND COALESCE(d.quality, 60) >= 45 AND COALESCE(d.outcome,'unknown') <> 'failure'
+     ORDER BY d.entry, d.created_at DESC LIMIT 400`, [team])
   if (!rows.length) return teamLessonDigest(team, n)
   const now = Date.now()
   const RELEVANCE_FLOOR = 0.35 // below this, the lesson is from a different domain → ignore it

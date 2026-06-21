@@ -119,3 +119,18 @@ CREATE TABLE IF NOT EXISTS puglit_metrics (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_metrics_name ON puglit_metrics(name, created_at DESC);
+
+-- ── Verified exemplars: known-good code (passed the gate) retrieved into prompts ──
+CREATE TABLE IF NOT EXISTS verified_exemplars (
+  id BIGSERIAL PRIMARY KEY,
+  kind  VARCHAR(24) NOT NULL,   -- route | page
+  task  TEXT,
+  code  TEXT NOT NULL,
+  embedding JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_exemplars_kind ON verified_exemplars(kind, created_at DESC);
+
+-- lesson outcome (anti-poisoning): only lessons from gate-passing builds get recalled
+ALTER TABLE puglit_agent_diary ADD COLUMN IF NOT EXISTS outcome VARCHAR(12) DEFAULT 'unknown';
+ALTER TABLE puglit_agent_diary ADD COLUMN IF NOT EXISTS scope VARCHAR(16) DEFAULT 'team';

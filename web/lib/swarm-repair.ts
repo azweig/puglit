@@ -7,8 +7,30 @@
  */
 import { chatJSON, MODELS } from "@/lib/openai"
 import { type CodeIssue } from "@/lib/swarm-checks"
+import { frontierEscalate } from "@/lib/swarm-fitness"
 
 type AppFile = { path: string; content: string }
+
+/** FRONTIER ESCALATION (crítica: techo del modelo + auto-repair solo flaggea security) — for the
+ *  high-severity security issues the local model/heuristics can't safely fix, spend a bounded
+ *  budget of a STRONGER model to rewrite the offending file. No-op unless PUGLIT_FRONTIER_BUDGET set. */
+export async function repairSecurityWithFrontier(files: AppFile[], issues: CodeIssue[]): Promise<number> {
+  const sec = issues.filter((i) => i.severity === "high" && ["sql-injection", "hardcoded-secret", "dangerous-exec"].includes(i.kind))
+  if (!sec.length) return 0
+  const byFile = new Map<string, CodeIssue[]>()
+  for (const i of sec) { if (!byFile.has(i.file)) byFile.set(i.file, []); byFile.get(i.file)!.push(i) }
+  let fixed = 0
+  for (const [path, fileIssues] of byFile) {
+    const f = files.find((x) => x.path === path)
+    if (!f) continue
+    const out = await frontierEscalate([
+      { role: "system", content: "You fix SECURITY issues in one Next.js 16 + TypeScript file. Return ONLY the full corrected file (no prose, no fences). Parameterize ALL SQL ($1,$2,…), move any secret to process.env, remove eval/exec/child_process. Keep behavior identical otherwise; it must still compile under tsc." },
+      { role: "user", content: `Issues to fix: ${fileIssues.map((i) => i.kind + " — " + i.detail).join("; ")}\n\nFile ${path}:\n${f.content.slice(0, 12000)}` },
+    ]).catch(() => null)
+    if (out && out.length > 60) { f.content = out.replace(/^```[a-z]*\n?/i, "").replace(/```\s*$/, "").trim(); fixed++ }
+  }
+  return fixed
+}
 
 const SCHEMA = { type: "object", properties: { sql: { type: "string" } }, required: ["sql"] }
 

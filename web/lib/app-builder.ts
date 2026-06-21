@@ -73,9 +73,11 @@ import { deterministicStats } from "@/lib/stats-module"
 import { deterministicCharts } from "@/lib/charts-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
-import { repairPhantomTables } from "@/lib/swarm-repair"
+import { repairPhantomTables, repairSecurityWithFrontier } from "@/lib/swarm-repair"
+import { resetFrontierBudget } from "@/lib/swarm-fitness"
 import { planCapabilities, resolveDeps } from "@/lib/swarm-planner"
 import { recordMetric } from "@/lib/swarm-metrics"
+import { exemplarFor, storeExemplar, generateBest } from "@/lib/swarm-fitness"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -284,9 +286,24 @@ function groupRoutes(routes: RouteSpec[]): RouteFile[] {
 }
 
 /** Backend swarm: one agent per route FILE → a real handler implementing ALL its methods. */
+/** Objective quality of a generated route (for best-of-N): handlers present, parameterized SQL,
+ *  no string-interpolated SQL, reasonable size. No LLM — measurable. */
+function routeScore(code: string): number {
+  if (!code) return -1
+  let s = 0
+  if (/export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)/.test(code)) s += 50
+  if (/\$\d/.test(code)) s += 15 // parameterized queries
+  if (/try\s*\{[\s\S]*catch/.test(code)) s += 10
+  if (/\.query\(\s*[`"][^`"]*\$\{/.test(code)) s -= 40 // SQL built by interpolation = bad
+  if (/TODO|FIXME|not implemented|stub/i.test(code)) s -= 20
+  return s + Math.min(15, code.length / 200)
+}
+
 async function genRouteFile(config: DomainConfig, bp: Blueprint, rf: RouteFile): Promise<AppFile | null> {
   const ops = rf.specs.map((s) => `• ${s.methods.join("/")} — ${s.purpose}\n  Logic: ${s.logic}`).join("\n")
-  const out = (await chatJSON([
+  // RETRIEVAL of a known-good route that built+ran (raise the floor without a better model)
+  const exemplar = await exemplarFor("route", `${rf.path} ${ops}`).catch(() => "")
+  const gen = async () => (await chatJSON([
     { role: "system", content: `You are a Backend Engineer. Write ONE Next.js 16 App Router route handler file at ${rf.path} implementing ALL the listed HTTP methods with REAL, working logic (no TODOs, no stubs). It must compile under tsc --noEmit.
 
 ${PLAYBOOK.dev}
@@ -314,8 +331,10 @@ DATABASE TABLES (already created — use these EXACT names/columns):
 ${tablesDoc(bp)}
 
 Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
-    { role: "user", content: `File: ${rf.path}\nMethods to implement: ${[...rf.methods].join(", ")}\nOperations:\n${ops}` },
+    { role: "user", content: `File: ${rf.path}\nMethods to implement: ${[...rf.methods].join(", ")}\nOperations:\n${ops}${exemplar}` },
   ], { model: MODELS.code, temperature: 0.2 })) as { code?: string }
+  // BEST-OF-N (gated by PUGLIT_BEST_OF, default 1 = off) — keep the attempt that scores best
+  const out = await generateBest(gen, (r) => routeScore((r as { code?: string } | null)?.code || ""))
   return out.code ? { path: rf.path, content: String(out.code).slice(0, 30_000).replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {") } : null
 }
 
@@ -383,7 +402,7 @@ DELIVERY CHECKLIST — the page is not done until ALL are true:
 8. Interaction matches the product: like/pass card-stack ONLY for swipe/match; scores/news/feed → dense scannable list/table (no like/pass); marketplace → photo grid; chat → bubble thread polling every 2500ms.
 
 Return ONLY JSON: {"code":"<the full contents of ${p.file}>"}` },
-    { role: "user", content: `File: ${p.file}\nRoute: ${p.route}\nTitle: ${p.title}\nBehavior to implement EXACTLY:\n${p.behavior}\n\nProduct: ${config.identity.name}. Nav between screens: ${bp.nav.map((n) => `${n.label}→${n.href}`).join(", ")}.` },
+    { role: "user", content: `File: ${p.file}\nRoute: ${p.route}\nTitle: ${p.title}\nBehavior to implement EXACTLY:\n${p.behavior}\n\nProduct: ${config.identity.name}. Nav between screens: ${bp.nav.map((n) => `${n.label}→${n.href}`).join(", ")}.${await exemplarFor("page", `${p.title} ${p.behavior}`).catch(() => "")}` },
   ], { model: MODELS.code, temperature: 0.45 })) as { code?: string }
   return out.code ? { path: p.file, content: postTsx(String(out.code).slice(0, 30_000)) } : null
 }
@@ -1396,15 +1415,28 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const declaredTables = (bp.tables || []).map((t) => t.name)
     let checks = runSwarmChecks(files, declaredTables)
     // CLOSE THE LOOP: auto-repair phantom tables (the recurring hallucinated-schema bug), then re-scan.
+    resetFrontierBudget() // bounded per build
     let repaired = 0
     if (checks.issues.some((i) => i.kind === "phantom-table")) {
       repaired = await repairPhantomTables(files, checks.issues, declaredTables, bp.tables as any).catch(() => 0)
       if (repaired) checks = runSwarmChecks(files, declaredTables)
     }
+    // FRONTIER ESCALATION — spend a bounded budget of a stronger model on high-severity security
+    // issues the local model can't safely fix (no-op unless PUGLIT_FRONTIER_BUDGET is set).
+    if (checks.issues.some((i) => i.severity === "high" && /sql-injection|hardcoded-secret|dangerous-exec/.test(i.kind))) {
+      const secFixed = await repairSecurityWithFrontier(files, checks.issues).catch(() => 0)
+      if (secFixed) checks = runSwarmChecks(files, declaredTables)
+    }
     if (checks.issues.length) { s.qualityIssues = checks.issues; console.warn("[swarm-checks]", checks.summary) }
     // METRICS (crítica: medir por evidencia) — record a build-quality signal per generation.
     const highIssues = checks.issues.filter((i) => i.severity === "high").length
     void recordMetric("build_success", highIssues === 0 ? 1 : 0, { files: files.length, issues: checks.issues.length, high: highIssues, repaired }).catch(() => {})
+    // VERIFIED EXEMPLARS — when the static gate is clean, store route/page code so future builds
+    // retrieve known-good examples (raises the floor without a stronger model).
+    if (highIssues === 0) for (const f of files) {
+      if (/^app\/api\/.*route\.ts$/.test(f.path)) void storeExemplar("route", f.path, f.content).catch(() => {})
+      else if (/^app\/.*\/page\.tsx$/.test(f.path) || f.path === "app/page.tsx") void storeExemplar("page", f.path, f.content).catch(() => {})
+    }
     s.phase = "done"
     return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}${repaired ? ` · auto-fixed ${repaired} table(s)` : ""}` }
   }
