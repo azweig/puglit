@@ -22,6 +22,7 @@ import { deterministicIntegrations } from "@/lib/integrations"
 import { deterministicAgent } from "@/lib/agent-module"
 import { deterministicVoice } from "@/lib/voice-module"
 import { deterministicMaps } from "@/lib/maps-module"
+import { deterministicScraper } from "@/lib/scraper-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1235,6 +1236,9 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // MAPS / LOCATION (Leaflet + OSM map UI, IP geolocation, Nominatim geocoding) — open-source.
     const maps = deterministicMaps(config, bp)
     if (maps) for (const f of maps.files) if (!files.some((x) => x.path === f.path)) files.push(f)
+    // SCRAPER (Scrapling stealth + ScrapeGraph-ai LLM extract, via a gateway) — for LinkedIn/paywalls/monitoring.
+    const scraper = deterministicScraper(config, bp)
+    if (scraper) for (const f of scraper.files) if (!files.some((x) => x.path === f.path)) files.push(f)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
