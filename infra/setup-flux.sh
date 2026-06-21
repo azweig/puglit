@@ -14,9 +14,13 @@ PORT="${FLUX_PORT:-8080}"
 export HF_HOME="${HF_HOME:-/workspace/.hf}"
 mkdir -p "$HF_HOME"
 
-echo "→ 1/3 deps (torch cu12, diffusers, fastapi)… (un rato la 1ra vez)"
+echo "→ 1/3 deps (diffusers, fastapi)… (un rato la 1ra vez)"
 pip install -q --upgrade pip
-pip install -q torch --index-url https://download.pytorch.org/whl/cu124 2>/dev/null || pip install -q torch
+# Use the pod image's existing torch (re-installing churns versions and breaks custom ops).
+python3 -c "import torch" 2>/dev/null || pip install -q torch --index-url https://download.pytorch.org/whl/cu124
+# The RunPod image ships FlashAttention-3, which registers a torch custom-op whose schema
+# the diffusers import chokes on (the `infer_schema` error). FLUX doesn't need it → remove it.
+pip uninstall -y flash-attn flash_attn flash-attn-3 2>/dev/null || true
 pip install -q diffusers transformers accelerate sentencepiece protobuf pillow fastapi "uvicorn[standard]"
 
 echo "→ 2/3 arrancando FLUX server en :$PORT (la 1ra vez baja ~24GB de FLUX.1-schnell)…"
