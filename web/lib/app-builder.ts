@@ -48,6 +48,7 @@ import { deterministicSocialSearch } from "@/lib/socialsearch-module"
 import { deterministicForecast } from "@/lib/forecast-module"
 import { deterministicCompress } from "@/lib/compress-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
+import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 
 export interface AppFile { path: string; content: string }
 export interface TableSpec { name: string; ddl: string }
@@ -1163,6 +1164,7 @@ export interface EngineState {
   pi: number
   files: AppFile[]
   connectorDeps?: Record<string, string> // extra npm deps from injected connectors (whatsapp/email/telegram)
+  qualityIssues?: CodeIssue[] // swarm-checks findings (security + consistency) surfaced for the critic
 }
 export function initEngineState(): EngineState {
   return { phase: "plan", blueprint: null, brief: "", ri: 0, pi: 0, files: [] }
@@ -1330,8 +1332,13 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
       const si = files.findIndex((f) => f.path === shell.path)
       if (si >= 0) files[si] = shell; else files.push(shell)
     }
+    // SWARM quality gate — security + consistency scan over the generated code (surfaced to the
+    // build log + the critic so the swarm can self-correct: hardcoded secrets, SQL injection,
+    // phantom tables / hallucinated schema, missing imports).
+    const checks = runSwarmChecks(files, (bp.tables || []).map((t) => t.name))
+    if (checks.issues.length) { s.qualityIssues = checks.issues; console.warn("[swarm-checks]", checks.summary) }
     s.phase = "done"
-    return { state: s, done: true, detail: `${files.length} archivos generados` }
+    return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}` }
   }
   return { state: s, done: true, detail: "done" }
 }
