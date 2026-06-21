@@ -36,6 +36,8 @@ import { deterministicBilling } from "@/lib/billing-module"
 import { deterministicLlm } from "@/lib/llm-module"
 import { deterministicRag } from "@/lib/rag-module"
 import { deterministicImageGen } from "@/lib/imagegen-module"
+import { deterministicCache } from "@/lib/cache-module"
+import { deterministicCloudflare } from "@/lib/cloudflare-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1284,6 +1286,8 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const llm = deterministicLlm(config, bp); if (llm) pushFiles(llm.files)
     const rag = deterministicRag(config, bp); if (rag) { pushFiles(rag.files); addSql(/CREATE TABLE IF NOT EXISTS rag_documents\b/, "pgvector RAG store (Puglit rag)", rag.extraSql) }
     const imagegen = deterministicImageGen(config, bp); if (imagegen) pushFiles(imagegen.files)
+    const cache = deterministicCache(config, bp); if (cache) pushFiles(cache.files)
+    const cloudflare = deterministicCloudflare(config, bp); if (cloudflare) pushFiles(cloudflare.files)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
