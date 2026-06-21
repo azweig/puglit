@@ -25,6 +25,7 @@ import { deterministicMaps } from "@/lib/maps-module"
 import { deterministicScraper } from "@/lib/scraper-module"
 import { deterministicPayments } from "@/lib/payments-module"
 import { deterministicSocialAuth } from "@/lib/social-auth-module"
+import { deterministicCrypto, cryptoFiles } from "@/lib/crypto-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 
 export interface AppFile { path: string; content: string }
@@ -1255,6 +1256,10 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
       const sqlF = files.find((f) => f.path === "sql/app.sql")
       if (sqlF && !/CREATE TABLE IF NOT EXISTS social_accounts\b/.test(sqlF.content)) sqlF.content += `\n\n-- social accounts (OAuth login + tokens) — Puglit social-auth module\n${social.extraSql}\n`
     }
+    // CRYPTO (encrypt-at-rest + hashing + signing) — co-injected with payments/social so stored
+    // tokens & secrets aren't plaintext, or on its own when the product handles secrets/PII.
+    const crypto = deterministicCrypto(config, bp) || (pay || social ? cryptoFiles() : null)
+    if (crypto) for (const f of crypto.files) if (!files.some((x) => x.path === f.path)) files.push(f)
     // VOICE (STT listen + TTS speak) — the "voice first" capability.
     const voice = deterministicVoice(config, bp)
     if (voice) for (const f of voice.files) if (!files.some((x) => x.path === f.path)) files.push(f)
