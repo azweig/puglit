@@ -73,16 +73,20 @@ export async function divergeBlueprints(config: DomainConfig, contracts: string,
 
 export interface AreaScore { data: number; dev: number; design: number; business: number; critique: string; overall: number }
 
-/** Grand Jury: scores each design ANONYMIZED (Option 1/2/3) PER AREA + a critique. */
-export async function judgeBlueprints(config: DomainConfig, designs: TeamDesign[]): Promise<{ byTeam: Record<string, AreaScore>; winner: TeamId }> {
+/** The jury panel: one OR several models (a "triumvirate") that each vote independently.
+ *  Set PUGLIT_JURY_MODELS="gpt-oss:20b,qwen2.5-coder:32b,deepseek-r1:32b" (comma-sep) for a
+ *  multi-model panel; default is a single judge (MODELS.premium). All local on the A40. */
+const JURY_MODELS = (process.env.PUGLIT_JURY_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean)
+
+/** ONE judge scores each design ANONYMIZED (Option 1/2/3) per area + a critique + a winner. */
+async function judgeOnce(config: DomainConfig, designs: TeamDesign[], model: string): Promise<{ byTeam: Record<string, AreaScore>; winner: TeamId } | null> {
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
   const card = (d: TeamDesign, i: number) =>
     `OPTION ${i + 1}\nkind: ${d.blueprint.kind}\nsummary: ${d.blueprint.summary}\ntables (${d.metrics.tables}): ${d.blueprint.tables.map((t) => t.name).join(", ")}\nroutes (${d.metrics.routes}): ${d.blueprint.routes.map((r) => r.path.replace(/^app\/api\//, "").replace(/\/route\.ts$/, "")).join(", ")}\npages (${d.metrics.pages}): ${d.blueprint.pages.map((p) => p.route).join(", ")}`
-
   let parsed: { scores?: { option: number; data: number; dev: number; design: number; business: number; critique: string }[]; winner?: number } = {}
   try {
     parsed = (await chatJSON([
-      { role: "system", content: `You are the Stakeholder Grand Jury (chairman + 4 specialists) judging candidate blueprints.
+      { role: "system", content: `You are a Stakeholder juror judging candidate blueprints.
 
 ${PLAYBOOK.review}
 
@@ -94,20 +98,45 @@ Score EACH candidate 0-100 on FOUR disciplines, and give a one-sentence critique
 Be critical and DISCRIMINATING; do not tie. Pick the best overall as winner. Judge only on merit, ignore house style.
 Return ONLY JSON {"scores":[{"option":1,"data":0-100,"dev":0-100,"design":0-100,"business":0-100,"critique":"..."}],"winner":<best option number>}.` },
       { role: "user", content: `Product: ${config.identity.name} — ${tagline}\n\n${designs.map(card).join("\n\n")}` },
-    ], { model: MODELS.premium, temperature: 0.2, schema: JUDGE_SCHEMA })) as typeof parsed
-  } catch { parsed = {} }
-
+    ], { model, temperature: 0.2, schema: JUDGE_SCHEMA })) as typeof parsed
+  } catch { return null }
   const byTeam: Record<string, AreaScore> = {}
   for (const s of parsed.scores || []) {
     const d = designs[s.option - 1]; if (!d) continue
-    const overall = Math.round((s.data + s.dev + s.design + s.business) / 4)
-    byTeam[d.team] = { data: s.data, dev: s.dev, design: s.design, business: s.business, critique: s.critique || "", overall }
+    byTeam[d.team] = { data: s.data, dev: s.dev, design: s.design, business: s.business, critique: s.critique || "", overall: Math.round((s.data + s.dev + s.design + s.business) / 4) }
   }
-  // fallback: any design the judge skipped gets a neutral score so it still competes
-  for (const d of designs) if (!byTeam[d.team]) byTeam[d.team] = { data: 60, dev: 60, design: 60, business: 60, critique: "sin evaluación del jurado", overall: 60 }
-
+  if (!Object.keys(byTeam).length) return null
   let winner = designs[(parsed.winner || 0) - 1]?.team
-  if (!winner) winner = (Object.entries(byTeam).sort((a, b) => b[1].overall - a[1].overall)[0]?.[0] as TeamId) || designs[0]?.team
+  if (!winner) winner = (Object.entries(byTeam).sort((a, b) => b[1].overall - a[1].overall)[0]?.[0] as TeamId)
+  return { byTeam, winner }
+}
+
+/** Grand Jury: runs the PANEL (1..N jurors), averages per-area scores across jurors, and
+ *  picks the winner by MAJORITY VOTE — ties broken by the aggregate overall score. */
+export async function judgeBlueprints(config: DomainConfig, designs: TeamDesign[]): Promise<{ byTeam: Record<string, AreaScore>; winner: TeamId }> {
+  const jury = JURY_MODELS.length ? JURY_MODELS : [MODELS.premium]
+  const verdicts: { byTeam: Record<string, AreaScore>; winner: TeamId }[] = []
+  for (const m of jury) { const v = await judgeOnce(config, designs, m).catch(() => null); if (v) verdicts.push(v) } // sequential: 1 GPU swaps
+
+  const byTeam: Record<string, AreaScore> = {}
+  for (const d of designs) {
+    const ss = verdicts.map((v) => v.byTeam[d.team]).filter(Boolean)
+    if (!ss.length) { byTeam[d.team] = { data: 60, dev: 60, design: 60, business: 60, critique: "sin evaluación del jurado", overall: 60 }; continue }
+    const avg = (k: "data" | "dev" | "design" | "business") => Math.round(ss.reduce((s, x) => s + x[k], 0) / ss.length)
+    const data = avg("data"), dev = avg("dev"), design = avg("design"), business = avg("business")
+    // keep the critiques from each juror (deduped) so the diary/UI sees the panel's view
+    const crit = [...new Set(ss.map((x) => x.critique).filter(Boolean))].slice(0, 3).join(" · ")
+    byTeam[d.team] = { data, dev, design, business, critique: crit, overall: Math.round((data + dev + design + business) / 4) }
+  }
+
+  // winner = majority vote across jurors; tie → highest aggregate overall (the "desempate")
+  const votes: Record<string, number> = {}
+  for (const v of verdicts) if (v.winner) votes[v.winner] = (votes[v.winner] || 0) + 1
+  const ranked = Object.entries(byTeam).sort((a, b) => b[1].overall - a[1].overall)
+  let winner = (Object.entries(votes).sort((a, b) => b[1] - a[1])[0]?.[0]) as TeamId | undefined
+  const topVotes = winner ? votes[winner] : 0
+  const tied = Object.values(votes).filter((n) => n === topVotes).length > 1
+  if (!winner || tied) winner = (ranked[0]?.[0] as TeamId) || designs[0]?.team // tie / no votes → aggregate overall
   return { byTeam, winner }
 }
 
