@@ -14,6 +14,8 @@ import { generateConfig, type IntakeAnswers } from "@/lib/generate"
 import { studyReference } from "@/lib/app-builder"
 import { runDivergence } from "@/lib/tournament"
 import { query } from "@/lib/db"
+import { getSession } from "@/lib/auth"
+import { createJob } from "@/lib/jobs"
 
 function jid() { return Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("") }
 
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
   try {
     const a = (await request.json()) as Partial<IntakeAnswers> & { jobId?: string; reference?: string }
     if (!a?.name) return NextResponse.json({ ok: false, error: "name required" }, { status: 400 })
+    const session = await getSession() // the user who launched it → owns the auto-built project
     const config = generateConfig(a as IntakeAnswers)
     const jobId = a.jobId || jid()
     JOBS.set(jobId, { status: "running", phase: "Estudiando el producto de referencia…", stage: "study", startedAt: Date.now() })
@@ -64,7 +67,14 @@ export async function POST(request: NextRequest) {
         const r = await runDivergence(jobId, config, "", reference, (p) => {
           const j = JOBS.get(jobId); if (j) { j.phase = p.label; j.stage = p.stage; j.team = p.team; j.model = p.model }
         })
-        JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, referenceUsed: !!reference, ...r } })
+        // AUTO-BUILD the winner (no manual button): create a build job owned by the launcher,
+        // seeded with the winning blueprint. The watchdog drives it → it lands in /projects.
+        let buildJobId: string | null = null
+        if (r.ok && r.winnerBlueprint) {
+          const ans = { ...(a as IntakeAnswers), benefits: [], modules: [], price: 0, languages: "es" as const, email: session?.email || "" }
+          buildJobId = await createJob({ answers: ans, branding: null, winnerBlueprint: r.winnerBlueprint, userEmail: session?.email || null }).catch(() => null)
+        }
+        JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, referenceUsed: !!reference, buildJobId, ...r } })
       } catch (e) {
         JOBS.set(jobId, { status: "error", phase: "Error", stage: "error", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), error: (e as Error).message })
       }

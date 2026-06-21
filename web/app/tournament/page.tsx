@@ -6,7 +6,6 @@
  * agents levelled up. Run it again to watch the teams LEARN.
  */
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 
 const TEAM = {
   A: { tint: "#22c55e", label: "Equipo Lean", sub: "Pragmático · MVP-first" },
@@ -16,7 +15,7 @@ const TEAM = {
 type TeamId = keyof typeof TEAM
 interface Areas { data: number; dev: number; design: number; business: number; critique: string; overall: number }
 interface Design { team: TeamId; philosophy: string; model: string; metrics: { tables: number; routes: number; pages: number }; summary: string; areas?: Areas }
-interface Result { winner?: TeamId; leveledUp?: { id: string; level: number }[]; designs?: Design[]; error?: string }
+interface Result { winner?: TeamId; leveledUp?: { id: string; level: number }[]; designs?: Design[]; error?: string; buildJobId?: string | null }
 
 const EXAMPLES = [
   { name: "DuelDeck", what: "juego de cartas coleccionables estilo Yu-Gi-Oh: construís mazos, duelás por turnos contra otros jugadores, cartas con ataque/defensa/atributo/tipo/nivel, torneos" },
@@ -31,18 +30,6 @@ export default function TournamentPage() {
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle")
   const [result, setResult] = useState<Result | null>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [building, setBuilding] = useState(false)
-  const router = useRouter()
-
-  // iteration 3: build the winning team's design into a real app
-  async function buildWinner() {
-    setBuilding(true)
-    try {
-      const d = await fetch("/api/genetic/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), what: what.trim(), audience: "usuarios", monetization: "free" }) }).then((r) => r.json())
-      if (d.ok && d.jobId) router.push(`/build/${d.jobId}`)
-      else { setBuilding(false); alert(d.error || "no se pudo crear el build") }
-    } catch { setBuilding(false) }
-  }
 
   // poll a running tournament's live phase until it finishes (used by launch AND reconnect)
   const startPolling = useCallback((jobId: string) => {
@@ -121,8 +108,8 @@ export default function TournamentPage() {
             )}
             {result.winner && status === "done" && (
               <div className="mb-4 flex items-center gap-3 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3">
-                <span className="text-sm text-white/80">Ganó <b style={{ color: TEAM[result.winner].tint }}>{TEAM[result.winner].label}</b>. Que construya su diseño:</span>
-                <button onClick={buildWinner} disabled={building} className="ml-auto rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-black disabled:opacity-50">{building ? "creando build…" : "🔨 Construir el ganador →"}</button>
+                <span className="text-sm text-white/80">Ganó <b style={{ color: TEAM[result.winner].tint }}>{TEAM[result.winner].label}</b> — {result.buildJobId ? "se está construyendo tu proyecto, automático 🔨" : "el ganador se construye solo y aparece en tus proyectos"}</span>
+                <a href={result.buildJobId ? `/build/${result.buildJobId}` : "/projects"} className="ml-auto rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-black">{result.buildJobId ? "Ver cómo se construye →" : "📁 Mis proyectos →"}</a>
               </div>
             )}
             <div className="grid gap-4 md:grid-cols-3">

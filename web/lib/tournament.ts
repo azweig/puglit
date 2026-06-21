@@ -137,6 +137,7 @@ export async function runDivergence(jobId: string, config: DomainConfig, contrac
   }
   return {
     ok: true as const, winner, leveledUp,
+    winnerBlueprint: designs.find((d) => d.team === winner)?.blueprint || null, // → auto-build
     designs: designs.map((d) => ({ team: d.team, philosophy: d.philosophy, model: d.model, metrics: d.metrics, summary: d.blueprint.summary, areas: byTeam[d.team] })),
   }
 }
