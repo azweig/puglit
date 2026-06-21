@@ -34,6 +34,10 @@ nohup env OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}" OLLAMA_FLASH_ATTE
 # even when nobody has the /build page open (a build can take hours → the user must be able
 # to close the tab and come back). Without this, builds only advance while a browser polls.
 pkill -f "puglit-sweep-loop" 2>/dev/null || true
+# The server reads CRON_SECRET from .env.local and REQUIRES it on /api/cron/sweep. Load it
+# here too (export → the loop's subshell inherits it) or the watchdog gets 401 and jobs stay
+# queued forever.
+export CRON_SECRET="$(grep -E '^CRON_SECRET=' .env.local 2>/dev/null | cut -d= -f2-)"
 nohup bash -c 'while true; do curl -s -o /dev/null --max-time 280 "http://localhost:3000/api/cron/sweep${CRON_SECRET:+?key=$CRON_SECRET}" 2>/dev/null; sleep 45; done # puglit-sweep-loop' > /tmp/puglit-sweep.log 2>&1 &
 
 # wait for the server to come up, then report
