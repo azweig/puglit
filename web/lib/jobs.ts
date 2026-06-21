@@ -141,7 +141,7 @@ export function genErd(entities: Entity[]): string {
 
 interface JobRow { id: string; slug: string; name: string; email: string | null; status: string; answers: any; branding: any; config: DomainConfig | null; steps: Step[]; artifacts: any; completion?: number; error?: string }
 
-export async function createJob(input: { answers: IntakeAnswers; branding: any; chosenLanding?: string; creds?: any; winnerBlueprint?: any; userEmail?: string | null }): Promise<string> {
+export async function createJob(input: { answers: IntakeAnswers; branding: any; chosenLanding?: string; creds?: any; winnerBlueprint?: any; tournament?: any; userEmail?: string | null }): Promise<string> {
   const id = randomBytes(8).toString("hex")
   let slug = slugify(input.answers.name)
   const { rows } = await query(`SELECT 1 FROM puglit_projects WHERE slug=$1`, [slug]).catch(() => ({ rows: [] as any[] }))
@@ -151,7 +151,7 @@ export async function createJob(input: { answers: IntakeAnswers; branding: any; 
   await query(
     `INSERT INTO puglit_jobs (id, slug, name, email, user_email, status, answers, branding, config, steps, artifacts, completion)
      VALUES ($1,$2,$3,$4,$5,'queued',$6,$7,$8,$9,$10,0)`,
-    [id, slug, input.answers.name, input.answers.email || null, input.userEmail || null, JSON.stringify(input.answers), JSON.stringify(input.branding || null), null, JSON.stringify(steps), JSON.stringify({ chosenLanding: input.chosenLanding || null, creds: input.creds || null, winnerBlueprint: input.winnerBlueprint || null })]
+    [id, slug, input.answers.name, input.answers.email || null, input.userEmail || null, JSON.stringify(input.answers), JSON.stringify(input.branding || null), null, JSON.stringify(steps), JSON.stringify({ chosenLanding: input.chosenLanding || null, creds: input.creds || null, winnerBlueprint: input.winnerBlueprint || null, tournament: input.tournament || null })]
   )
   return id
 }

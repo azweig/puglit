@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         let buildJobId: string | null = null
         if (r.ok && r.winnerBlueprint) {
           const ans = { ...(a as IntakeAnswers), benefits: [], modules: [], price: 0, languages: "es" as const, email: session?.email || "" }
-          buildJobId = await createJob({ answers: ans, branding: null, winnerBlueprint: r.winnerBlueprint, userEmail: session?.email || null }).catch(() => null)
+          buildJobId = await createJob({ answers: ans, branding: null, winnerBlueprint: r.winnerBlueprint, tournament: { designs: r.designs, winner: r.winner }, userEmail: session?.email || null }).catch(() => null)
         }
         JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, referenceUsed: !!reference, buildJobId, ...r } })
       } catch (e) {

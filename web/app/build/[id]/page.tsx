@@ -13,10 +13,13 @@ import { OfficeStage } from "@/components/OfficeStage"
 type Step = { key: string; label: string; status: "pending" | "running" | "done" | "error"; detail?: string }
 type Job = { status: string; steps: Step[]; artifacts?: { githubUrl?: string; previewUrl?: string }; name?: string; slug?: string }
 
+const TEAM_TINT: Record<string, string> = { A: "#22c55e", B: "#38bdf8", C: "#f43f5e" }
+const TEAM_LABEL: Record<string, string> = { A: "Equipo Lean", B: "Equipo Enterprise", C: "Equipo Hacker" }
+
 export default function BuildPage() {
   const { id } = useParams<{ id: string }>()
   const [job, setJob] = useState<Job | null>(null)
-  const [art, setArt] = useState<{ sql?: string; erd?: string; engine?: { path: string; code: string }; findings?: { severity: string; desc: string }[]; ciGreen?: boolean | null; ciErrors?: { path: string; line: number; message: string }[] } | null>(null)
+  const [art, setArt] = useState<{ sql?: string; erd?: string; engine?: { path: string; code: string }; findings?: { severity: string; desc: string }[]; ciGreen?: boolean | null; ciErrors?: { path: string; line: number; message: string }[]; githubUrl?: string | null; tournament?: { winner?: string; designs?: { team: string; model?: string; metrics?: { tables?: number; routes?: number; pages?: number }; areas?: { overall?: number } }[] } | null } | null>(null)
   const [tab, setTab] = useState<"engine" | "findings" | "erd" | "sql">("engine")
   const [view, setView] = useState<"oficina" | "flujo">("oficina")
   const [err, setErr] = useState("")
@@ -68,7 +71,7 @@ export default function BuildPage() {
   useEffect(() => {
     if (demo) return
     if (job?.status === "done" && !art) {
-      fetch(`/api/job/${id}`).then((r) => r.json()).then((d) => d.ok && setArt({ sql: d.sql, erd: d.erd, engine: d.engine, findings: d.findings, ciGreen: d.ciGreen, ciErrors: d.ciErrors })).catch(() => {})
+      fetch(`/api/job/${id}`).then((r) => r.json()).then((d) => d.ok && setArt({ sql: d.sql, erd: d.erd, engine: d.engine, findings: d.findings, ciGreen: d.ciGreen, ciErrors: d.ciErrors, githubUrl: d.githubUrl, tournament: d.tournament })).catch(() => {})
     }
   }, [job?.status, art, id, demo])
 
@@ -85,6 +88,32 @@ export default function BuildPage() {
       <p className="text-white/60 mt-2 mb-6">{done ? "Listo. El código fue entregado (sin compilar). Compilá y exportalo a TU cuenta abajo." : job?.status === "queued" ? "En cola — esperando un cupo de agentes. Esto sigue solo aunque cierres la pestaña (el watchdog lo continúa)." : job?.status === "error" ? "Hubo un error; el watchdog reintentará los pasos trabados." : "Los agentes están trabajando. Podés cerrar esta pestaña — te avisamos por mail si dejaste tu email."}</p>
 
       {done && <ExportPanel jobId={id} />}
+
+      {/* the tournament that produced this project: the 3 teams + the winner + git link */}
+      {art?.tournament?.designs?.length ? (
+        <div className="mb-6 rounded-2xl border border-white/10 bg-ink2 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-sm font-extrabold text-white/70">🧬 Las IAs compitieron — ganó <span style={{ color: TEAM_TINT[art.tournament.winner || ""] }}>{TEAM_LABEL[art.tournament.winner || ""] || art.tournament.winner}</span></div>
+            {art.githubUrl && <a href={art.githubUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-violet-bright underline">ver en GitHub →</a>}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {art.tournament.designs.slice().sort((a, b) => (b.areas?.overall || 0) - (a.areas?.overall || 0)).map((d) => {
+              const win = d.team === art!.tournament!.winner
+              return (
+                <div key={d.team} className="rounded-xl border p-3" style={{ borderColor: win ? "#fbbf24" : (TEAM_TINT[d.team] || "#888") + "55", background: (TEAM_TINT[d.team] || "#888") + "0c" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold" style={{ color: TEAM_TINT[d.team] || "#aaa" }}>{TEAM_LABEL[d.team] || d.team}</span>
+                    {win && <span className="rounded bg-amber-400 px-1.5 text-[10px] font-extrabold text-black">👑</span>}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] text-white/40">{d.model || "—"}</div>
+                  <div className="mt-1 text-lg font-extrabold" style={{ color: TEAM_TINT[d.team] || "#aaa" }}>{d.areas?.overall ?? "—"}</div>
+                  <div className="text-[10px] text-white/40">{d.metrics?.tables ?? "—"} tablas · {d.metrics?.routes ?? "—"} rutas</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-6"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: "var(--violet)" }} /></div>
 

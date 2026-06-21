@@ -22,5 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ciErrors: job.artifacts?.ciErrors || [],
     githubUrl: job.artifacts?.githubUrl || null,
     previewUrl: job.artifacts?.previewUrl || null,
+    localPath: job.artifacts?.localPath || null,
+    tournament: job.artifacts?.tournament || null,
   })
 }

@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [msg, setMsg] = useState("")
   const [dev, setDev] = useState("")
   const [busy, setBusy] = useState(false)
-  const [next, setNext] = useState("/campus")
+  const [next, setNext] = useState("")
   const router = useRouter()
   // read ?next from the URL client-side (avoids useSearchParams, which needs a Suspense
   // boundary and otherwise fails `next build`)
@@ -31,7 +31,10 @@ export default function LoginPage() {
     try {
       const d = await fetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim(), code: code.trim() }) }).then((r) => r.json())
       if (!d.ok) { setMsg(d.error || "código inválido"); return }
-      router.push(next)
+      if (next) { router.push(next); return } // honor an explicit deep-link
+      // else: dashboard if they already have projects, otherwise straight to create
+      const mine = await fetch("/api/projects/mine").then((r) => r.json()).catch(() => ({ jobs: [] }))
+      router.push(mine.jobs?.length ? "/projects" : "/generate")
     } catch { setMsg("error de red") } finally { setBusy(false) }
   }
 
