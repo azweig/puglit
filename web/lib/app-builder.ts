@@ -1290,12 +1290,51 @@ export function initEngineStateWith(blueprint: Blueprint): EngineState {
 /** Advance the build by ONE bounded unit so each fits a serverless time budget. The plan is
  *  split (blueprint / critique / brief) and routes+pages are one-at-a-time because a single
  *  multi-LLM-call unit can exceed Vercel's request limit and silently restart forever. */
+// CHARM-lite — deterministic blueprint CONSISTENCY check (no LLM). Catches the cascade at its source:
+// a foreign key or a route that references a table the architect forgot to declare. Returns the issues.
+function blueprintIssues(bp: Blueprint): string[] {
+  const issues: string[] = []
+  const declared = new Set(bp.tables.map((t) => t.name.toLowerCase()))
+  const SPINE = new Set(["users", "analytics_events"]) // provided by the spine
+  const known = (t: string) => declared.has(t) || SPINE.has(t)
+  for (const t of bp.tables) // FK targets must resolve
+    for (const m of t.ddl.matchAll(/references\s+([a-z_][a-z0-9_]*)/gi))
+      if (!known(m[1].toLowerCase())) issues.push(`Table "${t.name}" has a foreign key REFERENCES "${m[1]}" but that table is not declared.`)
+  for (const r of bp.routes) { // routes must not query undeclared (phantom) tables
+    const text = `${r.purpose} ${r.logic}`.toLowerCase()
+    for (const m of text.matchAll(/\b(?:from|into|update|join|delete from)\s+([a-z_][a-z0-9_]*)/g)) {
+      const tbl = m[1]
+      if (tbl.length > 2 && !["set", "values", "where", "and", "the"].includes(tbl) && !known(tbl)) issues.push(`Route "${r.path}" references table "${tbl}" which is not declared in the schema.`)
+    }
+  }
+  return [...new Set(issues)].slice(0, 12)
+}
+
+/** Bounded fix: ask for CREATE TABLE DDL for the tables the blueprint references but never declared. */
+async function fixBlueprintConsistency(config: DomainConfig, bp: Blueprint, issues: string[]): Promise<TableSpec[]> {
+  const out = (await chatJSON([
+    { role: "system", content: `A product blueprint has CONSISTENCY ISSUES: foreign keys / routes reference tables that are NOT declared in the schema. Supply the MISSING tables as proper Postgres CREATE TABLE DDL so every reference resolves (sane columns, reference users(id) where appropriate, integer cents for money). Do NOT redefine already-declared tables. Return ONLY JSON {"tables":[{"name":"...","ddl":"CREATE TABLE ..."}]}.` },
+    { role: "user", content: `Product: ${config.identity.name}\nDeclared tables: ${bp.tables.map((t) => t.name).join(", ")}\n\nIssues:\n${issues.join("\n")}` },
+  ], { model: MODELS.premium, temperature: 0.2 }).catch(() => null)) as { tables?: TableSpec[] } | null
+  return normalizeTables((out?.tables || []).filter((t) => t?.name && t?.ddl))
+}
+
 export async function buildAdvance(config: DomainConfig, contracts: string, research: string, reference: string, state: EngineState): Promise<{ state: EngineState; done: boolean; detail: string }> {
   const s = state
   await loadActiveSkills() // SkillOpt: load validated evolved skills into the overlay (once/process)
   if (s.phase === "plan") {
     const blueprint = await planBlueprint(config, contracts, reference)
     if (!blueprint.routes.length && !blueprint.pages.length) { s.blueprint = blueprint; s.phase = "done"; return { state: s, done: true, detail: "blueprint vacío" } }
+    // CHARM-lite: deterministic consistency GATE before ANY code is generated — fix a missing FK
+    // target / phantom table NOW so downstream agents don't build on a broken contract (cascade).
+    const issues = blueprintIssues(blueprint)
+    if (issues.length) {
+      const added = await fixBlueprintConsistency(config, blueprint, issues).catch(() => [] as TableSpec[])
+      for (const t of added) if (!blueprint.tables.some((x) => x.name.toLowerCase() === t.name.toLowerCase())) blueprint.tables.push(t)
+      const remaining = blueprintIssues(blueprint)
+      console.warn(`[charm] blueprint consistency: ${issues.length} issue(s) → +${added.length} tabla(s), ${remaining.length} sin resolver`)
+      void recordMetric("blueprint_consistency", remaining.length === 0 ? 1 : 0, { found: issues.length, fixed: added.length, remaining: remaining.length }).catch(() => {})
+    }
     s.blueprint = blueprint; s.phase = "critique"
     return { state: s, done: false, detail: `blueprint: ${blueprint.tables.length} tablas · ${groupRoutes(blueprint.routes).length} rutas · ${blueprint.pages.length} páginas` }
   }

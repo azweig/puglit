@@ -38,14 +38,33 @@ export async function loadActiveSkills(force = false): Promise<void> {
   } catch { /* fall back to seeds */ }
 }
 
-// Frozen, diverse held-out validation set — the skill must generalize, not overfit one product.
-const VAL_TASKS = [
+// DIVERSE task POOL. We do NOT validate against a fixed 5 (the optimizer would "study for the exam"
+// and overfit it). Each epoch samples a random GATE subset + a disjoint held-out TEST subset, so an
+// accepted edit must generalize across rotating, unseen tasks — not game a frozen set.
+const VAL_POOL = [
   "A booking marketplace for vacation rentals: host listings, availability calendar, reservations and reviews.",
   "A used-goods marketplace with a swipe feed, mutual matches and per-match chat.",
   "A live football scores site with competitions, matches, minute events, lineups and standings.",
   "A team task manager with projects, tasks, assignees, statuses and comments.",
   "A subscription box service with products, plans, orders, billing and shipping.",
+  "A dental clinic system: patients, appointments with statuses, treatments and reminders.",
+  "A personal accounting app: accounts, transactions, transfers, monthly balance and reports.",
+  "An online store with products, cart, checkout payments, orders and stock.",
+  "A blog/CMS with markdown posts, categories, tags, drafts and a public listing.",
+  "A help desk: tickets with status, priority, assignees, comments and SLA tracking.",
+  "A fitness tracker: workouts, exercises, sets, progress charts and goals.",
+  "A recipe site: recipes with ingredients and steps, categories, search and favorites.",
+  "A real-estate listings site: properties with geo, filters, search by distance and inquiries.",
+  "An events platform: events, ticket types with quota, purchases and QR check-in.",
+  "A CRM: contacts, companies, deals with pipeline stages, activities and notes.",
 ]
+const VAL_N = Number(process.env.PUGLIT_SKILL_VAL_N || 6)
+const TEST_N = Number(process.env.PUGLIT_SKILL_TEST_N || 4)
+function sampleTasks(n: number, exclude: string[] = []): string[] {
+  const a = VAL_POOL.filter((t) => !exclude.includes(t))
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] }
+  return a.slice(0, n)
+}
 const BP_SCHEMA = {
   type: "object",
   properties: {
@@ -64,8 +83,9 @@ async function rolloutScore(skillDoc: string, task: string): Promise<number> {
   ], { model: MODELS.premium, temperature: 0.3, schema: BP_SCHEMA }).catch(() => null)) as { tables?: unknown[]; routes?: unknown[]; pages?: unknown[] } | null
   return bp ? objectiveScore(bp as never) : 0
 }
-async function validate(skillDoc: string): Promise<number> {
-  const scores = await Promise.all(VAL_TASKS.map((t) => rolloutScore(skillDoc, t)))
+async function validate(skillDoc: string, tasks: string[]): Promise<number> {
+  if (!tasks.length) return 0
+  const scores = await Promise.all(tasks.map((t) => rolloutScore(skillDoc, t)))
   return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
 }
 
@@ -87,7 +107,11 @@ export async function evolveSkill(area: SkillArea): Promise<{ accepted: boolean;
   await ensureSkillSchema()
   await loadActiveSkills(true)
   const current = skillFor(area)
-  const before = active[area]?.score ?? (await validate(current)) // reuse the stored val score when present
+  // TRAIN/VAL/TEST split, re-sampled THIS epoch: a GATE set (improve by margin) + a DISJOINT held-out
+  // TEST set (must not regress). Random rotation each epoch → an edit can't overfit a fixed task set.
+  const gateTasks = sampleTasks(VAL_N)
+  const testTasks = sampleTasks(TEST_N, gateTasks)
+  const before = await validate(current, gateTasks) // computed on THIS epoch's gate set (fair before/after)
   const [fb, rejects] = await Promise.all([feedback(), rejectedEdits(area)])
   // PROPOSE — bounded add/delete/replace within a char budget (the textual "learning rate").
   const out = (await chatJSON([
@@ -97,10 +121,13 @@ export async function evolveSkill(area: SkillArea): Promise<{ accepted: boolean;
   const candidate = String(out?.doc || "").trim()
   const edit = String(out?.edit || "edit").slice(0, 200)
   if (candidate.length < 120 || candidate.length > 2600 || candidate === current) return { accepted: false, before, after: before }
-  // VALIDATE — held-out gate. Accept ONLY if strictly better by a margin (avoids noise-chasing).
-  const after = await validate(candidate)
+  // GATE: strictly better on the sampled gate set by a margin (avoids noise-chasing) AND no regression
+  // on the disjoint held-out TEST set (the anti-overfitting check — generalizes, not memorizes).
+  const after = await validate(candidate, gateTasks)
   const MARGIN = Number(process.env.PUGLIT_SKILL_MARGIN || 1.5)
-  if (after > before + MARGIN) {
+  const [testBefore, testAfter] = await Promise.all([validate(current, testTasks), validate(candidate, testTasks)])
+  const generalizes = testAfter >= testBefore - 1 // tolerate 1pt noise; reject edits that only help the gate
+  if (after > before + MARGIN && generalizes) {
     const ver = (await query<{ v: number }>("SELECT COALESCE(MAX(version),0)+1 AS v FROM puglit_skills WHERE area=$1", [area])).rows[0].v
     await query("UPDATE puglit_skills SET status='archived' WHERE area=$1 AND status='active'", [area])
     await query("INSERT INTO puglit_skills (area, version, doc, val_score, status) VALUES ($1,$2,$3,$4,'active')", [area, ver, candidate, after])

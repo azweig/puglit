@@ -86,6 +86,11 @@ async function judgeOnce(config: DomainConfig, designs: TeamDesign[], model: str
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
   const card = (d: TeamDesign, i: number) =>
     `OPTION ${i + 1}\nkind: ${d.blueprint.kind}\nsummary: ${d.blueprint.summary}\ntables (${d.metrics.tables}): ${d.blueprint.tables.map((t) => t.name).join(", ")}\nroutes (${d.metrics.routes}): ${d.blueprint.routes.map((r) => r.path.replace(/^app\/api\//, "").replace(/\/route\.ts$/, "")).join(", ")}\npages (${d.metrics.pages}): ${d.blueprint.pages.map((p) => p.route).join(", ")}`
+  // POSITION-BIAS MITIGATION (PCR): present the candidates in a RANDOM order to THIS juror. LLM judges
+  // favor OPTION 1 (primacy); shuffling per-juror averages that out across the panel, and the winner is
+  // mapped back by team (not slot) so the shuffle is transparent to scoring.
+  const presented = [...designs]
+  for (let i = presented.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [presented[i], presented[j]] = [presented[j], presented[i]] }
   let parsed: { scores?: { option: number; data: number; dev: number; design: number; business: number; critique: string }[]; winner?: number } = {}
   try {
     parsed = (await chatJSON([
@@ -102,16 +107,16 @@ Score EACH candidate 0-100 on FOUR disciplines, and give a one-sentence critique
 - business: product fidelity + feature completeness + a coherent money model (no pricing if free, no signup if public).
 Apply this rubric explicitly (anchors, not vibes): 90-100 = ships as-is; 70-89 = minor fixes; 50-69 = missing a core piece; <50 = broken/incoherent. Penalize: hallucinated/unused tables, dead-end routes, missing the product's core action, insecure patterns (SQL built by string concat, secrets in code). Judge the WHOLE design of each candidate (never mix pieces across candidates). Be critical and DISCRIMINATING; do not tie. Pick the best overall as winner. Judge only on merit, ignore house style.
 Return ONLY JSON {"scores":[{"option":1,"data":0-100,"dev":0-100,"design":0-100,"business":0-100,"critique":"..."}],"winner":<best option number>}.` },
-      { role: "user", content: `Product: ${config.identity.name} — ${tagline}\n\n${designs.map(card).join("\n\n")}` },
+      { role: "user", content: `Product: ${config.identity.name} — ${tagline}\n\n${presented.map(card).join("\n\n")}` },
     ], { model, temperature: 0.2, schema: JUDGE_SCHEMA })) as typeof parsed
   } catch { return null }
   const byTeam: Record<string, AreaScore> = {}
   for (const s of parsed.scores || []) {
-    const d = designs[s.option - 1]; if (!d) continue
+    const d = presented[s.option - 1]; if (!d) continue
     byTeam[d.team] = { data: s.data, dev: s.dev, design: s.design, business: s.business, critique: s.critique || "", overall: Math.round((s.data + s.dev + s.design + s.business) / 4) }
   }
   if (!Object.keys(byTeam).length) return null
-  let winner = designs[(parsed.winner || 0) - 1]?.team
+  let winner = presented[(parsed.winner || 0) - 1]?.team
   if (!winner) winner = (Object.entries(byTeam).sort((a, b) => b[1].overall - a[1].overall)[0]?.[0] as TeamId)
   return { byTeam, winner }
 }
