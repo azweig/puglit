@@ -166,8 +166,8 @@ function assemble({ config, appFiles, sql, seedSql }) {
   // same-filesystem only (DIR & SPINE are both under the repo). Falls back to clonefile / real copy.
   // the spine must have its deps installed (next/react/pg/…) — install once if missing, else every
   // served app has a dangling node_modules and Turbopack can't resolve `next`.
-  if (!fs.existsSync(path.join(SPINE, "node_modules", "next"))) {
-    log("spine/node_modules ausente → npm install en el spine (una vez, ~1-2 min)…")
+  if (!fs.existsSync(path.join(SPINE, "node_modules", "next")) || !fs.existsSync(path.join(SPINE, "node_modules", "vitest"))) {
+    log("spine deps incompletas (next/vitest) → npm install en el spine…")
     execSync("npm install --no-audit --no-fund", { cwd: SPINE, stdio: "inherit" })
   }
   fs.rmSync(path.join(DIR, "node_modules"), { recursive: true, force: true })
@@ -186,6 +186,8 @@ function assemble({ config, appFiles, sql, seedSql }) {
   // root = DIR now that node_modules is a REAL dir inside it → self-contained, no cross-dir symlink,
   // no inferred-root ambiguity. (eslint key removed — Next 16 rejects it.)
   fs.writeFileSync(path.join(DIR, "next.config.ts"), `import type { NextConfig } from "next"\nconst nextConfig: NextConfig = { turbopack: { root: ${JSON.stringify(DIR)} }, outputFileTracingRoot: ${JSON.stringify(DIR)}, typescript: { ignoreBuildErrors: true } }\nexport default nextConfig\n`)
+  // QA: vitest config — node env, @/ alias to the app root, coverage of the domain logic in lib/.
+  fs.writeFileSync(path.join(DIR, "vitest.config.ts"), `import { defineConfig } from "vitest/config"\nexport default defineConfig({\n  resolve: { alias: { "@": process.cwd() } },\n  test: {\n    environment: "node",\n    include: ["lib/**/*.{test,spec}.ts", "**/__tests__/**/*.{test,spec}.ts"],\n    coverage: { provider: "v8", reporter: ["text-summary", "json-summary"], reportsDirectory: "coverage", include: ["lib/**/*.ts"], exclude: ["**/*.{test,spec}.ts", "**/__tests__/**"] },\n  },\n})\n`)
   // bespoke files (override spine on collision) + DETERMINISTIC spine-import fix
   let count = 0
   for (const f of appFiles) {
@@ -300,6 +302,23 @@ const ok = await repairTs().catch((e) => { log("repairTs error:", String(e.messa
 // write the app's DB env so it talks to the loaded schema
 fs.writeFileSync(path.join(DIR, ".env.local"), `POSTGRES_HOST=localhost\nPOSTGRES_PORT=${PG_PORT}\nPOSTGRES_DB=${APP_DB}\nPOSTGRES_USER=postgres\nPOSTGRES_PASSWORD=postgres\nPOSTGRES_SSL=disable\nPUGLIT_PROVIDER=ollama\n`)
 log(ok ? "RESULT: COMPILES ✓" : "RESULT: still failing (serving anyway)")
+
+// ── QA GATE: unit + business tests (vitest) + coverage of the domain logic ──────
+async function runTests() {
+  let testFiles = []
+  try { testFiles = execSync(`find ${JSON.stringify(DIR)}/lib ${JSON.stringify(DIR)}/app -type f \\( -name '*.test.ts' -o -name '*.spec.ts' \\) 2>/dev/null`, { encoding: "utf8" }).split("\n").filter(Boolean) } catch {}
+  if (!testFiles.length) { log("QA: ⚠ 0 tests generados — coverage 0% (la lógica de dominio NO está probada)"); try { writeStatus({ tests: 0, coverage: 0 }) } catch {} ; return }
+  log(`QA: corriendo ${testFiles.length} archivos de test (vitest + coverage)…`)
+  const out = path.join(DIR, "vitest-results.json")
+  spawnSync("npx", ["vitest", "run", "--coverage", "--reporter=json", "--outputFile=" + out], { cwd: DIR, encoding: "utf8", env: { ...process.env }, timeout: 180000 })
+  let total = 0, passed = 0, failed = 0, cov = null
+  try { const j = JSON.parse(fs.readFileSync(out, "utf8")); total = j.numTotalTests || 0; passed = j.numPassedTests || 0; failed = j.numFailedTests || 0 } catch {}
+  try { const c = JSON.parse(fs.readFileSync(path.join(DIR, "coverage/coverage-summary.json"), "utf8")); cov = c?.total?.lines?.pct ?? null } catch {}
+  const cv = cov == null ? "n/d" : `${cov}%`
+  log(`QA: ${passed}/${total} tests verdes${failed ? ` · ${failed} ROJOS ✗` : " ✓"} · COVERAGE ${cv} (lib/ dominio)`)
+  try { writeStatus({ tests: total, testsPassed: passed, testsFailed: failed, coverage: cov }) } catch {}
+}
+await runTests()
 
 // BYO deploy to the USER's own GitHub (+ optional Vercel), if tokens are present. Tokens
 // come from env, are passed straight to infra/deploy.sh, and are NEVER persisted.

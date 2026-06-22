@@ -15,19 +15,41 @@ import { ROLE_AREA, type Area } from "@/lib/progression"
 const ARCHITECT = `SKILL — Spec-driven architecture: design spec-FIRST, not table-first.
 1) Identify the REAL domain entities + relations. Separate CATALOG/reference data (the app seeds/ingests, users only read) from USER-GENERATED content.
 2) Think in complete USER JOURNEYS: everything listable must be creatable; no dead-ends.
-3) Make each operation's CONTRACT explicit (inputs, outputs, scoping).
-4) YAGNI: no speculative abstractions, no entities the product doesn't need.
-5) Location features → lat/lng DOUBLE PRECISION + Haversine ordered by distance.
-Self-check: can a real user use the product end-to-end with this model?`
+3) Emit an EXPLICIT CONTRACT every other agent must follow VERBATIM: the canonical table name + every column for each entity, and each operation's inputs/outputs/scoping. ONE name per concept (don't call it "reservations" in the schema and "bookings" in a route) — the dev and the lib helpers must reuse these EXACT names.
+4) Single source of truth: the hard domain rules (pricing, availability, refunds, state machines) live in ONE lib/ module the routes import — never duplicate a rule across routes.
+5) YAGNI: no speculative abstractions, no entities the product doesn't need. Money in integer cents.
+6) Location features → lat/lng DOUBLE PRECISION + Haversine ordered by distance.
+Self-check: can a real user use the product end-to-end with this model, and is every name consistent?`
 
 // distilled from systematic-debugging + TDD (Superpowers) + ponytail (code minimalism)
-const DEV = `SKILL — Correctness over cleverness.
-1) Define the operation's CONTRACT before coding (inputs, outputs, error cases).
-2) One route = one clear responsibility.
-3) Parameterized SQL ALWAYS; never string-concat user input.
-4) Handle errors + edge cases explicitly; never assume the happy path.
-5) On failure, find ROOT CAUSE, not random patches.
-6) MINIMAL CODE (decision ladder, before writing): does it need to exist (YAGNI)? → does stdlib / a native platform feature / an already-installed dep do it? → can it be ONE line? → only then write the minimum viable solution. NEVER add an npm dependency or an abstraction when a few lines of plain code work. This never lowers validation/security/error-handling.`
+const DEV = `SKILL — First-class code: correct, tested, ZERO hardcoding.
+1) CONTRACT first: inputs, outputs, error cases before coding.
+2) NEVER HARDCODE. No magic literals, no hardcoded table/column names, IDs, URLs, prices, limits.
+   Use the EXACT table & column names from the schema VERBATIM (if the schema says "reservations",
+   use "reservations" — never invent/rename a table). Derive every value from schema/request/env/config.
+3) DESIGN PATTERNS: domain/business logic lives in lib/ helpers (single source of truth), NOT copy-
+   pasted in routes. Routes are THIN: validate → call the lib function → respond. DRY — the same
+   rule/calculation exists in ONE place, imported everywhere (search and checkout call the SAME
+   pricing fn so totals can't diverge). Money in integer cents, never floats.
+4) REUSE: if a lib helper already does this (pricing, availability, booking, refund, auth, the
+   injected modules), IMPORT it — do NOT reimplement it inline.
+5) Parameterized SQL ALWAYS ($1,$2…); never string-concat user input.
+6) Handle errors + edge cases explicitly; correct status codes; never assume the happy path.
+7) MINIMAL CODE: YAGNI → native/stdlib → one line. Never add a dep/abstraction when a few lines
+   work. This NEVER lowers validation/security/error-handling/correctness.`
+
+// the QA discipline — distilled from TDD + testing-best-practices
+const TEST = `SKILL — Tests are not optional. For every piece of domain logic you touch:
+1) UNIT TESTS (vitest) for the pure rules — pricing, availability/overlap, refund-by-policy, the
+   state machine, validators. Assert exact expected values (integer cents), boundaries, and the
+   error cases — not just the happy path.
+2) BUSINESS-RULE TESTS: encode the product's invariants as assertions (e.g. "an overlapping
+   confirmed booking is rejected", "search total === checkout total", "refund matches the policy
+   snapshot, not the current policy").
+3) INTEGRATION TESTS: drive the real API routes (register → act → assert status + DB effect),
+   including the adversarial cases (double-booking, invalid dates, over-capacity, wrong actor).
+4) NO hardcoded/stubbed responses, NO deleting an assertion to make it pass. Tests import the SAME
+   lib helpers the app uses. Aim for high coverage of the domain logic; report the number.`
 
 // distilled from Anthropic frontend-design
 const DESIGN = `SKILL — Frontend design.
@@ -42,10 +64,11 @@ const DESIGN = `SKILL — Frontend design.
 const REVIEW = `SKILL — Critical code/blueprint review. Judge on:
 1) Correctness — does it do what it claims? edge cases handled?
 2) Journey completeness — everything listable is creatable; no dead routes.
-3) Coherence — only this product's domain entities; zero contamination.
-4) Security — input validation, no secrets, auth where it belongs.
-5) Feasibility — buildable and right-sized (not bloated, not a toy).
-6) Over-engineering — flag needless dependencies, abstractions and boilerplate; the LEANEST correct solution wins (a native input over a library, a few lines over a framework).`
+3) Coherence & NAMING — only this product's entities; ONE name per concept (no schema/route table-name mismatch). FLAG any hardcoded value, magic literal, or duplicated business rule.
+4) Patterns — domain logic in lib/ (single source of truth), thin routes, DRY; reuses helpers instead of reimplementing.
+5) TESTS — are there real unit + business + integration tests, and do they cover the domain rules? Untested domain logic is a fail.
+6) Security — input validation, no secrets, parameterized SQL, auth where it belongs.
+7) Over-engineering — flag needless deps/abstractions; leanest correct solution wins.`
 
 // distilled from execution-planning (Superpowers) — for the Queen / orchestrator
 const QUEEN = `SKILL — Orchestration: plan the whole roadmap as verifiable steps, each with a
@@ -59,4 +82,4 @@ export function playbookFor(role: string, queen = false): string {
   if (queen) return QUEEN
   return BY_AREA[ROLE_AREA[role] || "business"] || ""
 }
-export const PLAYBOOK = { architect: ARCHITECT, dev: DEV, design: DESIGN, review: REVIEW, queen: QUEEN }
+export const PLAYBOOK = { architect: ARCHITECT, dev: DEV, design: DESIGN, review: REVIEW, queen: QUEEN, test: TEST }

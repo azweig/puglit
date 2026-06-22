@@ -362,6 +362,32 @@ Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
   return out.code ? { path: rf.path, content: unescapeJsx(String(out.code).slice(0, 30_000)).replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {") } : null
 }
 
+/** QA — generate a vitest unit + business test file for the app's PURE domain logic (no DB/server).
+ *  Deterministic modules (rentals) ship their own tests; this covers the swarm-written helpers. */
+async function genTests(config: DomainConfig, bp: Blueprint, files: AppFile[]): Promise<AppFile[]> {
+  const skip = /^lib\/(db|auth|mailer|rate|ratelimit|analytics|i18n|rentals\/)/
+  const candidates = files.filter((f) =>
+    /^lib\/.+\.ts$/.test(f.path) && !/\.(test|spec)\.ts$/.test(f.path) && !skip.test(f.path) &&
+    /export\s+(async\s+)?function|export\s+const\s+\w+\s*=\s*\(/.test(f.content)
+  ).slice(0, 6)
+  if (!candidates.length) return []
+  const src = candidates.map((f) => `// ${f.path}\n${f.content.slice(0, 2400)}`).join("\n\n")
+  const out = (await chatJSON([
+    { role: "system", content: `You are a QA engineer. Write ONE vitest test file at lib/__tests__/domain.test.ts that genuinely tests the product's PURE domain logic.
+
+${PLAYBOOK.test}
+
+HARD RULES:
+- import { describe, it, expect } from "vitest". Import the REAL functions under test from their "@/lib/…" path (the @ alias = app root).
+- Test ONLY pure functions (no DB/network). If a module also queries the pool, import and test ONLY its pure exports; never call a function that touches the database.
+- Assert EXACT expected values + the edge/error cases (boundaries, invalid input, state transitions). NO expect(true).toBe(true), no snapshots, no stubbed/hardcoded return values, never weaken an assertion to pass.
+- Encode the product's business rules as assertions where they exist.
+- Must compile under tsc and pass. Return ONLY JSON: {"code":"<full test file>"}.` },
+    { role: "user", content: `Product: ${config.identity.name} — ${bp.summary}\n\nPure domain helpers to test:\n${src}` },
+  ], { model: MODELS.code, temperature: 0.2 })) as { code?: string }
+  return out.code && out.code.length > 80 ? [{ path: "lib/__tests__/domain.test.ts", content: unescapeJsx(String(out.code).slice(0, 20000)) }] : []
+}
+
 /** Art Director: a DISTINCTIVE, product-specific visual identity for the app screens
  *  (not a generic dashboard). Derived from the idea + brand palette + archetype, so
  *  it differs per project. The frontend swarm follows this brief verbatim. */
@@ -1446,7 +1472,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     if (rent) {
       pushFiles(rent.files); addSql(/EXCLUDE USING gist|no_double_booking/, "anti-double-booking + indexes (Puglit rentals)", rent.extraSql)
       // OVERRIDE the swarm's booking route with the verified one (it reinvents it wrong).
-      for (const rf of deterministicRentalRoutes(files.map((f) => f.path))) { const i = files.findIndex((f) => f.path === rf.path); if (i >= 0) files[i] = rf; else files.push(rf) }
+      for (const rf of deterministicRentalRoutes(bp, files.map((f) => f.path))) { const i = files.findIndex((f) => f.path === rf.path); if (i >= 0) files[i] = rf; else files.push(rf) }
     }
     // DEPENDENCY RESOLVER (crítica: dependency graph) — force-inject hard requirements (e.g.
     // social-auth → crypto, inappnotify → realtime) so no keyword-triggered module ships broken.
@@ -1468,6 +1494,11 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // HARVEST: register any reusable connector/integration the agents wrote that's new → the
     // module directory GROWS from the swarm's own work, available to every future project.
     await harvestModules(files, bp.kind).catch(() => {})
+    // QA: generate vitest unit + business tests for the swarm-written domain logic (deterministic
+    // modules like rentals already ship their own). build-local runs them + reports coverage.
+    const testFiles = await genTests(config, bp, files).catch(() => [])
+    for (const f of testFiles) if (!files.some((x) => x.path === f.path)) files.push(f)
+    if (testFiles.length) console.log("[qa] generated domain tests:", testFiles.map((f) => f.path).join(", "))
     reconcilePageRoutes(files)
     integratePageRoutes(files)
     if (bp.kind === "accounts") {
