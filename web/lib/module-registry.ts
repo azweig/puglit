@@ -11,6 +11,7 @@
  * live in Postgres (puglit_modules) + are mirrored to modules/<name>/ for git review.
  */
 import { query } from "@/lib/db"
+import { chatJSON, MODELS } from "@/lib/openai"
 import { writeFileSync, mkdirSync } from "node:fs"
 import { join, basename } from "node:path"
 
@@ -211,20 +212,67 @@ const BUILTIN_NAMES = new Set(BUILTIN_MODULES.map((m) => m.name))
 
 /** HARVEST: after a build, register any reusable connector/integration the agents wrote that
  *  isn't already a module → the directory GROWS from the swarm's own work. */
+type Candidate = { name: string; category: Module["category"]; file: ModuleFile }
+
+const CURATOR_SCHEMA = {
+  type: "object",
+  properties: {
+    verdict: { type: "string" }, target: { type: ["string", "null"] }, reusable: { type: "boolean" },
+    reason: { type: "string" }, description: { type: "string" }, whenToUse: { type: "string" },
+  }, required: ["verdict", "reason"],
+} as const
+
+/**
+ * MODULE CURATOR — the post-duel registrar that GUARDS the reusable module genome. The duel never
+ * touches modules; after the winner builds, this agent reviews each harvested candidate against the
+ * EXISTING registry (old vs new) and decides on merit: accept (genuinely new + reusable), improve
+ * (a better version of an existing module → heal it), or reject (app-specific / duplicate / low
+ * quality). Only worthy, reusable modules enter the genome — no more dumb auto-registration.
+ */
+export async function curateModules(candidates: Candidate[], createdBy?: string): Promise<{ accepted: string[]; improved: string[]; rejected: { name: string; reason: string }[] }> {
+  const accepted: string[] = [], improved: string[] = [], rejected: { name: string; reason: string }[] = []
+  if (!candidates.length) return { accepted, improved, rejected }
+  const customs = await customModules().catch(() => [] as Module[])
+  const existing = [...BUILTIN_MODULES, ...customs].map((m) => `- ${m.name} (${m.category}): ${m.description}`).join("\n")
+  for (const c of candidates) {
+    const out = (await chatJSON([
+      { role: "system", content: `You are the MODULE CURATOR — the registrar that guards Puglit's REUSABLE module genome. A build produced a candidate connector/integration. Decide, on merit, whether it earns a place in the SHARED registry every future app can reuse. Be strict:
+- REUSABLE: generic across products — NOT hardcoded to this one app (no app-specific table names, business rules or copy). If it's bespoke to this product → reject.
+- NOVEL vs DUPLICATE: genuinely new, or does an EXISTING module already cover it? Duplicate → reject; a clearly BETTER version of an existing one → "improve" (name it in target).
+- QUALITY: parameterized SQL, no secrets/hardcoded keys, clean typed contract, no missing deps.
+Return ONLY JSON {"verdict":"accept|improve|reject","target":"<existing module name if improve, else null>","reusable":true|false,"reason":"<one sentence>","description":"<crisp catalog description>","whenToUse":"<when an app needs it>"}.` },
+      { role: "user", content: `EXISTING MODULES:\n${existing}\n\nCANDIDATE: ${c.name} (${c.category})\nCODE:\n${c.file.content.slice(0, 4000)}` },
+    ], { model: MODELS.premium, temperature: 0.2, schema: CURATOR_SCHEMA }).catch(() => null)) as { verdict?: string; target?: string | null; reusable?: boolean; reason?: string; description?: string; whenToUse?: string } | null
+    const reason = String(out?.reason || "no rationale").slice(0, 200)
+    if (out?.verdict === "accept" && out?.reusable !== false) {
+      await registerModule({ name: c.name, category: c.category, description: String(out.description || `Harvested ${c.category}`).slice(0, 200), whenToUse: String(out.whenToUse || `the product uses ${c.name}`).slice(0, 160), files: [c.file], status: "experimental", createdBy })
+      accepted.push(c.name)
+    } else if (out?.verdict === "improve" && out?.target) {
+      const tgt = String(out.target).toLowerCase().replace(/[^a-z0-9_-]/g, "")
+      if (tgt) { await registerModule({ name: tgt, category: c.category, description: String(out.description || "").slice(0, 200), whenToUse: String(out.whenToUse || "").slice(0, 160), files: [c.file], status: "improved", createdBy }); improved.push(tgt) }
+      else rejected.push({ name: c.name, reason })
+    } else {
+      rejected.push({ name: c.name, reason })
+    }
+  }
+  return { accepted, improved, rejected }
+}
+
+/** HARVEST: after a build, COLLECT the candidate connectors/integrations the agents wrote and route
+ *  them through the CURATOR (no more dumb auto-registration). Returns the names that entered the genome. */
 export async function harvestModules(files: ModuleFile[], createdBy?: string): Promise<string[]> {
-  const harvested: string[] = []
+  const customNames = new Set((await customModules().catch(() => [] as Module[])).map((x) => x.name))
+  const candidates: Candidate[] = []
   for (const f of files) {
     const m = f.path.match(/^lib\/(connectors|integrations)\/([a-z0-9_-]+)\.ts$/i)
     if (!m) continue
     const name = m[2].toLowerCase()
-    if (name === "types" || name === "index" || BUILTIN_NAMES.has(name)) continue
-    if ((await customModules()).some((x) => x.name === name)) continue
-    await registerModule({
-      name, category: m[1] === "connectors" ? "channel" : "integration",
-      description: `Auto-harvested ${m[1] === "connectors" ? "channel" : "integration"} connector from a generated app.`,
-      whenToUse: `the product uses ${name}`, files: [f], status: "experimental", createdBy,
-    })
-    harvested.push(name)
+    if (name === "types" || name === "index" || BUILTIN_NAMES.has(name) || customNames.has(name)) continue
+    if (!candidates.some((c) => c.name === name)) candidates.push({ name, category: m[1] === "connectors" ? "channel" : "integration", file: f })
   }
-  return harvested
+  if (!candidates.length) return []
+  const res = await curateModules(candidates, createdBy)
+  if (res.rejected.length) console.warn("[curator] rejected:", res.rejected.map((r) => `${r.name} (${r.reason})`).join("; "))
+  if (res.accepted.length || res.improved.length) console.warn(`[curator] accepted: ${res.accepted.join(", ") || "—"} · improved: ${res.improved.join(", ") || "—"}`)
+  return [...res.accepted, ...res.improved]
 }
