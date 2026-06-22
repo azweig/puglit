@@ -8,6 +8,8 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import { chatJSON, aiConfigured, MODELS, type ChatMessage } from "@/lib/openai"
+import { skillFor, loadActiveSkills } from "@/lib/skill-evolution"
+import { activeInterviewVersion } from "@/lib/interview-evolution"
 
 const SYSTEM = `You are a world-class product discovery team in one — Principal Product Architect, CTO, UX Lead, Product Manager and Brand Strategist — interviewing a founder to fully understand their idea before anything is built. The product NAME is in the first user message.
 
@@ -78,13 +80,18 @@ export async function POST(request: NextRequest) {
       ctx.push(`REFERENCES the founder provided up front (use them to interpret the idea, infer data/brand/features, and make suggestions — do NOT re-ask what they already answer; DO confirm or refine the non-obvious parts):\n${references.slice(0, 6000)}`)
     }
 
+    // EVOLVABLE STYLE: the interviewer's tone / option-count / depth is an evolved skill (driven by
+    // the founders' 😀/😞 — see interview-evolution.ts). Overlay it on the static SYSTEM.
+    await loadActiveSkills().catch(() => {})
+    const [styleVersion] = await Promise.all([activeInterviewVersion().catch(() => 0)])
     const full: ChatMessage[] = [
-      { role: "system", content: SYSTEM },
+      { role: "system", content: `${SYSTEM}\n\nSTYLE (evolved from founder feedback — follow it):\n${skillFor("interview")}` },
       ...(ctx.length ? [{ role: "user", content: ctx.join(" ") } as ChatMessage] : []),
       ...history,
     ]
 
     const step = (await chatJSON(full, { model: MODELS.premium })) as Record<string, unknown>
+    ;(step as { styleVersion?: number }).styleVersion = styleVersion
 
     // Normalize completion: the model sometimes signals done via kind/field but
     // not the boolean, and doesn't reliably accumulate `answers`. When finished,

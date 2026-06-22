@@ -14,7 +14,7 @@ import { Mark } from "@/components/Mark"
 
 type Msg = { role: "user" | "assistant"; content: string }
 type Opt = { id: string; label: string; detail?: string; color?: string | null }
-type Step = { reflection?: string; question?: string; field?: string; kind?: string; options?: Opt[]; allowOther?: boolean; answers?: Record<string, unknown>; done?: boolean; progress?: number }
+type Step = { reflection?: string; question?: string; field?: string; kind?: string; options?: Opt[]; allowOther?: boolean; answers?: Record<string, unknown>; done?: boolean; progress?: number; styleVersion?: number }
 type Entry = { who: "ai" | "you"; text: string }
 
 const card = "rounded-2xl border border-white/10 bg-ink2 p-4"
@@ -121,6 +121,11 @@ export default function Generate() {
   const [name, setName] = useState("")
   const [messages, setMessages] = useState<Msg[]>([])
   const [step, setStep] = useState<Step | null>(null)
+  const [rated, setRated] = useState<boolean | null>(null)
+  const rateQuestion = (up: boolean, st: Step) => {
+    setRated(up)
+    fetch("/api/interview/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ up, kind: st.kind || st.field || "general", ver: st.styleVersion || 0 }) }).catch(() => {})
+  }
   const [log, setLog] = useState<Entry[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState("")
@@ -207,7 +212,7 @@ export default function Generate() {
       const d = await r.json()
       if (!r.ok) { setErr(d.error === "ai_not_configured" ? "The AI interview isn’t connected yet (missing OpenAI key)." : "AI error — try again."); return }
       const s: Step = d.step
-      setStep(s)
+      setStep(s); setRated(null)
       if (typeof s.progress === "number") setProgress(Math.max(progress, Math.min(100, s.progress)))
       if (s.reflection) setLog((l) => [...l, { who: "ai", text: s.reflection! }])
       if (s.done) await produceSpec(s.answers || {}, msgs)
@@ -643,7 +648,18 @@ export default function Generate() {
 
       {phase === "chat" && !busy && s && !s.done && (
         <div className={card}>
-          {s.question && <p className="font-semibold mb-3">{s.question}</p>}
+          {s.question && (
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <p className="font-semibold">{s.question}</p>
+              {/* the founder's 😀/😞 on this question → evolves the interviewer's style */}
+              {rated === null ? (
+                <div className="flex gap-1 shrink-0 text-lg" title="¿Te gustó cómo te pregunté?">
+                  <button onClick={() => rateQuestion(true, s)} className="opacity-50 hover:opacity-100 transition" aria-label="me gustó la pregunta">😀</button>
+                  <button onClick={() => rateQuestion(false, s)} className="opacity-50 hover:opacity-100 transition" aria-label="no me gustó la pregunta">😞</button>
+                </div>
+              ) : <span className="text-xs text-white/40 shrink-0">¡gracias!</span>}
+            </div>
+          )}
 
           {s.kind === "color" ? (
             <div className="space-y-3">

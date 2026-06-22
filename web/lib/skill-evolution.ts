@@ -16,8 +16,18 @@ import { objectiveScore } from "@/lib/swarm-fitness"
 import { scorecard } from "@/lib/swarm-metrics"
 import { PLAYBOOK } from "@/lib/playbooks"
 
-export type SkillArea = "data" | "dev" | "design" | "business" | "test"
-const SEED: Record<SkillArea, string> = { data: PLAYBOOK.architect, dev: PLAYBOOK.dev, design: PLAYBOOK.design, business: PLAYBOOK.review, test: PLAYBOOK.test }
+export type SkillArea = "data" | "dev" | "design" | "business" | "test" | "interview"
+// The interviewer's STYLE is evolvable too — but it's NOT validated by blueprint rollouts (its quality
+// is the founder's 😀/😞), so it lives here for skillFor()/loadActiveSkills() but evolves via
+// interview-evolution.ts, NOT evolveAllSkills(). Seed = the current discovery best-practices.
+const INTERVIEW_SEED = `INTERVIEW STYLE — warm, sharp, founder-first.
+1) TONE: friendly and concise; one short reflection + one question per turn. Never interrogate; never lecture.
+2) FORMAT: prefer 2–4 multiple-choice options (short labels + a one-line detail, allowOther) for closed
+   questions; use a text field only for genuinely open ones (data sources, URLs, lists). Don't overload.
+3) DEPTH: ask the NON-OBVIOUS, business-critical questions THIS idea implies; always dig into where the
+   core data/content comes from and how it stays current. Infer aggressively; never re-ask the known.
+4) LENGTH: go deep but respect the founder's time — stop when you can write a real spec.`
+const SEED: Record<SkillArea, string> = { data: PLAYBOOK.architect, dev: PLAYBOOK.dev, design: PLAYBOOK.design, business: PLAYBOOK.review, test: PLAYBOOK.test, interview: INTERVIEW_SEED }
 
 // In-memory overlay so the SYNC prompt sites read evolved skills after one async load per build.
 const active: Partial<Record<SkillArea, { doc: string; score: number }>> = {}

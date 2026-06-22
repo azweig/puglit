@@ -77,6 +77,29 @@ export default function BuildPage() {
 
   const done = job?.status === "done"
   const b64 = (s: string) => { try { return btoa(unescape(encodeURIComponent(s))) } catch { return "" } }
+  // Build a self-contained HTML report of everything generated → the browser's Save-as-PDF (zero deps).
+  const downloadReport = () => {
+    const w = window.open("", "_blank"); if (!w) return
+    const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string))
+    const erd = art?.erd ? `<h2>Diagrama ER</h2><img src="https://mermaid.ink/img/${b64(art.erd)}?type=png" style="max-width:100%"/>` : ""
+    const findings = art?.findings?.length ? `<h2>Revisión de calidad</h2><ul>${art.findings.map((f) => `<li><b>${esc(f.severity)}</b>: ${esc(f.desc)}</li>`).join("")}</ul>` : ""
+    const winner = art?.tournament?.winner ? `<p><b>Equipo ganador del torneo:</b> ${esc(art.tournament.winner)}</p>` : ""
+    const gh = job?.artifacts?.githubUrl ? `<p>Código: <a href="${job.artifacts.githubUrl}">${job.artifacts.githubUrl}</a></p>` : ""
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(job?.name || "Proyecto")} — Informe Puglit</title><style>
+      body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;max-width:820px;margin:28px auto;padding:0 18px;color:#1a1a2e;line-height:1.5}
+      h1{color:#5b2a86;font-size:26px} h2{color:#6a2c91;border-bottom:1px solid #e0d0ef;padding-bottom:4px;margin-top:26px;font-size:16px}
+      pre{background:#f5f2fa;padding:12px;border-radius:8px;overflow:auto;font-size:11px;white-space:pre-wrap;word-break:break-word}
+      .meta{color:#999;font-size:13px} a{color:#7b3fb3}
+    </style></head><body>
+      <h1>${esc(job?.name || "Proyecto")}</h1>
+      <p class="meta">Informe generado por Puglit · ${new Date().toLocaleDateString()}</p>
+      ${winner}
+      <h2>Modelo de datos (esquema SQL)</h2><pre>${esc(art?.sql || "—")}</pre>
+      ${erd}${findings}${gh}
+      <script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
+    </body></html>`)
+    w.document.close()
+  }
   const total = job?.steps?.length || 1
   const completed = job?.steps?.filter((s) => s.status === "done").length || 0
   const pct = Math.round((completed / total) * 100)
@@ -152,6 +175,7 @@ export default function BuildPage() {
         <div className="mt-7 flex flex-wrap gap-3">
           {job?.artifacts?.previewUrl && <a href={job.artifacts.previewUrl} target="_blank" rel="noopener" className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Ver tu sitio →</a>}
           {job?.artifacts?.githubUrl && <a href={job.artifacts.githubUrl} target="_blank" rel="noopener" className="px-6 py-3 rounded-xl font-semibold text-white border border-white/15">Ver el código en GitHub</a>}
+          {art && <button onClick={downloadReport} className="px-6 py-3 rounded-xl font-semibold text-white border border-white/15">↓ Descargar informe (PDF)</button>}
         </div>
       )}
 
