@@ -17,6 +17,7 @@
 import { chatJSON, chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
 import { skillFor, loadActiveSkills } from "@/lib/skill-evolution"
+import { antiPatterns } from "@/lib/brain-insights"
 import { deterministicConnectors } from "@/lib/connectors"
 import { deterministicIntegrations } from "@/lib/integrations"
 import { deterministicAgent } from "@/lib/agent-module"
@@ -331,6 +332,7 @@ async function genRouteFile(config: DomainConfig, bp: Blueprint, rf: RouteFile):
   const ops = rf.specs.map((s) => `• ${s.methods.join("/")} — ${s.purpose}\n  Logic: ${s.logic}`).join("\n")
   // RETRIEVAL of a known-good route that built+ran (raise the floor without a better model)
   const exemplar = await exemplarFor("route", `${rf.path} ${ops}`).catch(() => "")
+  const avoid = await antiPatterns().catch(() => "") // #11 anti-pattern registry
   const gen = async () => (await chatJSON([
     { role: "system", content: `You are a Backend Engineer. Write ONE Next.js 16 App Router route handler file at ${rf.path} implementing ALL the listed HTTP methods with REAL, working logic (no TODOs, no stubs). It must compile under tsc --noEmit.
 
@@ -357,7 +359,7 @@ PRODUCTION-GRADE BACKEND STANDARDS (every handler):
 
 DATABASE TABLES (already created — use these EXACT names/columns):
 ${tablesDoc(bp)}
-
+${avoid ? `\n${avoid}\n` : ""}
 Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
     { role: "user", content: `File: ${rf.path}\nMethods to implement: ${[...rf.methods].join(", ")}\nOperations:\n${ops}${exemplar}` },
   ], { model: MODELS.code, temperature: 0.2 })) as { code?: string }

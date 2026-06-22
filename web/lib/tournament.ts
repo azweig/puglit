@@ -183,7 +183,10 @@ export async function runDivergence(jobId: string, config: DomainConfig, contrac
     areaScores[team] = { data: s.data, dev: s.dev, design: s.design, business: s.business }
     feedback[team] = Object.fromEntries(AREAS.map((ar) => [ar, s.critique])) as Partial<Record<Area, string>>
   }
-  const { leveledUp } = await awardRound({ jobId, round: "diverge", winner, areaScores, feedback }).catch(() => ({ leveledUp: [] as { id: string; level: number }[] }))
+  // #8 counterfactual: hand the losers a summary of the WINNING design so they learn from it.
+  const winDesign = designs.find((d) => d.team === winner)
+  const winnerSummary = winDesign ? `${winDesign.blueprint.summary} (tablas: ${winDesign.blueprint.tables.map((t) => t.name).join(", ")})` : undefined
+  const { leveledUp } = await awardRound({ jobId, round: "diverge", winner, areaScores, feedback, winnerSummary }).catch(() => ({ leveledUp: [] as { id: string; level: number }[] }))
 
   for (const d of designs) {
     const s = byTeam[d.team]

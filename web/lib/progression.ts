@@ -75,8 +75,9 @@ export async function awardRound(opts: {
   winner: string
   areaScores: Record<string, Partial<Record<Area, number>>>
   feedback: Record<string, Partial<Record<Area, string>>>
+  winnerSummary?: string // #8 counterfactual: what the WINNING design did, so losers learn from it
 }): Promise<{ leveledUp: { id: string; level: number }[] }> {
-  const { jobId, round, winner, areaScores, feedback } = opts
+  const { jobId, round, winner, areaScores, feedback, winnerSummary } = opts
   const { rows } = await query<AgentRow>(`SELECT id,team,role,queen,stats,level,xp,quality_sum,quality_n FROM puglit_agents`)
   const leveledUp: { id: string; level: number }[] = []
   const embCache = new Map<string, number[] | null>() // many agents share an identical lesson → embed each unique string once
@@ -115,7 +116,7 @@ export async function awardRound(opts: {
     const fb = feedback[a.team]?.[area]
     const entry = a.team === winner
       ? `Ganamos el round (${AREA_ES[area]} ${score}/100). ${fb || "Mantener este enfoque."}`
-      : `Perdimos (${AREA_ES[area]} ${score}/100). A mejorar: ${fb || "subir fidelidad y completitud del área."}`
+      : `Perdimos (${AREA_ES[area]} ${score}/100). A mejorar: ${fb || "subir fidelidad y completitud del área."}${winnerSummary ? ` El diseño GANADOR lo resolvió así: ${winnerSummary.slice(0, 220)}` : ""}`
     // embed the lesson (semantic "gene") so it can be retrieved by RELEVANCE later, not just recency
     if (!embCache.has(entry)) embCache.set(entry, await embed(entry).catch(() => null))
     const emb = embCache.get(entry) || null

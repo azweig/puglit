@@ -335,3 +335,22 @@ export async function growGenome(productName: string, summary: string, files: Mo
   if (built.length) console.warn(`[genome] built missing modules (wishlist): ${built.join(", ")}`)
   return { harvested, built }
 }
+
+/** #9 AUTO-PROMOTION: a harvested/built module matures experimental → candidate → stable as it
+ *  survives evolution cycles, gated by a clean security re-scan. Only 'stable'/'core' are injected
+ *  into apps (findCustomModulesFor), so this is the governance that lets proven modules graduate. */
+export async function autoPromoteModules(): Promise<{ name: string; to: string }[]> {
+  const promoted: { name: string; to: string }[] = []
+  try {
+    const { rows } = await query<{ name: string; status: string; files: ModuleFile[] }>(
+      "SELECT name, status, files FROM puglit_modules WHERE status IN ('experimental','new','improved','candidate') AND created_at < NOW() - interval '1 hour'")
+    for (const r of rows) {
+      const file = (Array.isArray(r.files) ? r.files : [])[0]
+      if (file && moduleIsUnsafe(file)) continue // never promote a module carrying a secret/RCE
+      const next = r.status === "candidate" ? "stable" : "candidate"
+      await query("UPDATE puglit_modules SET status=$2, updated_at=NOW() WHERE name=$1", [r.name, next]).catch(() => {})
+      promoted.push({ name: r.name, to: next })
+    }
+  } catch { /* best-effort */ }
+  return promoted
+}

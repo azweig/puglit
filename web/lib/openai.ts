@@ -13,7 +13,14 @@
  * (e.g. premium→Claude for the blueprint, cheap→local Gemma for extraction) via env.
  */
 
-import { traceCall } from "@/lib/run-trace"
+import { traceCall, traceTokens } from "@/lib/run-trace"
+
+// #14 prompt cache: dedup IDENTICAL low-temperature calls within a process (same model+messages+schema)
+// — never cache high-temp calls, which must stay diverse (the tournament's 3 teams). Bounded LRU.
+const _cache = new Map<string, string>()
+function cacheKey(model: string, messages: ChatMessage[], opts: { json?: boolean; schema?: object }): string {
+  return `${model}|${opts.json ? 1 : 0}|${opts.schema ? JSON.stringify(opts.schema).length : 0}|${JSON.stringify(messages)}`
+}
 
 // ── Providers ────────────────────────────────────────────────────────────────
 type Protocol = "openai" | "anthropic"
@@ -197,6 +204,15 @@ async function callOpenAICompat(messages: ChatMessage[], opts: { model: string; 
 async function call(messages: ChatMessage[], opts: { model: string; temperature?: number; json?: boolean; schema?: object }): Promise<string> {
   const r = resolve(opts.model)
   if (r.def.needsKey && !r.key) throw new Error("ai_not_configured")
+  // #15 TOKEN BUDGET: a per-build hard cap (PUGLIT_BUILD_TOKEN_CAP) aborts a runaway build instead of
+  // burning the whole budget. 0/unset = no cap.
+  const CAP = Number(process.env.PUGLIT_BUILD_TOKEN_CAP || 0)
+  if (CAP > 0 && traceTokens() > CAP) throw new Error("token_budget_exceeded")
+  // #14 PROMPT CACHE: identical low-temperature calls return the cached result (never high-temp —
+  // those must stay diverse for the 3-team tournament).
+  const cacheable = (opts.temperature ?? 0) <= 0.2
+  const key = cacheable ? cacheKey(opts.model, messages, opts) : ""
+  if (key && _cache.has(key)) return _cache.get(key)!
   // PROFILE the run (agent-house idea): record one span per call — tier, prompt size, latency, ok.
   const started = Date.now()
   const promptChars = messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0)
@@ -211,6 +227,7 @@ async function call(messages: ChatMessage[], opts: { model: string; temperature?
         if (r.def.protocol === "anthropic") out = await callAnthropic(messages, opts, r)
         else if (opts.schema && isOllama(r) && allStrings(messages)) out = await callOllamaSchema(messages, { ...opts, schema: opts.schema }, r)
         else out = await callOpenAICompat(messages, opts, r)
+        if (key && out) { if (_cache.size > 500) _cache.clear(); _cache.set(key, out) }
         return out
       } catch (e) {
         if (attempt >= RETRIES || !transient(e)) throw e

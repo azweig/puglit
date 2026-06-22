@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { isServiceRequest } from "@/lib/auth"
 import { evolveAllSkills, evolveSkill, type SkillArea } from "@/lib/skill-evolution"
 import { evolveInterviewStyle, consolidateInterviewStyle } from "@/lib/interview-evolution"
+import { autoPromoteModules } from "@/lib/module-registry"
 
 export const maxDuration = 800
 
@@ -21,7 +22,8 @@ export async function POST(req: Request) {
     // the interviewer evolves from founder 😀/😞 (not blueprint rollouts): revert a bad edit, then try one.
     const reverted = await consolidateInterviewStyle().catch(() => null)
     const interview = await evolveInterviewStyle().catch(() => null)
-    return NextResponse.json({ ok: true, accepted, result, interview, reverted })
+    const promoted = await autoPromoteModules().catch(() => []) // #9 mature modules
+    return NextResponse.json({ ok: true, accepted, result, interview, reverted, promoted })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
