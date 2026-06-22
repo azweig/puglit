@@ -201,11 +201,22 @@ async function call(messages: ChatMessage[], opts: { model: string; temperature?
   const started = Date.now()
   const promptChars = messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0)
   let out = "", ok = true
+  // RESILIENCE: a transient Ollama hiccup (a fetch that fails mid model-swap / under load) must NOT
+  // kill a whole build. Retry transient network errors with backoff before giving up.
+  const RETRIES = Number(process.env.PUGLIT_LLM_RETRIES || 2)
+  const transient = (e: unknown) => /fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|network|timeout|EOF|aborted|50[234]|overloaded/i.test(String((e as Error)?.message || e))
   try {
-    if (r.def.protocol === "anthropic") out = await callAnthropic(messages, opts, r)
-    else if (opts.schema && isOllama(r) && allStrings(messages)) out = await callOllamaSchema(messages, { ...opts, schema: opts.schema }, r)
-    else out = await callOpenAICompat(messages, opts, r)
-    return out
+    for (let attempt = 0; ; attempt++) {
+      try {
+        if (r.def.protocol === "anthropic") out = await callAnthropic(messages, opts, r)
+        else if (opts.schema && isOllama(r) && allStrings(messages)) out = await callOllamaSchema(messages, { ...opts, schema: opts.schema }, r)
+        else out = await callOpenAICompat(messages, opts, r)
+        return out
+      } catch (e) {
+        if (attempt >= RETRIES || !transient(e)) throw e
+        await new Promise((res) => setTimeout(res, 1500 * (attempt + 1))) // 1.5s, 3s backoff
+      }
+    }
   } catch (e) { ok = false; throw e }
   finally { try { traceCall({ tier: (tierOf(opts.model) || "other").toLowerCase(), model: opts.model, promptChars, outChars: out.length, ms: Date.now() - started, ok, json: !!opts.schema || !!opts.json }) } catch { /* never break a call to trace it */ } }
 }
