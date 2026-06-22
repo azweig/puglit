@@ -88,9 +88,11 @@ async function judgeOnce(config: DomainConfig, designs: TeamDesign[], model: str
   let parsed: { scores?: { option: number; data: number; dev: number; design: number; business: number; critique: string }[]; winner?: number } = {}
   try {
     parsed = (await chatJSON([
-      { role: "system", content: `You are a Stakeholder juror judging candidate blueprints.
+      { role: "system", content: `You are a Stakeholder juror judging candidate blueprints. Judge like an ADVERSARIAL reviewer, not a cheerleader.
 
 ${PLAYBOOK.review}
+
+${PLAYBOOK.adversarial}
 
 Score EACH candidate 0-100 on FOUR disciplines, and give a one-sentence critique (the single most important thing to improve):
 - data: the data model — right tables/relations for THIS product, no missing core entities, no unrelated/contaminating tables.

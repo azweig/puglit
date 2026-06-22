@@ -38,18 +38,34 @@ const DEV = `SKILL — First-class code: correct, tested, ZERO hardcoding.
 7) MINIMAL CODE: YAGNI → native/stdlib → one line. Never add a dep/abstraction when a few lines
    work. This NEVER lowers validation/security/error-handling/correctness.`
 
-// the QA discipline — distilled from TDD + testing-best-practices
-const TEST = `SKILL — Tests are not optional. For every piece of domain logic you touch:
-1) UNIT TESTS (vitest) for the pure rules — pricing, availability/overlap, refund-by-policy, the
-   state machine, validators. Assert exact expected values (integer cents), boundaries, and the
-   error cases — not just the happy path.
-2) BUSINESS-RULE TESTS: encode the product's invariants as assertions (e.g. "an overlapping
-   confirmed booking is rejected", "search total === checkout total", "refund matches the policy
-   snapshot, not the current policy").
-3) INTEGRATION TESTS: drive the real API routes (register → act → assert status + DB effect),
-   including the adversarial cases (double-booking, invalid dates, over-capacity, wrong actor).
-4) NO hardcoded/stubbed responses, NO deleting an assertion to make it pass. Tests import the SAME
-   lib helpers the app uses. Aim for high coverage of the domain logic; report the number.`
+// the QA discipline — distilled from addyosmani test-driven-development + testing-patterns
+const TEST = `SKILL — Tests are PROOF, not decoration. Arrange-Act-Assert.
+1) STRUCTURE every test Arrange → Act → Assert. Name for BEHAVIOR: describe("<unit>"),
+   it("<expected behavior> when <condition>"). ONE behavior per test.
+2) UNIT TESTS (vitest) for the pure rules — pricing, availability/overlap, refund-by-policy, the
+   state machine, validators. Assert EXACT values (integer cents), boundaries, AND the error cases.
+3) BUSINESS-RULE TESTS: encode the product's invariants ("an overlapping confirmed booking is
+   rejected", "search total === checkout total", "refund uses the policy SNAPSHOT, not the current").
+4) INTEGRATION TESTS: drive the real API routes (register → act → assert status + DB effect),
+   including adversarial cases (double-booking, invalid dates, over-capacity, wrong actor).
+5) ANTI-PATTERNS — never: test implementation details (test inputs/outputs); snapshot-everything
+   (assert specific values); shared mutable state (setup/teardown per test); overly-broad asserts
+   (be specific to catch regressions); test.skip or deleting an assertion to pass (fix or delete);
+   missing await on async (false passes); testing third-party code. Tests import the SAME lib helpers
+   the app uses. Report the coverage number.`
+
+// distilled from addyosmani/adverse (multi-agent adversarial review) + doubt-driven-development
+const ADVERSARIAL = `SKILL — Adversarial review BEFORE delivery: a confident answer is not a correct one.
+Review from THREE orthogonal lenses — each STAYS IN ITS LANE (do not duplicate the others):
+• AUDITOR — logic/correctness bugs, wrong domain math, unhandled edge cases, naming/schema
+  mismatches (one concept = one name), and ANY hardcoded value or duplicated rule.
+• ADVERSARY — how it breaks under abuse: SQL injection, missing auth/scoping, race conditions,
+  double-book/double-spend, integer/precision errors, unvalidated input. Bias to REJECT.
+• PRAGMATIST — design health: business logic in routes instead of lib/, DRY violations, dead
+  routes, missing tests/low coverage. Ship only if it's correct AND maintainable.
+Then CROSS-EXAMINE: a finding backed by ≥2 lenses is REAL; one lens's hunch is a maybe. VERIFY by
+reading the ACTUAL code + the test/coverage EVIDENCE — never trust the claim. Verdict per artifact:
+SHIP / SHIP-WITH-CAVEATS / BLOCK, each finding with concrete file:line evidence.`
 
 // distilled from Anthropic frontend-design
 const DESIGN = `SKILL — Frontend design.
@@ -82,4 +98,4 @@ export function playbookFor(role: string, queen = false): string {
   if (queen) return QUEEN
   return BY_AREA[ROLE_AREA[role] || "business"] || ""
 }
-export const PLAYBOOK = { architect: ARCHITECT, dev: DEV, design: DESIGN, review: REVIEW, queen: QUEEN, test: TEST }
+export const PLAYBOOK = { architect: ARCHITECT, dev: DEV, design: DESIGN, review: REVIEW, queen: QUEEN, test: TEST, adversarial: ADVERSARIAL }

@@ -333,7 +333,10 @@ async function writeTestsFor(rels) {
   for (const rel of rels.slice(0, 6)) {
     let src = ""; try { src = fs.readFileSync(path.join(DIR, rel), "utf8").slice(0, 3200) } catch { continue }
     const alias = "@/" + rel.replace(/\.ts$/, "")
-    const sys = `You are a QA engineer. Output ONLY a vitest test file (no prose, no \`\`\` fences). import { describe, it, expect } from "vitest". Import the REAL functions from "${alias}". Test ONLY pure functions — NEVER call anything that queries the database/network (skip those exports). Assert EXACT values + the edge/error cases (boundaries, invalid input, state transitions). NO expect(true).toBe(true), no stubs, never weaken an assertion to pass. Must compile under tsc and pass.`
+    const sys = `You are a Test Engineer. Output ONLY a vitest test file (no prose, no \`\`\` fences).
+Arrange-Act-Assert: structure each test Arrange → Act → Assert; name for BEHAVIOR — describe("<unit>"), it("<expected behavior> when <condition>"); ONE behavior per test.
+import { describe, it, expect } from "vitest". Import the REAL functions from "${alias}". Test ONLY pure functions — NEVER call anything that queries the database/network (skip those exports). Assert EXACT values + the edge/error cases (boundaries, invalid input, state transitions).
+ANTI-PATTERNS (never): expect(true).toBe(true); snapshot-everything; overly-broad asserts; test.skip; deleting/weakening an assertion to pass; missing await on async. Be specific so a regression fails the test. Must compile under tsc and pass.`
     const code = (await ask(sys, `Module ${rel}:\n${src}`, 8192)).replace(/^```[a-z]*\n?|```$/gm, "").trim()
     if (code.length > 60 && /describe|it\(|expect/.test(code)) { fs.writeFileSync(path.join(DIR, "lib/__tests__/", rel.replace(/[\/]/g, "_").replace(/\.ts$/, "") + ".test.ts"), code); log(`  QA + test → ${rel}`) }
   }
