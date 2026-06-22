@@ -147,6 +147,15 @@ function ensureSpineImports(code, rel) {
   if (m) return m[0] + adds.join("\n") + "\n" + code.slice(m[0].length)
   return adds.join("\n") + "\n" + code
 }
+// The LLM sometimes returns JSON-over-escaped source: className=\"…\" → invalid TSX ("Expected
+// unicode escape", every page 500s). Unescape when the signature is present.
+function unescapeJsx(code) {
+  if (/=\\"|\\"\s*\/?>|className=\\"|>\\n\s*</.test(code)) {
+    return code.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+  }
+  return code
+}
+
 function assemble({ config, appFiles, sql, seedSql }) {
   execSync(`rm -rf ${DIR} && mkdir -p ${DIR}`)
   // copy spine app (exclude node_modules + the dropped template surfaces)
@@ -182,7 +191,7 @@ function assemble({ config, appFiles, sql, seedSql }) {
   for (const f of appFiles) {
     if (!f?.path || !f?.content) continue
     const fp = path.join(DIR, f.path)
-    fs.mkdirSync(path.dirname(fp), { recursive: true }); fs.writeFileSync(fp, ensureSpineImports(f.content, f.path)); count++
+    fs.mkdirSync(path.dirname(fp), { recursive: true }); fs.writeFileSync(fp, ensureSpineImports(unescapeJsx(f.content), f.path)); count++
   }
   // ensure a bespoke schema + seed exist as sql/app.sql + sql/seed.sql
   if (!fs.existsSync(path.join(DIR, "sql/app.sql")) && sql) fs.writeFileSync(path.join(DIR, "sql/app.sql"), sql)

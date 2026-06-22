@@ -359,7 +359,7 @@ Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
   ], { model: MODELS.code, temperature: 0.2 })) as { code?: string }
   // BEST-OF-N (gated by PUGLIT_BEST_OF, default 1 = off) — keep the attempt that scores best
   const out = await generateBest(gen, (r) => routeScore((r as { code?: string } | null)?.code || ""))
-  return out.code ? { path: rf.path, content: String(out.code).slice(0, 30_000).replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {") } : null
+  return out.code ? { path: rf.path, content: unescapeJsx(String(out.code).slice(0, 30_000)).replace(/catch\s*\(\s*([a-zA-Z_$][\w$]*)\s*\)\s*\{/g, "catch ($1: any) {") } : null
 }
 
 /** Art Director: a DISTINCTIVE, product-specific visual identity for the app screens
@@ -490,10 +490,21 @@ function fixNextLinks(code: string): string {
 }
 
 /** All deterministic post-fixes applied to a generated .tsx (directive + Link + App-Router import). */
+/** The LLM sometimes returns JSON-OVER-ESCAPED source: className=\"…\" instead of className="…"
+ *  (a parse error: "Expected unicode escape" → every page 500s). If a file shows the signature,
+ *  JSON-unescape the stray backslash-escapes back to real characters. */
+function unescapeJsx(code: string): string {
+  if (/=\\"|\\"\s*\/?>|className=\\"|>\\n\s*</.test(code)) {
+    return code.replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\n/g, "\n").replace(/\\t/g, "\t")
+  }
+  return code
+}
+
 function postTsx(code: string): string {
+  let fixed = unescapeJsx(code)
   // App Router: useRouter/usePathname must come from next/navigation, NOT next/router
   // (which throws "NextRouter was not mounted"). Rewrite the import path.
-  let fixed = code.replace(/from\s+["']next\/router["']/g, 'from "next/navigation"')
+  fixed = fixed.replace(/from\s+["']next\/router["']/g, 'from "next/navigation"')
   // Pages sometimes hardcode placeholder coords (?lat=0&lng=0) on a near-me fetch, returning
   // nothing. Strip that query so the route uses the SAVED location / real geolocation.
   fixed = fixed.replace(/(\/api\/[\w/-]*(?:near|nearby|offer|discount|deal|cerca)[\w/-]*)\?lat=0(?:\.0+)?&lng=0(?:\.0+)?[^"'`]*/gi, "$1")
