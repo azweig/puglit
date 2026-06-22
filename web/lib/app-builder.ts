@@ -1584,7 +1584,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     if (checks.issues.length) { s.qualityIssues = checks.issues; console.warn("[swarm-checks]", checks.summary) }
     // METRICS (crítica: medir por evidencia) — record a build-quality signal per generation.
     const highIssues = checks.issues.filter((i) => i.severity === "high").length
-    void recordMetric("build_success", highIssues === 0 ? 1 : 0, { files: files.length, issues: checks.issues.length, high: highIssues, repaired }).catch(() => {})
+    void recordMetric("build_success", highIssues === 0 ? 1 : 0, { files: files.length, issues: checks.issues.length, high: highIssues, repaired, kinds: checks.issues.filter((i) => i.severity === "high").map((i) => i.kind).slice(0, 20) }).catch(() => {})
     // VERIFIED EXEMPLARS — when the static gate is clean, store route/page code so future builds
     // retrieve known-good examples (raises the floor without a stronger model).
     if (highIssues === 0) for (const f of files) {

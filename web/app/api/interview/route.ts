@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "ai_not_configured" }, { status: 503 })
   }
   try {
-    const { messages, productName, hasLogo, hasWebsite, references, finish } = await request.json()
+    const { messages, productName, hasLogo, hasWebsite, references, finish, grill } = await request.json()
     const history: ChatMessage[] = Array.isArray(messages) ? messages : []
 
     // "Finish now": the user chose to stop the interview — extract what we have
@@ -84,8 +84,14 @@ export async function POST(request: NextRequest) {
     // the founders' 😀/😞 — see interview-evolution.ts). Overlay it on the static SYSTEM.
     await loadActiveSkills().catch(() => {})
     const [styleVersion] = await Promise.all([activeInterviewVersion().catch(() => 0)])
+    // GRILL MODE: the founder asked to go deeper (or frowned). Become relentless — walk the design
+    // tree branch by branch, surface the still-ambiguous high-stakes decisions, recommend a default
+    // for each. (Matt Pocock's grill-me discipline.)
+    const grillDirective = grill
+      ? `\n\nGRILL MODE — the founder wants to go DEEPER. Be relentless but warm. Do NOT wrap up: keep walking the design tree, resolving the still-open, high-stakes, NON-OBVIOUS decisions one at a time, in dependency order. For each, STATE YOUR RECOMMENDED answer + why so they can confirm. Surface the things they haven't thought about (edge cases, data freshness, abuse, scale, money, who-maintains-what). Only set done=true once nothing important remains ambiguous.`
+      : ""
     const full: ChatMessage[] = [
-      { role: "system", content: `${SYSTEM}\n\nSTYLE (evolved from founder feedback — follow it):\n${skillFor("interview")}` },
+      { role: "system", content: `${SYSTEM}\n\nSTYLE (evolved from founder feedback — follow it):\n${skillFor("interview")}${grillDirective}` },
       ...(ctx.length ? [{ role: "user", content: ctx.join(" ") } as ChatMessage] : []),
       ...history,
     ]

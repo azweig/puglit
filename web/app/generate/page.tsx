@@ -219,6 +219,23 @@ export default function Generate() {
     } catch { setErr("Network error.") } finally { setBusy(false) }
   }
 
+  // GRILL: the founder wants to go deeper (or frowned) → relentless follow-up, never wraps up.
+  async function grillMore() {
+    setBusy(true); setErr("")
+    try {
+      const r = await fetch("/api/interview", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, productName: name, hasLogo: !!logo, hasWebsite: !!website, references, grill: true }),
+      })
+      const d = await r.json()
+      if (!r.ok) { setErr("AI error — try again."); return }
+      const s: Step = d.step
+      setStep(s); setRated(null)
+      if (s.reflection) setLog((l) => [...l, { who: "ai", text: s.reflection! }])
+      // grill never auto-builds, even if the model returns done — keep digging
+    } catch { setErr("Network error.") } finally { setBusy(false) }
+  }
+
   // After the interview (or "finish now"): run the ANALYSIS (spec + identity + 2 designs)
   // with a visible checklist, then show the full diagnosis. Nothing is built yet.
   const ANALYZE_LABELS = ["Analizando tus respuestas", "Definiendo identidad (logo + paleta)", "Diseñando 2 propuestas visuales"]
@@ -627,7 +644,12 @@ export default function Generate() {
             {history.length > 0 && <button onClick={goBack} disabled={busy} className="text-white/60 hover:text-white font-semibold disabled:opacity-40">← Volver</button>}
             <span className="text-white/40">Entendido ~{progress}%</span>
           </div>
-          {log.filter((e) => e.who === "you").length >= 3 && <button onClick={finishNow} disabled={busy} className="text-violet-bright font-semibold hover:underline disabled:opacity-40">Terminar y ver diagnóstico →</button>}
+          {log.filter((e) => e.who === "you").length >= 3 && (
+            <div className="flex items-center gap-4">
+              <button onClick={grillMore} disabled={busy} className={`font-semibold hover:underline disabled:opacity-40 ${rated === false ? "text-orange-400" : "text-white/60"}`} title="Que profundice en lo que falta">🔥 Profundizar más</button>
+              <button onClick={finishNow} disabled={busy} className="text-violet-bright font-semibold hover:underline disabled:opacity-40">Terminar y ver diagnóstico →</button>
+            </div>
+          )}
         </div>
         <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: "var(--violet)" }} /></div>
       </div>

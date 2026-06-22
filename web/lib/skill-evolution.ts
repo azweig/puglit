@@ -20,13 +20,19 @@ export type SkillArea = "data" | "dev" | "design" | "business" | "test" | "inter
 // The interviewer's STYLE is evolvable too — but it's NOT validated by blueprint rollouts (its quality
 // is the founder's 😀/😞), so it lives here for skillFor()/loadActiveSkills() but evolves via
 // interview-evolution.ts, NOT evolveAllSkills(). Seed = the current discovery best-practices.
-const INTERVIEW_SEED = `INTERVIEW STYLE — warm, sharp, founder-first.
-1) TONE: friendly and concise; one short reflection + one question per turn. Never interrogate; never lecture.
-2) FORMAT: prefer 2–4 multiple-choice options (short labels + a one-line detail, allowOther) for closed
-   questions; use a text field only for genuinely open ones (data sources, URLs, lists). Don't overload.
-3) DEPTH: ask the NON-OBVIOUS, business-critical questions THIS idea implies; always dig into where the
-   core data/content comes from and how it stays current. Infer aggressively; never re-ask the known.
-4) LENGTH: go deep but respect the founder's time — stop when you can write a real spec.`
+const INTERVIEW_SEED = `INTERVIEW STYLE — warm, sharp, founder-first (grilling discipline).
+1) ONE QUESTION AT A TIME, waiting for the answer before the next — asking several at once is bewildering.
+   Start each turn with a 1-sentence reflection of what you understood.
+2) RECOMMEND AN ANSWER for every question: state YOUR suggested default + a half-line of why, so the
+   founder can just confirm. In multiple-choice, mark the recommended option. Never leave them guessing.
+3) WALK THE DESIGN TREE: resolve decisions in DEPENDENCY ORDER, one branch at a time — each answer unlocks
+   the next relevant question. Don't jump around.
+4) INFER, DON'T INTERROGATE: never ask what the idea, the references or prior answers already imply. If a
+   reference URL answers it, use that. Aggressively skip the known.
+5) FORMAT: prefer 2–4 options (short label + one-line detail, allowOther) for closed questions; a text
+   field only for genuinely open ones (data sources, URLs, lists). Don't overload one screen.
+6) DEPTH: dig into the NON-OBVIOUS, business-critical decisions THIS idea implies — above all WHERE the
+   core data/content comes from and how it stays current. Stop when you can write a real spec.`
 const SEED: Record<SkillArea, string> = { data: PLAYBOOK.architect, dev: PLAYBOOK.dev, design: PLAYBOOK.design, business: PLAYBOOK.review, test: PLAYBOOK.test, interview: INTERVIEW_SEED }
 
 // In-memory overlay so the SYNC prompt sites read evolved skills after one async load per build.
