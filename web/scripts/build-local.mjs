@@ -303,20 +303,56 @@ const ok = await repairTs().catch((e) => { log("repairTs error:", String(e.messa
 fs.writeFileSync(path.join(DIR, ".env.local"), `POSTGRES_HOST=localhost\nPOSTGRES_PORT=${PG_PORT}\nPOSTGRES_DB=${APP_DB}\nPOSTGRES_USER=postgres\nPOSTGRES_PASSWORD=postgres\nPOSTGRES_SSL=disable\nPUGLIT_PROVIDER=ollama\n`)
 log(ok ? "RESULT: COMPILES ✓" : "RESULT: still failing (serving anyway)")
 
-// ── QA GATE: unit + business tests (vitest) + coverage of the domain logic ──────
-async function runTests() {
-  let testFiles = []
-  try { testFiles = execSync(`find ${JSON.stringify(DIR)}/lib ${JSON.stringify(DIR)}/app -type f \\( -name '*.test.ts' -o -name '*.spec.ts' \\) 2>/dev/null`, { encoding: "utf8" }).split("\n").filter(Boolean) } catch {}
-  if (!testFiles.length) { log("QA: ⚠ 0 tests generados — coverage 0% (la lógica de dominio NO está probada)"); try { writeStatus({ tests: 0, coverage: 0 }) } catch {} ; return }
-  log(`QA: corriendo ${testFiles.length} archivos de test (vitest + coverage)…`)
-  const out = path.join(DIR, "vitest-results.json")
+// ── QA GATE + QUEEN EVIDENCE REVIEW ─────────────────────────────────────────────
+// Not "trust the claim" — MEASURE. Run vitest+coverage, then the team's Queen reviews the REAL
+// evidence (tests green? coverage ≥ bar?). If it falls short she bounces it back with specific
+// feedback ("coverage 41% < 70%, these functions are untested: …") and the team writes more tests
+// → re-measure. Loop until the evidence clears the bar (or max rounds). External eyes BEFORE delivery.
+const COV_BAR = Number(process.env.PUGLIT_COVERAGE_BAR || 70)
+const QA_ROUNDS = Number(process.env.PUGLIT_QA_ROUNDS || 2)
+const listTests = () => { try { return execSync(`find ${JSON.stringify(DIR)}/lib ${JSON.stringify(DIR)}/app -type f \\( -name '*.test.ts' -o -name '*.spec.ts' \\) 2>/dev/null`, { encoding: "utf8" }).split("\n").filter(Boolean) } catch { return [] } }
+const SKIP_LIB = /\/lib\/(db|auth|mailer|rate|ratelimit|analytics|i18n)\.ts$|\.(test|spec)\.ts$|\/__tests__\//
+function domainLibs() { try { return execSync(`find ${JSON.stringify(DIR)}/lib -type f -name '*.ts' 2>/dev/null`, { encoding: "utf8" }).split("\n").filter(Boolean).filter((p) => !SKIP_LIB.test(p)).map((p) => p.slice(DIR.length + 1)) } catch { return [] } }
+function runVitest() {
+  const out = path.join(DIR, "vitest-results.json"); try { fs.rmSync(out, { force: true }) } catch {}
   spawnSync("npx", ["vitest", "run", "--coverage", "--reporter=json", "--outputFile=" + out], { cwd: DIR, encoding: "utf8", env: { ...process.env }, timeout: 180000 })
-  let total = 0, passed = 0, failed = 0, cov = null
+  let total = 0, passed = 0, failed = 0, cov = null, perFile = {}
   try { const j = JSON.parse(fs.readFileSync(out, "utf8")); total = j.numTotalTests || 0; passed = j.numPassedTests || 0; failed = j.numFailedTests || 0 } catch {}
-  try { const c = JSON.parse(fs.readFileSync(path.join(DIR, "coverage/coverage-summary.json"), "utf8")); cov = c?.total?.lines?.pct ?? null } catch {}
-  const cv = cov == null ? "n/d" : `${cov}%`
-  log(`QA: ${passed}/${total} tests verdes${failed ? ` · ${failed} ROJOS ✗` : " ✓"} · COVERAGE ${cv} (lib/ dominio)`)
-  try { writeStatus({ tests: total, testsPassed: passed, testsFailed: failed, coverage: cov }) } catch {}
+  try { perFile = JSON.parse(fs.readFileSync(path.join(DIR, "coverage/coverage-summary.json"), "utf8")); cov = perFile?.total?.lines?.pct ?? null } catch {}
+  return { total, passed, failed, cov, perFile }
+}
+/** domain lib files whose measured line-coverage is under the bar (the Queen's "show me evidence"). */
+function uncovered(perFile) {
+  const domain = new Set(domainLibs())
+  return Object.entries(perFile || {}).filter(([k, v]) => k !== "total" && v?.lines?.pct != null)
+    .map(([k, v]) => ({ rel: k.startsWith(DIR) ? k.slice(DIR.length + 1) : k, pct: v.lines.pct }))
+    .filter((f) => domain.has(f.rel) && f.pct < COV_BAR)
+}
+async function writeTestsFor(rels) {
+  fs.mkdirSync(path.join(DIR, "lib/__tests__"), { recursive: true })
+  for (const rel of rels.slice(0, 6)) {
+    let src = ""; try { src = fs.readFileSync(path.join(DIR, rel), "utf8").slice(0, 3200) } catch { continue }
+    const alias = "@/" + rel.replace(/\.ts$/, "")
+    const sys = `You are a QA engineer. Output ONLY a vitest test file (no prose, no \`\`\` fences). import { describe, it, expect } from "vitest". Import the REAL functions from "${alias}". Test ONLY pure functions — NEVER call anything that queries the database/network (skip those exports). Assert EXACT values + the edge/error cases (boundaries, invalid input, state transitions). NO expect(true).toBe(true), no stubs, never weaken an assertion to pass. Must compile under tsc and pass.`
+    const code = (await ask(sys, `Module ${rel}:\n${src}`, 8192)).replace(/^```[a-z]*\n?|```$/gm, "").trim()
+    if (code.length > 60 && /describe|it\(|expect/.test(code)) { fs.writeFileSync(path.join(DIR, "lib/__tests__/", rel.replace(/[\/]/g, "_").replace(/\.ts$/, "") + ".test.ts"), code); log(`  QA + test → ${rel}`) }
+  }
+}
+async function runTests() {
+  if (!listTests().length) { log("QA: 0 tests entregados → la Reina exige cobertura del dominio (genero ronda inicial)…"); await writeTestsFor(domainLibs()) }
+  if (!listTests().length) { log("QA: ⚠ sin lógica de dominio testeable — coverage 0%"); try { writeStatus({ tests: 0, coverage: 0 }) } catch {} ; return }
+  let ev = runVitest(), round = 0
+  log(`QA: ${ev.passed}/${ev.total} tests · COVERAGE ${ev.cov ?? "n/d"}% (bar ${COV_BAR}%) — evidencia inicial`)
+  while ((ev.failed > 0 || (ev.cov != null && ev.cov < COV_BAR)) && round < QA_ROUNDS) {
+    round++
+    const gaps = uncovered(ev.perFile)
+    log(`👑 REVIEW Abeja Reina ronda ${round}: "${ev.passed}/${ev.total} verdes, coverage ${ev.cov ?? "n/d"}% < bar ${COV_BAR}% — mostrame evidencia, falta cubrir: ${gaps.map((g) => g.rel + " (" + g.pct + "%)").join(", ") || "asserts reales / casos borde"}". Devuelto al equipo.`)
+    await writeTestsFor(gaps.length ? gaps.map((g) => g.rel) : domainLibs())
+    ev = runVitest()
+  }
+  const approved = ev.failed === 0 && ev.cov != null && ev.cov >= COV_BAR
+  log(`QA VEREDICTO: ${ev.passed}/${ev.total} tests verdes${ev.failed ? ` · ${ev.failed} ROJOS ✗` : ""} · COVERAGE ${ev.cov ?? "n/d"}% / bar ${COV_BAR}% · ${round} ronda(s) de revisión · ${approved ? "✓ APROBADO por la Reina" : "✗ NO alcanza el bar (entregado con deuda de QA)"}`)
+  try { writeStatus({ tests: ev.total, testsPassed: ev.passed, testsFailed: ev.failed, coverage: ev.cov, coverageBar: COV_BAR, qaRounds: round, qaApproved: approved }) } catch {}
 }
 await runTests()
 
