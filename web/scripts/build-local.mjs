@@ -168,7 +168,10 @@ function assemble({ config, appFiles, sql, seedSql }) {
   // Turbopack workspace-root: DIR is nested inside the Puglit repo, so Next infers the WRONG root
   // (the parent lockfile) and fails to boot → the runtime gate's smoke test FAILS for a non-app
   // reason. Pin the root to DIR + serve permissively (tsc already ran separately).
-  fs.writeFileSync(path.join(DIR, "next.config.ts"), `import type { NextConfig } from "next"\nconst nextConfig: NextConfig = { turbopack: { root: ${JSON.stringify(DIR)} }, outputFileTracingRoot: ${JSON.stringify(DIR)}, eslint: { ignoreDuringBuilds: true }, typescript: { ignoreBuildErrors: true } }\nexport default nextConfig\n`)
+  // root = the REPO (ROOT), NOT DIR: the node_modules symlink points to ROOT/spine/node_modules,
+  // which is inside ROOT but OUTSIDE DIR — so root must be an ancestor of BOTH DIR and the symlink
+  // target, else Turbopack panics "symlink points out of the filesystem root".
+  fs.writeFileSync(path.join(DIR, "next.config.ts"), `import type { NextConfig } from "next"\nconst nextConfig: NextConfig = { turbopack: { root: ${JSON.stringify(ROOT)} }, outputFileTracingRoot: ${JSON.stringify(ROOT)}, eslint: { ignoreDuringBuilds: true }, typescript: { ignoreBuildErrors: true } }\nexport default nextConfig\n`)
   // bespoke files (override spine on collision) + DETERMINISTIC spine-import fix
   let count = 0
   for (const f of appFiles) {
