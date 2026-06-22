@@ -19,7 +19,8 @@ const TEAM_LABEL: Record<string, string> = { A: "Equipo Lean", B: "Equipo Enterp
 export default function BuildPage() {
   const { id } = useParams<{ id: string }>()
   const [job, setJob] = useState<Job | null>(null)
-  const [art, setArt] = useState<{ sql?: string; erd?: string; engine?: { path: string; code: string }; findings?: { severity: string; desc: string }[]; ciGreen?: boolean | null; ciErrors?: { path: string; line: number; message: string }[]; githubUrl?: string | null; tournament?: { winner?: string; designs?: { team: string; model?: string; metrics?: { tables?: number; routes?: number; pages?: number }; areas?: { overall?: number } }[] } | null } | null>(null)
+  const [art, setArt] = useState<{ sql?: string; erd?: string; engine?: { path: string; code: string }; findings?: { severity: string; desc: string }[]; ciGreen?: boolean | null; ciErrors?: { path: string; line: number; message: string }[]; githubUrl?: string | null; files?: string[]; tournament?: { winner?: string; designs?: { team: string; model?: string; metrics?: { tables?: number; routes?: number; pages?: number }; areas?: { overall?: number } }[] } | null } | null>(null)
+  const [iter, setIter] = useState({ req: "", busy: false, msg: "" })
   const [tab, setTab] = useState<"engine" | "findings" | "erd" | "sql">("engine")
   const [view, setView] = useState<"oficina" | "flujo">("oficina")
   const [err, setErr] = useState("")
@@ -71,7 +72,7 @@ export default function BuildPage() {
   useEffect(() => {
     if (demo) return
     if (job?.status === "done" && !art) {
-      fetch(`/api/job/${id}`).then((r) => r.json()).then((d) => d.ok && setArt({ sql: d.sql, erd: d.erd, engine: d.engine, findings: d.findings, ciGreen: d.ciGreen, ciErrors: d.ciErrors, githubUrl: d.githubUrl, tournament: d.tournament })).catch(() => {})
+      fetch(`/api/job/${id}`).then((r) => r.json()).then((d) => d.ok && setArt({ sql: d.sql, erd: d.erd, engine: d.engine, findings: d.findings, ciGreen: d.ciGreen, ciErrors: d.ciErrors, githubUrl: d.githubUrl, files: d.files, tournament: d.tournament })).catch(() => {})
     }
   }, [job?.status, art, id, demo])
 
@@ -99,6 +100,16 @@ export default function BuildPage() {
       <script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
     </body></html>`)
     w.document.close()
+  }
+  // #4 iterate/diff: ask for a surgical change to the generated app.
+  async function runIterate() {
+    const req = iter.req.trim(); if (req.length < 4) return
+    setIter((s) => ({ ...s, busy: true, msg: "" }))
+    try {
+      const r = await fetch(`/api/job/${id}/iterate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request: req }) })
+      const d = await r.json()
+      setIter((s) => ({ ...s, busy: false, req: r.ok ? "" : s.req, msg: r.ok ? `✓ ${d.note || "actualizado"} — ${(d.changed || []).length} archivo(s): ${(d.changed || []).join(", ")}` : `✗ ${d.error || "error"}` }))
+    } catch { setIter((s) => ({ ...s, busy: false, msg: "✗ error de red" })) }
   }
   const total = job?.steps?.length || 1
   const completed = job?.steps?.filter((s) => s.status === "done").length || 0
@@ -171,11 +182,33 @@ export default function BuildPage() {
 
       {err && <p className="text-red-400 text-sm mt-4">{err}</p>}
 
+      {/* #5 live preview: the generated files streaming in (paths) */}
+      {art?.files && art.files.length > 0 && (
+        <details className="mt-5 rounded-xl border border-white/10 bg-ink2/50 p-3">
+          <summary className="text-sm font-semibold text-white/70 cursor-pointer">📁 Archivos generados ({art.files.length})</summary>
+          <div className="mt-2 grid sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs font-mono text-white/45 max-h-60 overflow-y-auto">
+            {art.files.map((f) => <div key={f} className="truncate">{f}</div>)}
+          </div>
+        </details>
+      )}
+
       {done && (
         <div className="mt-7 flex flex-wrap gap-3">
           {job?.artifacts?.previewUrl && <a href={job.artifacts.previewUrl} target="_blank" rel="noopener" className="px-6 py-3 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Ver tu sitio →</a>}
           {job?.artifacts?.githubUrl && <a href={job.artifacts.githubUrl} target="_blank" rel="noopener" className="px-6 py-3 rounded-xl font-semibold text-white border border-white/15">Ver el código en GitHub</a>}
           {art && <button onClick={downloadReport} className="px-6 py-3 rounded-xl font-semibold text-white border border-white/15">↓ Descargar informe (PDF)</button>}
+        </div>
+      )}
+
+      {/* #4 iterate/diff: ask for a surgical change to the generated app */}
+      {done && art?.files && art.files.length > 0 && (
+        <div className="mt-6 rounded-xl border border-white/10 bg-ink2/50 p-4">
+          <div className="text-sm font-bold text-white/80 mb-2">✏️ Pedir un cambio (sin reconstruir todo)</div>
+          <div className="flex gap-2">
+            <input value={iter.req} onChange={(e) => setIter((s) => ({ ...s, req: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && runIterate()} placeholder="ej. agregá un filtro por ciudad en la búsqueda" disabled={iter.busy} className="flex-1 rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-sm outline-none focus:border-violet/50" />
+            <button onClick={runIterate} disabled={iter.busy || iter.req.trim().length < 4} className="px-4 py-2 rounded-lg font-semibold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{iter.busy ? "…" : "Aplicar"}</button>
+          </div>
+          {iter.msg && <div className="text-xs text-white/55 mt-2">{iter.msg}</div>}
         </div>
       )}
 

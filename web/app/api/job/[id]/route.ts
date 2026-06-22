@@ -24,5 +24,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     previewUrl: job.artifacts?.previewUrl || null,
     localPath: job.artifacts?.localPath || null,
     tournament: job.artifacts?.tournament || null,
+    // #5 live preview: the generated file PATHS (not content) so the UI can show files streaming in.
+    files: ((job.artifacts?.appFiles || []) as { path: string }[]).map((f) => f.path),
   })
 }

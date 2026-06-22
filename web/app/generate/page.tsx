@@ -215,7 +215,7 @@ export default function Generate() {
       setStep(s); setRated(null)
       if (typeof s.progress === "number") setProgress(Math.max(progress, Math.min(100, s.progress)))
       if (s.reflection) setLog((l) => [...l, { who: "ai", text: s.reflection! }])
-      if (s.done) await produceSpec(s.answers || {}, msgs)
+      if (s.done) presentReview(s.answers || {}, msgs)
     } catch { setErr("Network error.") } finally { setBusy(false) }
   }
 
@@ -238,6 +238,17 @@ export default function Generate() {
 
   // After the interview (or "finish now"): run the ANALYSIS (spec + identity + 2 designs)
   // with a visible checklist, then show the full diagnosis. Nothing is built yet.
+  // #6 spec/PRD review: show the captured plan (editable) BEFORE building, instead of auto-building.
+  const [review, setReview] = useState<{ answers: Record<string, unknown>; msgs: Msg[]; text: string } | null>(null)
+  function presentReview(answers: Record<string, unknown>, msgs: Msg[]) {
+    setReview({ answers, msgs, text: JSON.stringify(answers, null, 2) })
+  }
+  function buildFromReview() {
+    if (!review) return
+    let a = review.answers
+    try { a = JSON.parse(review.text) } catch { /* keep original if edited JSON is invalid */ }
+    const msgs = review.msgs; setReview(null); produceSpec(a, msgs)
+  }
   const ANALYZE_LABELS = ["Analizando tus respuestas", "Definiendo identidad (logo + paleta)", "Diseñando 2 propuestas visuales"]
   async function produceSpec(answers: Record<string, unknown>, msgs: Msg[], nm: string = name) {
     setPendingAnswers(answers)
@@ -265,7 +276,7 @@ export default function Generate() {
     try {
       const r = await fetch("/api/interview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages, productName: name, finish: true }) })
       const d = await r.json()
-      if (r.ok && d.step?.done) await produceSpec(d.step.answers || {}, messages)
+      if (r.ok && d.step?.done) presentReview(d.step.answers || {}, messages)
       else setErr("Couldn't wrap up — try one more answer.")
     } catch { setErr("Network error.") } finally { setBusy(false) }
   }
@@ -671,7 +682,20 @@ export default function Generate() {
       {/* current question + input */}
       {phase === "saving" && <div className={card}><span className="inline-block animate-pulse">✦</span> {buildMsg || "Building your SaaS…"}</div>}
 
-      {phase === "chat" && !busy && s && !s.done && (
+      {/* #6 spec/PRD review — confirm/edit the captured plan before building */}
+      {phase === "chat" && review && !busy && (
+        <div className={card}>
+          <p className="font-bold mb-1">📋 Revisá el plan antes de construir</p>
+          <p className="text-xs text-white/50 mb-3">Esto es lo que entendí. Editalo si querés (es JSON) y construimos con esto.</p>
+          <textarea value={review.text} onChange={(e) => setReview((r) => r && ({ ...r, text: e.target.value }))} rows={12} className="w-full rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-xs font-mono outline-none focus:border-violet/50" />
+          <div className="flex gap-2 mt-3">
+            <button onClick={buildFromReview} className="px-5 py-2.5 rounded-xl font-bold text-white" style={{ background: "var(--violet)" }}>Construir con esto →</button>
+            <button onClick={() => { const r = review; setReview(null); if (r) grillMore() }} className="px-5 py-2.5 rounded-xl font-semibold text-white/70 border border-white/15">🔥 Mejor profundizá más</button>
+          </div>
+        </div>
+      )}
+
+      {phase === "chat" && !review && !busy && s && !s.done && (
         <div className={card}>
           {s.question && (
             <div className="flex items-start justify-between gap-3 mb-3">
