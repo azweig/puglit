@@ -95,6 +95,8 @@ import { deterministicObsidian } from "@/lib/obsidian-module"
 import { deterministicGraphify } from "@/lib/graphify-module"
 import { deterministicRentals, deterministicRentalRoutes } from "@/lib/rentals-module"
 import { adversarialReview } from "@/lib/adversarial-review"
+import { traceReset } from "@/lib/run-trace"
+import { scoreRun, summarizeRun } from "@/lib/swarm-profile"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables, repairSecurityWithFrontier } from "@/lib/swarm-repair"
@@ -1275,6 +1277,7 @@ export interface EngineState {
   qualityIssues?: CodeIssue[] // swarm-checks findings (security + consistency) surfaced for the critic
 }
 export function initEngineState(): EngineState {
+  traceReset() // start a fresh LLM-call trace for this build's run-profile
   return { phase: "plan", blueprint: null, brief: "", ri: 0, pi: 0, files: [] }
 }
 /** Start the engine from an ALREADY-CHOSEN blueprint (the genetic tournament's winner),
@@ -1545,8 +1548,12 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
       if (/^app\/api\/.*route\.ts$/.test(f.path)) void storeExemplar("route", f.path, f.content).catch(() => {})
       else if (/^app\/.*\/page\.tsx$/.test(f.path) || f.path === "app/page.tsx") void storeExemplar("page", f.path, f.content).catch(() => {})
     }
+    // RUN PROFILE (agent-house idea): score this build's LLM-call trace (cost/latency/reliability/
+    // context) + ranked fixes, so the swarm gets cheaper/faster over time. Recorded as a metric.
+    const profile = scoreRun()
+    if (profile) { console.warn("[agent-house]", summarizeRun(profile)); void recordMetric("run_score", profile.score, { ...profile.categories, savingsMs: profile.savingsMs, calls: profile.run.calls }).catch(() => {}) }
     s.phase = "done"
-    return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}${repaired ? ` · auto-fixed ${repaired} table(s)` : ""}${review ? ` · adverse: ${review.verdict}` : ""}` }
+    return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}${repaired ? ` · auto-fixed ${repaired} table(s)` : ""}${review ? ` · adverse: ${review.verdict}` : ""}${profile ? ` · run ${profile.score}/100` : ""}` }
   }
   return { state: s, done: true, detail: "done" }
 }

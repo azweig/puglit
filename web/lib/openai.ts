@@ -13,6 +13,8 @@
  * (e.g. premium→Claude for the blueprint, cheap→local Gemma for extraction) via env.
  */
 
+import { traceCall } from "@/lib/run-trace"
+
 // ── Providers ────────────────────────────────────────────────────────────────
 type Protocol = "openai" | "anthropic"
 interface ProviderDef { protocol: Protocol; baseURL: string; supportsJsonMode: boolean; supportsVision: boolean; needsKey: boolean }
@@ -195,10 +197,17 @@ async function callOpenAICompat(messages: ChatMessage[], opts: { model: string; 
 async function call(messages: ChatMessage[], opts: { model: string; temperature?: number; json?: boolean; schema?: object }): Promise<string> {
   const r = resolve(opts.model)
   if (r.def.needsKey && !r.key) throw new Error("ai_not_configured")
-  if (r.def.protocol === "anthropic") return callAnthropic(messages, opts, r)
-  // Ollama: route schema-constrained calls through the native endpoint (most reliable).
-  if (opts.schema && isOllama(r) && allStrings(messages)) return callOllamaSchema(messages, { ...opts, schema: opts.schema }, r)
-  return callOpenAICompat(messages, opts, r)
+  // PROFILE the run (agent-house idea): record one span per call — tier, prompt size, latency, ok.
+  const started = Date.now()
+  const promptChars = messages.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : JSON.stringify(m.content).length), 0)
+  let out = "", ok = true
+  try {
+    if (r.def.protocol === "anthropic") out = await callAnthropic(messages, opts, r)
+    else if (opts.schema && isOllama(r) && allStrings(messages)) out = await callOllamaSchema(messages, { ...opts, schema: opts.schema }, r)
+    else out = await callOpenAICompat(messages, opts, r)
+    return out
+  } catch (e) { ok = false; throw e }
+  finally { try { traceCall({ tier: (tierOf(opts.model) || "other").toLowerCase(), model: opts.model, promptChars, outChars: out.length, ms: Date.now() - started, ok, json: !!opts.schema || !!opts.json }) } catch { /* never break a call to trace it */ } }
 }
 
 // ── Robust JSON (local/open models love to wrap JSON in prose or ```fences) ───
