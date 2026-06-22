@@ -30,7 +30,8 @@ echo "BUILD_DONE rc=$?" >> /tmp/build.log
 nohup npm run start -- -p 3000 -H 0.0.0.0 > /tmp/puglit-prod.log 2>&1 &
 # #12 model residency: keep 2 models resident (A40 48GB fits a ~20GB 32B coder + a small model) so
 # tier switches (premium↔code↔cheap) don't pay a cold-start reload every call. Set =1 if VRAM OOMs.
-nohup env OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}" OLLAMA_FLASH_ATTENTION=1 OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS:-2}" ollama serve > /tmp/ollama.log 2>&1 &
+# #13 OLLAMA_NUM_PARALLEL=2 so the batched route/page generation (Promise.all) actually overlaps.
+nohup env OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}" OLLAMA_FLASH_ATTENTION=1 OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS:-2}" OLLAMA_NUM_PARALLEL="${OLLAMA_NUM_PARALLEL:-2}" ollama serve > /tmp/ollama.log 2>&1 &
 
 # WATCHDOG: drive queued/running builds SERVER-SIDE every 45s, so a build keeps progressing
 # even when nobody has the /build page open (a build can take hours → the user must be able

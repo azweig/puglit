@@ -1360,25 +1360,27 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     s.brief = brief; s.files = files; s.ri = 0; s.pi = 0; s.phase = "routes"
     return { state: s, done: false, detail: "diseño + esquema listos" }
   }
+  // #13 parallelize generation: produce a BATCH of independent files concurrently per advance.
+  const BATCH = Math.max(1, Number(process.env.PUGLIT_GEN_BATCH || 3))
   if (s.phase === "routes") {
     const routeFiles = groupRoutes(bp.routes)
     if (s.ri >= routeFiles.length) { s.phase = "pages"; return { state: s, done: false, detail: "rutas listas → páginas" } }
-    const rf = routeFiles[s.ri]
-    const f = await genRouteFile(config, bp, rf).then((x) => (x ? hardenRoute(x, schemaSql) : null)).catch(() => null)
-    if (f) s.files.push(f)
-    s.ri++
-    return { state: s, done: false, detail: `ruta ${s.ri}/${routeFiles.length}: ${rf.path.replace(/^app\/api\//, "").replace(/\/route\.ts$/, "")}` }
+    const batch = routeFiles.slice(s.ri, s.ri + BATCH)
+    const results = await Promise.all(batch.map((rf) => genRouteFile(config, bp, rf).then((x) => (x ? hardenRoute(x, schemaSql) : null)).catch(() => null)))
+    for (const f of results) if (f) s.files.push(f)
+    s.ri += batch.length
+    return { state: s, done: false, detail: `rutas ${Math.min(s.ri, routeFiles.length)}/${routeFiles.length}` }
   }
   if (s.phase === "pages") {
     if (s.pi >= bp.pages.length) { s.phase = "finalize"; return { state: s, done: false, detail: "páginas listas → ensamblaje" } }
     const matchesDet = deterministicMatchesRoute(bp.tables, [])
     const geoDet = deterministicGeo(bp.tables, [])
     const shapes = [matchesDet?.shape, geoDet?.shape].filter(Boolean).join("\n")
-    const p = bp.pages[s.pi]
-    const f = await genPage(config, bp, p, s.brief, shapes).catch(() => null)
-    if (f) s.files.push(f)
-    s.pi++
-    return { state: s, done: false, detail: `página ${s.pi}/${bp.pages.length}: ${p.route}` }
+    const batch = bp.pages.slice(s.pi, s.pi + BATCH)
+    const results = await Promise.all(batch.map((p) => genPage(config, bp, p, s.brief, shapes).catch(() => null)))
+    for (const f of results) if (f) s.files.push(f)
+    s.pi += batch.length
+    return { state: s, done: false, detail: `páginas ${Math.min(s.pi, bp.pages.length)}/${bp.pages.length}` }
   }
   if (s.phase === "finalize") {
     const files = s.files

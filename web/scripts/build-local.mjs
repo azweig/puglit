@@ -399,13 +399,29 @@ async function smokeTest() {
     }
   }
   try { walk(appDir) } catch {}
-  let pass = 0, fail = 0; const bad = []
+  let pass = 0, fail = 0, empty = 0; const bad = []
   for (const t of [...targets].slice(0, 20)) {
-    try { const r = await fetch(`http://localhost:${PORT}${t}`); if (r.status >= 500) { fail++; bad.push(`${t}→${r.status}`) } else pass++ }
-    catch { fail++; bad.push(`${t}→ERR`) }
+    try {
+      const r = await fetch(`http://localhost:${PORT}${t}`)
+      if (r.status >= 500) { fail++; bad.push(`${t}→${r.status}`); continue }
+      pass++
+      // #3 RENDER VERIFICATION: a 200 that's blank / an error shell isn't "working". Check the HTML
+      // actually has real content (a non-trivial <body>, no Next error overlay).
+      const html = await r.text().catch(() => "")
+      const body = (html.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] || "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, "").trim()
+      if (/__NEXT_ERROR__|Application error|Internal Server Error/.test(html) || body.length < 40) { empty++; bad.push(`${t}→vacío`) }
+    } catch { fail++; bad.push(`${t}→ERR`) }
   }
-  const okGate = fail === 0
-  log(`SMOKE: ${okGate ? "✓ PASS" : "✗ FAIL"} — RUNTIME GATE (${pass} ok, ${fail} 5xx${bad.length ? ": " + bad.join(", ") : ""})`)
-  try { writeStatus({ smoke: okGate, pagesOk: pass, pagesFail: fail, failing: bad }) } catch {}
+  // #2 E2E FUNCTIONAL: POST to the first collection route with a tiny body — the write path must not 5xx.
+  let writeOk = null
+  try {
+    const apiDir = path.join(DIR, "app/api")
+    const findRoute = (dir, base = "/api") => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { if (e.name.startsWith("[")) continue; if (e.isDirectory()) { const r = findRoute(path.join(dir, e.name), base + "/" + e.name); if (r) return r } else if (e.name === "route.ts" && /export async function POST/.test(fs.readFileSync(path.join(dir, e.name), "utf8"))) return base } return null }
+    const wr = fs.existsSync(apiDir) ? findRoute(apiDir) : null
+    if (wr) { const r = await fetch(`http://localhost:${PORT}${wr}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); writeOk = r.status < 500; if (!writeOk) bad.push(`POST ${wr}→${r.status}`) }
+  } catch { writeOk = false }
+  const okGate = fail === 0 && empty === 0 && writeOk !== false
+  log(`SMOKE: ${okGate ? "✓ PASS" : "✗ FAIL"} — RUNTIME GATE (${pass} ok, ${fail} 5xx, ${empty} vacías, write=${writeOk === null ? "n/a" : writeOk ? "ok" : "5xx"}${bad.length ? " · " + bad.slice(0, 6).join(", ") : ""})`)
+  try { writeStatus({ smoke: okGate, pagesOk: pass, pagesFail: fail, pagesEmpty: empty, writeOk, failing: bad }) } catch {}
 }
 smokeTest()
