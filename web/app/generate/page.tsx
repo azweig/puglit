@@ -635,23 +635,26 @@ export default function Generate() {
 
   const s = step
   return (
-    <main className="max-w-xl mx-auto px-5 py-10">
+    <main className="max-w-xl mx-auto px-5 pt-10 pb-32">
       <Link href="/" className="flex items-center gap-2 text-violet-bright mb-4"><Mark size={24} /><span className="font-extrabold text-white">Puglit</span></Link>
 
-      <div className="mb-5">
-        <div className="flex items-center justify-between text-xs mb-1.5">
-          <div className="flex items-center gap-3">
-            {history.length > 0 && <button onClick={goBack} disabled={busy} className="text-white/60 hover:text-white font-semibold disabled:opacity-40">← Volver</button>}
-            <span className="text-white/40">Entendido ~{progress}%</span>
-          </div>
-          {log.filter((e) => e.who === "you").length >= 3 && (
-            <div className="flex items-center gap-4">
-              <button onClick={grillMore} disabled={busy} className={`font-semibold hover:underline disabled:opacity-40 ${rated === false ? "text-orange-400" : "text-white/60"}`} title="Que profundice en lo que falta">🔥 Profundizar más</button>
-              <button onClick={finishNow} disabled={busy} className="text-violet-bright font-semibold hover:underline disabled:opacity-40">Terminar y ver diagnóstico →</button>
+      {/* progress "thermometer" — DOCKED at the bottom so it's always visible */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/10 bg-ink/90 backdrop-blur-md">
+        <div className="max-w-xl mx-auto px-5 py-3">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <div className="flex items-center gap-3">
+              {history.length > 0 && <button onClick={goBack} disabled={busy} className="text-white/60 hover:text-white font-semibold disabled:opacity-40">← Volver</button>}
+              <span className="text-white/50 font-semibold">Entendido ~{progress}%</span>
             </div>
-          )}
+            {log.filter((e) => e.who === "you").length >= 3 && (
+              <div className="flex items-center gap-4">
+                <button onClick={grillMore} disabled={busy} className={`font-semibold hover:underline disabled:opacity-40 ${rated === false ? "text-orange-400" : "text-white/60"}`} title="Que profundice en lo que falta">🔥 Profundizar más</button>
+                <button onClick={finishNow} disabled={busy} className="text-violet-bright font-semibold hover:underline disabled:opacity-40">Terminar →</button>
+              </div>
+            )}
+          </div>
+          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: "var(--violet)" }} /></div>
         </div>
-        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: "var(--violet)" }} /></div>
       </div>
 
       {/* transcript */}
