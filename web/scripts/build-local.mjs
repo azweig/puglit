@@ -155,6 +155,12 @@ function assemble({ config, appFiles, sql, seedSql }) {
   // node_modules: a REAL directory (NOT a symlink — Turbopack rejects a node_modules symlink that
   // points outside the project dir). cp -al = hard-links: instant, no extra disk (shared inodes),
   // same-filesystem only (DIR & SPINE are both under the repo). Falls back to clonefile / real copy.
+  // the spine must have its deps installed (next/react/pg/…) — install once if missing, else every
+  // served app has a dangling node_modules and Turbopack can't resolve `next`.
+  if (!fs.existsSync(path.join(SPINE, "node_modules", "next"))) {
+    log("spine/node_modules ausente → npm install en el spine (una vez, ~1-2 min)…")
+    execSync("npm install --no-audit --no-fund", { cwd: SPINE, stdio: "inherit" })
+  }
   fs.rmSync(path.join(DIR, "node_modules"), { recursive: true, force: true })
   try { execSync(`cp -al ${SPINE}/node_modules ${DIR}/node_modules 2>/dev/null`) }
   catch { try { execSync(`cp -Rc ${SPINE}/node_modules ${DIR}/node_modules 2>/dev/null`) } catch { execSync(`cp -R ${SPINE}/node_modules ${DIR}/node_modules`) } }
