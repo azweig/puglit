@@ -129,7 +129,8 @@ export async function adversarialReview(config: DomainConfig, bp: Blueprint, fil
   // CROSS-EXAMINED CRITICALS → one bounded repair pass, then resynthesize from a fresh review.
   let repaired: string[] = []
   const confirmedCritical = crossValidated.filter((f) => f.severity === "critical")
-  if (confirmedCritical.length) {
+  // training mode (batch brain-fill): review once, skip the expensive repair + re-review pass.
+  if (confirmedCritical.length && !process.env.PUGLIT_TRAINING_MODE) {
     repaired = await repairFindings(files, confirmedCritical).catch(() => [])
     if (repaired.length) {
       const reSource = digest(files)

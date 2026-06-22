@@ -1,0 +1,101 @@
+# name	what	mode	monetization   (mode: train=ligero · full=torneo completo)
+Solitario Klondike	juego de solitario Klondike: 7 columnas, 4 fundaciones por palo, mazo y descarte, mover/arrastrar cartas, deshacer, contador de movimientos y tiempo, victoria al completar	train	free
+Buscaminas	buscaminas: grilla configurable (facil/medio/dificil), revelar celda, marcar bandera, conteo de minas adyacentes, cronometro, mejores tiempos guardados	train	free
+FreeCell	solitario FreeCell: 8 columnas, 4 celdas libres, 4 fundaciones, validacion de movimientos, autocompletar, contador de movimientos	train	free
+Spider Solitaire	solitario Spider: 1/2/4 palos, 10 columnas, secuencias descendentes, repartir del mazo, deshacer, puntaje	train	free
+Snake	juego de la viborita: control por flechas, comida que hace crecer y acelerar, choque = game over, puntaje y record persistido	train	free
+Tetris	Tetris: 7 piezas con rotacion, lineas completas, niveles que aceleran, puntaje, vista de proxima pieza, record	train	free
+Reversi	Reversi/Othello 8x8: fichas que voltean, turnos por color, contador de fichas, fin de juego y ganador, 2 jugadores local	train	free
+Conecta 4	Conecta 4: tablero 7x6, soltar ficha por columna, detectar 4 en linea (horizontal/vertical/diagonal), 2 jugadores, marcador	train	free
+Batalla Naval	batalla naval: colocar flota en grilla, disparar a la del rival, acierto/agua/hundido, por turnos, 2 jugadores	train	free
+2048	2048: grilla 4x4, deslizar y fusionar fichas con flechas, puntaje, mejor puntaje, game over al llenar sin movimientos	train	free
+Pong	Pong clasico 2 jugadores: paletas izquierda (W/S) y derecha (flechas), pelota que rebota y acelera, INPUT SIMULTANEO de ambos jugadores sin trabarse, marcador a 11, saque	train	free
+Arkanoid	Arkanoid/Breakout: paleta movible, pelota, muro de ladrillos por filas y colores, power-ups, vidas, puntaje por ladrillo segun color, niveles	train	free
+Asteroids	Asteroids: nave que rota y empuja con inercia, dispara, asteroides que se parten en chicos, TECLAS SIMULTANEAS (rotar + empujar + disparar a la vez), vidas, puntaje y record	train	free
+Calculadora	calculadora basica: operaciones, teclado y mouse, historial de calculos, memoria M+/M-/MR, manejo de errores (division por cero)	train	free
+Calculadora Cientifica	calculadora cientifica: sin/cos/tan/log/ln/raiz/potencia/factorial, grados y radianes, constantes pi/e, historial, memoria	train	free
+Conversor de Unidades	conversor de unidades: longitud, peso, temperatura, volumen, area, velocidad; categorias, conversion en vivo, favoritos	train	free
+Conversor de Moneda	conversor de monedas: catalogo de monedas, tasas (ingesta diaria por cron), conversion en vivo, historico simple, favoritos	full	free
+Calculadora de Propinas	calculadora de propinas: monto, porcentaje, dividir entre N personas, redondeo, total por persona	train	free
+Calculadora de Prestamo	calculadora de prestamo/hipoteca: capital, tasa, plazo; cuota mensual, total a pagar, tabla de amortizacion, grafico	train	free
+Calculadora IMC	calculadora de indice de masa corporal: peso y altura, categoria (bajo/normal/sobrepeso), historial de mediciones, grafico	train	free
+Generador de Contraseñas	generador de contraseñas: longitud, mayus/minus/numeros/simbolos, medidor de fuerza, copiar, historial local	train	free
+Diferencia de Fechas	calculadora de fechas: diferencia entre dos fechas (dias/meses/años), sumar/restar dias, dias habiles, edad exacta	train	free
+Tracker de Gastos	tracker de gastos personales: categorias, ingresos y egresos, presupuesto mensual, reportes por categoria, graficos, exportar	train	free
+Contabilidad Personal	sistema de contabilidad personal: cuentas (banco/efectivo/tarjeta), transacciones, transferencias, conciliacion, balance por cuenta, reportes mensuales, grafico de patrimonio	full	free
+Tracker de Habitos	tracker de habitos: habitos diarios/semanales, marcar cumplido, rachas (streaks), porcentaje de cumplimiento, calendario heatmap	train	free
+Diario de Animo	diario de estado de animo: registro diario con emocion y nota, etiquetas, calendario de animos, tendencia y grafico	train	free
+Tracker de Peso	tracker de peso y fitness: registro de peso, objetivo, grafico de progreso, IMC, medidas corporales, recordatorios	train	free
+Diario de Calorias	diario de calorias: alimentos con calorias/macros, comidas del dia, objetivo diario, totales, busqueda de alimentos	train	free
+Tracker de Sueño	tracker de sueño: hora de dormir/despertar, horas dormidas, calidad, notas, tendencia semanal, grafico	train	free
+Tracker de Suscripciones	tracker de suscripciones: servicios, monto, ciclo (mensual/anual), proxima renovacion, costo total mensual, recordatorios de cobro	train	free
+Dentista	sistema de gestion para dentista: pacientes (ficha + historia clinica), turnos/citas con estados (solicitado/confirmado/atendido/cancelado), tratamientos, odontograma simple, recordatorios, agenda diaria	full	suscripcion
+Peluqueria	sistema de reservas para peluqueria/barberia: servicios con duracion y precio, profesionales, agenda con horarios disponibles, reserva sin solapamiento, recordatorios, historial de clientes	full	suscripcion
+Gimnasio	gestion de membresias de gimnasio: socios, planes con vencimiento, pagos, control de acceso (check-in), clases con cupo, reportes de morosos	full	suscripcion
+Clases Particulares	scheduler de clases particulares: alumnos, materias, agenda de clases con estados, tarifas, pagos, asistencia, recordatorios	full	suscripcion
+Facturacion Freelance	facturacion para freelancers: clientes, proyectos, registro de horas, facturas con items e impuestos, estados (borrador/enviada/pagada), totales	full	pago
+Inventario	gestion de inventario/stock: productos con SKU, categorias, stock actual, movimientos (entrada/salida), alertas de stock minimo, valorizacion, reportes	full	suscripcion
+Reservas de Mesa	reservas de mesa para restaurante: mesas con capacidad, turnos, reserva sin solapamiento por franja, lista de espera, estados, vista del dia	full	suscripcion
+Veterinaria	registros de clinica veterinaria: dueños, mascotas (especie/raza), historia clinica, vacunas con vencimiento, turnos, tratamientos, recordatorios	full	suscripcion
+Taller Mecanico	ordenes de trabajo de taller mecanico: clientes, vehiculos, ordenes con estados (ingresado/diagnostico/reparacion/listo), items de repuestos y mano de obra, presupuesto, total	full	suscripcion
+Servicio de Limpieza	scheduler de servicio de limpieza: clientes, direcciones, agenda recurrente, asignacion de personal, estados del trabajo, cobro, ruta del dia	full	suscripcion
+Lista de Tareas	lista de tareas (to-do): tareas con prioridad, fecha, etiquetas, completar, filtros, listas/proyectos, orden por arrastre	train	free
+Tablero Kanban	tablero kanban: columnas configurables, tarjetas con descripcion/etiquetas/asignado, mover entre columnas, limites WIP, busqueda	train	free
+Notas	app de notas: notas con titulo y cuerpo markdown, carpetas/etiquetas, busqueda, fijar, papelera, vista previa	train	free
+Marcadores	gestor de marcadores: links con titulo/url/etiquetas, carpetas, busqueda, favoritos, import/export, vista de tarjetas	train	free
+Recetario	recetario personal: recetas con ingredientes y pasos, categorias, porciones (escalar cantidades), favoritos, busqueda, lista de compras	train	free
+Plan de Comidas	planificador de comidas semanal: recetas, calendario semanal por comida, lista de compras autogenerada, porciones	train	free
+Contactos	agenda de contactos: personas con telefono/email/etiquetas, grupos, busqueda, favoritos, notas, cumpleaños	train	free
+Flashcards	flashcards con repeticion espaciada: mazos, tarjetas frente/dorso, algoritmo de repaso (SM-2 simple), progreso por mazo, sesion de estudio	train	free
+Objetivos OKR	tracker de objetivos/OKR: objetivos con resultados clave medibles, progreso %, periodos trimestrales, estado, tablero	train	free
+Agenda Diaria	planificador diario: bloques horarios, eventos, tareas del dia, vista de calendario semanal, recordatorios	train	free
+Blog CMS	blog/CMS: posts con markdown, categorias y tags, borradores/publicado, pagina publica con listado y post, SEO basico, busqueda	full	free
+Link in Bio	pagina link-in-bio: perfil, lista de links con icono y orden, tema/colores, clicks por link (analitica simple), pagina publica	full	free
+Portfolio	sitio de portfolio: proyectos con imagenes/descripcion/tags, about, contacto, pagina publica responsive, filtro por tag	full	free
+Menu de Restaurante	sitio de menu de restaurante: categorias, platos con precio/foto/descripcion, disponibilidad, pagina publica, destacados	full	free
+Base de Conocimiento	base de conocimiento/FAQ: articulos por categoria, busqueda, votos util/no util, articulos relacionados, pagina publica	full	free
+Status Page	pagina de estado de servicios: servicios y componentes, estado actual, uptime 90 dias, incidentes con updates, mantenimientos, suscripcion por email	full	free
+Bolsa de Empleo	bolsa de empleo: ofertas con empresa/categoria/ubicacion/remoto, busqueda y filtros, postular, pagina publica, destacados	full	free
+Directorio de Negocios	directorio de negocios: fichas con categoria/ubicacion (lat/lng)/horarios, busqueda por cercania, reseñas, pagina publica	full	free
+Cartelera de Eventos	cartelera de eventos: eventos con fecha/lugar/categoria, calendario, filtros, detalle, asistir/interesado, pagina publica	full	free
+Dashboard del Clima	dashboard del clima: ciudades favoritas, clima actual y pronostico (ingesta por cron de una fuente real), graficos, busqueda de ciudad	full	free
+Libro de Visitas	libro de visitas: mensajes publicos con nombre y texto, moderacion, paginacion, anti-spam basico	train	free
+Foro	foro de discusion: categorias, temas, respuestas anidadas, usuarios, votos, busqueda, scoping de autor	train	free
+Preguntas y Respuestas	sitio de preguntas y respuestas: preguntas con tags, respuestas, votos, mejor respuesta aceptada, reputacion, busqueda	train	free
+Encuestas	app de encuestas/votacion: crear encuesta con opciones, votar una vez, resultados en vivo con grafico, compartir, cierre	train	free
+Reseñas	sitio de reseñas: items, reseñas con rating 1-5 y texto, promedio, filtros, util/no util, scoping (una reseña por usuario)	full	free
+Clasificados	clasificados: avisos con categoria/precio/fotos/ubicacion, busqueda y filtros, contactar al vendedor, marcar vendido, scoping	full	free
+Galeria de Fotos	galeria de fotos compartida: albumes, subir foto (data-url), descripcion, likes, comentarios, vista grid, scoping por dueño	train	free
+Leaderboard	app de leaderboard/ranking: jugadores, puntajes, ranking ordenado, filtros por periodo, perfil de jugador, top N	train	free
+Adopcion de Mascotas	tablero de adopcion de mascotas: fichas (especie/edad/ubicacion/fotos), filtros, solicitud de adopcion, estados, scoping del publicante	train	free
+Objetos Perdidos	objetos perdidos y encontrados: publicaciones con tipo/lugar/fecha/foto, busqueda, marcar resuelto, contacto, scoping	train	free
+Tienda Online	tienda online simple: productos, carrito, checkout con pago, ordenes con estado, stock, total con envio	full	pago
+Descargas Digitales	tienda de descargas digitales: productos digitales, compra con pago, entrega del archivo/link tras pagar, ordenes, biblioteca del comprador	full	pago
+Donaciones	pagina de donaciones/tip jar: montos sugeridos y libre, pago, mensaje opcional, muro de donantes, total recaudado	full	pago
+Crowdfunding	crowdfunding simple: campañas con meta y plazo, aportes con pago, barra de progreso, recompensas por nivel, lista de backers	full	pago
+Venta de Entradas	venta de entradas a eventos: eventos, tipos de entrada con cupo y precio, compra con pago, codigo QR por entrada, control de cupo	full	pago
+Puntos de Lealtad	programa de puntos de lealtad: clientes, acumular/canjear puntos (ledger append-only), recompensas, balance, historial	full	suscripcion
+Dividir Gastos	app para dividir gastos en grupo: grupos, gastos con pagador y participantes, balance quien debe a quien, liquidacion sugerida, saldar	train	free
+Generador de Facturas	generador de facturas: clientes, items con cantidad/precio/impuesto, numeracion, totales, estados, PDF/imprimir, listado	full	pago
+Membresia Paywall	sitio de membresia con paywall: contenido premium, planes de suscripcion, pago recurrente, acceso por plan, area de socio	full	suscripcion
+POS Simple	punto de venta (POS) simple: catalogo, agregar al ticket, descuentos, cobro con pago, cierre de caja diario, ventas del dia	full	pago
+Quiz	app de quiz: cuestionarios con preguntas de opcion multiple, puntaje, ranking, explicacion de respuestas, crear quiz	train	free
+Trivia	juego de trivia: categorias, preguntas con tiempo, puntaje por velocidad, ranking, banco de preguntas	train	free
+Test de Tipeo	test de mecanografia: textos, WPM y precision en vivo, errores resaltados, niveles, ranking de mejores WPM	train	free
+Practica de Matematicas	practica de matematicas: operaciones por nivel, contra reloj, puntaje, racha, estadisticas de aciertos por tipo	train	free
+Vocabulario	constructor de vocabulario: palabras con definicion/ejemplo, listas, quiz de repaso, progreso, repeticion espaciada	train	free
+Sudoku	sudoku: generador por dificultad, validacion, notas en celda, pistas, cronometro, deshacer, verificar	train	free
+Sopa de Letras	sopa de letras/crucigrama: grilla con palabras ocultas, seleccionar palabra, marcar encontradas, niveles, cronometro	train	free
+Ahorcado	juego del ahorcado: categorias de palabras, adivinar letras, intentos, teclado en pantalla, puntaje, racha	train	free
+Quiz de Banderas	quiz de banderas y capitales: paises con bandera/capital, modo banderas o capitales, puntaje, ranking, por continente	train	free
+Akinator	clon de Akinator / 20 preguntas: arbol de preguntas si/no/no-se, adivina el personaje u objeto, APRENDE cuando falla (agrega objeto y pregunta distintiva), ranking de aciertos, base de objetos y preguntas	full	free
+Timer de Meditacion	timer de meditacion: duracion, sonido de campana de inicio/fin, intervalos, sesiones registradas, racha, estadisticas	train	free
+Diario de Gratitud	diario de gratitud: entrada diaria con 3 cosas, etiquetas, calendario, racha, busqueda, recordatorio diario	train	free
+Itinerario de Viaje	planificador de itinerario de viaje: viajes, dias, actividades con hora/lugar, presupuesto, lista de tareas, mapa simple	train	free
+Lista de Equipaje	lista de equipaje: plantillas por tipo de viaje, items por categoria, marcar empacado, cantidad, progreso	train	free
+Tareas del Hogar	tareas del hogar (familia): miembros, tareas rotativas, asignacion semanal, completar, puntos/recompensas, ranking familiar	train	free
+Planificador de Huerta	planificador de huerta: canteros, plantas con temporada y riego, calendario de siembra/cosecha, recordatorios de riego	train	free
+Bitacora de Cafe	bitacora de cafe/vino: registros con origen/nota/puntaje, fotos, etiquetas, ranking personal, busqueda	train	free
+Coleccion	tracker de colecciones (vinilos/cartas/libros): items con atributos/foto/valor, categorias, busqueda, estadisticas, faltantes	train	free
+Checklist de Casamiento	checklist de planificacion de casamiento: tareas por categoria con fecha limite, proveedores, presupuesto, invitados con RSVP, progreso	train	free
+Recordatorio de Medicacion	recordatorio de medicacion: medicamentos con dosis y horarios, recordatorios, registro de tomas, adherencia, stock restante	train	free
