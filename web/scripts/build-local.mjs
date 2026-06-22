@@ -152,12 +152,12 @@ function assemble({ config, appFiles, sql, seedSql }) {
   // copy spine app (exclude node_modules + the dropped template surfaces)
   execSync(`rsync -a --exclude node_modules ${SPINE}/ ${DIR}/`)
   for (const d of SPINE_DROP) execSync(`rm -rf ${path.join(DIR, d)}`)
-  // node_modules: symlink to the spine's. DIR is on the SAME filesystem as the spine now, so
-  // Turbopack accepts the symlink (it only rejects symlinks that cross filesystems) — instant,
-  // no 300MB copy, no disk pressure. APFS clonefile on Mac as a nicer alternative if it works.
+  // node_modules: a REAL directory (NOT a symlink — Turbopack rejects a node_modules symlink that
+  // points outside the project dir). cp -al = hard-links: instant, no extra disk (shared inodes),
+  // same-filesystem only (DIR & SPINE are both under the repo). Falls back to clonefile / real copy.
   fs.rmSync(path.join(DIR, "node_modules"), { recursive: true, force: true })
-  try { execSync(`cp -Rc ${SPINE}/node_modules ${DIR}/node_modules 2>/dev/null`) }
-  catch { fs.symlinkSync(path.join(SPINE, "node_modules"), path.join(DIR, "node_modules"), "dir") }
+  try { execSync(`cp -al ${SPINE}/node_modules ${DIR}/node_modules 2>/dev/null`) }
+  catch { try { execSync(`cp -Rc ${SPINE}/node_modules ${DIR}/node_modules 2>/dev/null`) } catch { execSync(`cp -R ${SPINE}/node_modules ${DIR}/node_modules`) } }
   // spine SQL migrations
   execSync(`mkdir -p ${path.join(DIR, "sql")}`)
   for (const f of ["001_core.sql", "002_auth.sql", "003_records.sql"]) {
@@ -168,10 +168,9 @@ function assemble({ config, appFiles, sql, seedSql }) {
   // Turbopack workspace-root: DIR is nested inside the Puglit repo, so Next infers the WRONG root
   // (the parent lockfile) and fails to boot → the runtime gate's smoke test FAILS for a non-app
   // reason. Pin the root to DIR + serve permissively (tsc already ran separately).
-  // root = the REPO (ROOT), NOT DIR: the node_modules symlink points to ROOT/spine/node_modules,
-  // which is inside ROOT but OUTSIDE DIR — so root must be an ancestor of BOTH DIR and the symlink
-  // target, else Turbopack panics "symlink points out of the filesystem root".
-  fs.writeFileSync(path.join(DIR, "next.config.ts"), `import type { NextConfig } from "next"\nconst nextConfig: NextConfig = { turbopack: { root: ${JSON.stringify(ROOT)} }, outputFileTracingRoot: ${JSON.stringify(ROOT)}, eslint: { ignoreDuringBuilds: true }, typescript: { ignoreBuildErrors: true } }\nexport default nextConfig\n`)
+  // root = DIR now that node_modules is a REAL dir inside it → self-contained, no cross-dir symlink,
+  // no inferred-root ambiguity. (eslint key removed — Next 16 rejects it.)
+  fs.writeFileSync(path.join(DIR, "next.config.ts"), `import type { NextConfig } from "next"\nconst nextConfig: NextConfig = { turbopack: { root: ${JSON.stringify(DIR)} }, outputFileTracingRoot: ${JSON.stringify(DIR)}, typescript: { ignoreBuildErrors: true } }\nexport default nextConfig\n`)
   // bespoke files (override spine on collision) + DETERMINISTIC spine-import fix
   let count = 0
   for (const f of appFiles) {
