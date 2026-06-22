@@ -94,6 +94,7 @@ import { deterministicDms } from "@/lib/dms-module"
 import { deterministicObsidian } from "@/lib/obsidian-module"
 import { deterministicGraphify } from "@/lib/graphify-module"
 import { deterministicRentals, deterministicRentalRoutes } from "@/lib/rentals-module"
+import { adversarialReview } from "@/lib/adversarial-review"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables, repairSecurityWithFrontier } from "@/lib/swarm-repair"
@@ -1523,6 +1524,17 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
       const secFixed = await repairSecurityWithFrontier(files, checks.issues).catch(() => 0)
       if (secFixed) checks = runSwarmChecks(files, declaredTables)
     }
+    // ADVERSARIAL PRE-DELIVERY REVIEW (addyosmani/adverse pattern): 3 orthogonal lenses (Auditor/
+    // Adversary/Pragmatist) review the final deliverable, cross-examine (≥2 lenses = confirmed),
+    // bounded-repair the confirmed CRITICALs, then verdict SHIP / CAVEATS / BLOCK. External eyes
+    // before it reaches the judge — and it never trusts a claim, it reads the actual code.
+    const review = await adversarialReview(config, bp, files).catch(() => null)
+    if (review) {
+      console.warn(`[adverse] verdict ${review.verdict} · ${review.crossValidated.length} confirmados / ${review.solo.length} solo${review.repaired.length ? ` · auto-fix: ${review.repaired.join(", ")}` : ""}`)
+      for (const f of [...review.crossValidated, ...review.solo].slice(0, 6)) console.warn(`  [${f.severity}/${f.lens}] ${f.title}${f.file ? " — " + f.file : ""}`)
+      void recordMetric("adverse_verdict", review.verdict === "SHIP" ? 1 : review.verdict === "SHIP-WITH-CAVEATS" ? 0.5 : 0, { confirmed: review.crossValidated.length, solo: review.solo.length, repaired: review.repaired.length }).catch(() => {})
+      if (review.repaired.length) checks = runSwarmChecks(files, declaredTables)
+    }
     if (checks.issues.length) { s.qualityIssues = checks.issues; console.warn("[swarm-checks]", checks.summary) }
     // METRICS (crítica: medir por evidencia) — record a build-quality signal per generation.
     const highIssues = checks.issues.filter((i) => i.severity === "high").length
@@ -1534,7 +1546,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
       else if (/^app\/.*\/page\.tsx$/.test(f.path) || f.path === "app/page.tsx") void storeExemplar("page", f.path, f.content).catch(() => {})
     }
     s.phase = "done"
-    return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}${repaired ? ` · auto-fixed ${repaired} table(s)` : ""}` }
+    return { state: s, done: true, detail: `${files.length} archivos generados · ${checks.summary}${repaired ? ` · auto-fixed ${repaired} table(s)` : ""}${review ? ` · adverse: ${review.verdict}` : ""}` }
   }
   return { state: s, done: true, detail: "done" }
 }
