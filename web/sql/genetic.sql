@@ -120,6 +120,20 @@ CREATE TABLE IF NOT EXISTS puglit_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_metrics_name ON puglit_metrics(name, created_at DESC);
 
+-- ── SkillOpt: validation-gated evolved agent skills + the rejected-edit buffer ──
+CREATE TABLE IF NOT EXISTS puglit_skills (
+  id BIGSERIAL PRIMARY KEY,
+  area VARCHAR(16) NOT NULL, version INT NOT NULL, doc TEXT NOT NULL,
+  val_score DOUBLE PRECISION DEFAULT 0, status VARCHAR(12) NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_puglit_skills_area ON puglit_skills(area, version DESC);
+CREATE TABLE IF NOT EXISTS puglit_skill_rejects (
+  id BIGSERIAL PRIMARY KEY,
+  area VARCHAR(16) NOT NULL, edit TEXT NOT NULL,
+  before_score DOUBLE PRECISION, after_score DOUBLE PRECISION, created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── Verified exemplars: known-good code (passed the gate) retrieved into prompts ──
 CREATE TABLE IF NOT EXISTS verified_exemplars (
   id BIGSERIAL PRIMARY KEY,

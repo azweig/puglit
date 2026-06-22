@@ -19,6 +19,7 @@ import { generateLandingHtml } from "@/lib/landing-gen"
 import { assembleProject, githubConfigured } from "@/lib/github"
 import { runContracts } from "@/lib/agents"
 import { buildAdvance, initEngineState, initEngineStateWith, researchProduct, studyReference } from "@/lib/app-builder"
+import { groundReferences } from "@/lib/reference-extract"
 import { gameAdvance, initGameState, looksLikeGame } from "@/lib/game-builder"
 import { stakeholderAdvance, initStakeholderState } from "@/lib/stakeholder"
 import { harnessFiles } from "@/lib/harness"
@@ -359,7 +360,10 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
           // Fold the founder's up-front references (URLs/docs/images digest) into the reference
           // brief so the blueprint reaches their fidelity bar and interprets their data.
           const userRefs = (A.references || "").trim()
-          job.artifacts.reference = [ref, userRefs ? `FOUNDER-PROVIDED REFERENCES (match these cues — brand, data, features):\n${userRefs}` : ""].filter(Boolean).join("\n\n")
+          // GROUND IN REALITY: if a reference URL is present + the ScrapeGraphAI sidecar is up,
+          // extract the live product's real structure (entities/surfaces) instead of guessing.
+          const grounded = await groundReferences(userRefs, job.config.identity.name).catch(() => "")
+          job.artifacts.reference = [ref, grounded, userRefs ? `FOUNDER-PROVIDED REFERENCES (match these cues — brand, data, features):\n${userRefs}` : ""].filter(Boolean).join("\n\n")
           const bits = [r.dataDriven ? "fuente de datos real + plan de ingesta" : "sin datos externos", ref ? "producto de referencia mapeado" : "", userRefs ? "referencias del fundador integradas" : ""].filter(Boolean)
           step.detail = bits.join(" · ")
         } else { step.detail = "—" }

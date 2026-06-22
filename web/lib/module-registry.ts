@@ -60,6 +60,7 @@ export function dependencyClosure(names: string[]): string[] {
 
 /** Metadata for the builtin modules (their code is injected by connectors.ts / integrations.ts). */
 export const BUILTIN_MODULES: Module[] = [
+  { name: "scrape", category: "integration", description: "Smart web extraction (ScrapeGraphAI) — prompt + URL → structured JSON. Self-hosted on local Ollama (SCRAPE_URL) or cloud (SCRAPEGRAPH_API_KEY).", whenToUse: "the product pulls info/leads/clients/competitor data from web pages", envVars: ["SCRAPE_URL"] },
   { name: "telegram", category: "channel", description: "Telegram bot — bidirectional, zero deps (Bot API + long polling).", whenToUse: "the product sends/receives Telegram messages", envVars: ["TELEGRAM_BOT_TOKEN"] },
   { name: "email", category: "channel", description: "Universal email — IMAP read + SMTP send, ANY provider (Gmail/Outlook/custom).", whenToUse: "the product reads/sends email", envVars: ["EMAIL_USER", "EMAIL_PASS", "IMAP_HOST", "SMTP_HOST"], deps: { imapflow: "^1", nodemailer: "^6" } },
   { name: "whatsapp", category: "channel", description: "WhatsApp via the OpenWA gateway — thin HTTP client + webhook (no puppeteer in-app).", whenToUse: "the product uses WhatsApp", gateway: "OpenWA (Docker)", envVars: ["OPENWA_URL", "OPENWA_KEY"] },

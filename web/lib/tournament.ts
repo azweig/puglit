@@ -18,6 +18,7 @@ import { TEAMS, type TeamId } from "@/lib/roster"
 import type { DomainConfig } from "@/lib/domain-types"
 import { awardRound, relevantLessons, AREAS, type Area } from "@/lib/progression"
 import { PLAYBOOK } from "@/lib/playbooks"
+import { skillFor } from "@/lib/skill-evolution"
 import { recordMetric } from "@/lib/swarm-metrics"
 import { objectiveScore } from "@/lib/swarm-fitness"
 
@@ -90,7 +91,7 @@ async function judgeOnce(config: DomainConfig, designs: TeamDesign[], model: str
     parsed = (await chatJSON([
       { role: "system", content: `You are a Stakeholder juror judging candidate blueprints. Judge like an ADVERSARIAL reviewer, not a cheerleader.
 
-${PLAYBOOK.review}
+${skillFor("business")}
 
 ${PLAYBOOK.adversarial}
 

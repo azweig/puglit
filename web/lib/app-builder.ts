@@ -16,7 +16,7 @@
  */
 import { chatJSON, chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
-import { PLAYBOOK } from "@/lib/playbooks"
+import { skillFor, loadActiveSkills } from "@/lib/skill-evolution"
 import { deterministicConnectors } from "@/lib/connectors"
 import { deterministicIntegrations } from "@/lib/integrations"
 import { deterministicAgent } from "@/lib/agent-module"
@@ -64,6 +64,7 @@ import { deterministicEntitlements } from "@/lib/entitlements-module"
 import { deterministicErrorTracking } from "@/lib/errortracking-module"
 import { deterministicMigrations } from "@/lib/migrations-module"
 import { deterministicWallet } from "@/lib/wallet-module"
+import { deterministicSmartScraper } from "@/lib/scraper-smart-module"
 import { deterministicValidation } from "@/lib/validation-module"
 import { deterministicForms } from "@/lib/forms-module"
 import { deterministicAdmin } from "@/lib/admin-module"
@@ -197,7 +198,7 @@ export async function planBlueprint(config: DomainConfig, contracts: string, ref
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
 
-${PLAYBOOK.architect}
+${skillFor("data")}
 ${catalog ? `\nREUSABLE MODULES already in the factory (if the product needs one of these, REUSE it — do NOT design it from scratch; just note it in the blueprint):\n${catalog}\n` : ""}
 ${lens ? `\n${lens}\nLet this philosophy genuinely shape your blueprint (table count, layering, route style) so it is DISTINCT from other approaches — but stay 100% on THIS product's domain (never invent unrelated entities like sports leagues in a status page).\n` : ""}${opts?.lessons ? `\nLESSONS FROM YOUR TEAM'S PAST PROJECTS (apply them — this is how you improve and beat the other teams):\n${opts.lessons}\n` : ""}
 
@@ -333,7 +334,7 @@ async function genRouteFile(config: DomainConfig, bp: Blueprint, rf: RouteFile):
   const gen = async () => (await chatJSON([
     { role: "system", content: `You are a Backend Engineer. Write ONE Next.js 16 App Router route handler file at ${rf.path} implementing ALL the listed HTTP methods with REAL, working logic (no TODOs, no stubs). It must compile under tsc --noEmit.
 
-${PLAYBOOK.dev}
+${skillFor("dev")}
 
 ${RULES}
 ${SPINE_API}
@@ -378,7 +379,7 @@ async function genTests(config: DomainConfig, bp: Blueprint, files: AppFile[]): 
   const out = (await chatJSON([
     { role: "system", content: `You are a QA engineer. Write ONE vitest test file at lib/__tests__/domain.test.ts that genuinely tests the product's PURE domain logic.
 
-${PLAYBOOK.test}
+${skillFor("test")}
 
 HARD RULES:
 - import { describe, it, expect } from "vitest". Import the REAL functions under test from their "@/lib/…" path (the @ alias = app root).
@@ -425,7 +426,7 @@ async function genPage(config: DomainConfig, bp: Blueprint, p: PageSpec, brief: 
   const out = (await chatJSON([
     { role: "system", content: `You are a senior Frontend Engineer + Product Designer who ships interfaces at the level of Linear / Vercel / Airbnb. Write ONE Next.js 16 page (App Router) that is REAL and fully interactive (no placeholders/TODOs/lorem) AND visually premium. It MUST compile under tsc --noEmit and work against the listed APIs. The page should look like a designer obsessed over it — never an auto-generated CRUD form.
 
-${PLAYBOOK.design}
+${skillFor("design")}
 
 ${RULES}
 
@@ -1291,6 +1292,7 @@ export function initEngineStateWith(blueprint: Blueprint): EngineState {
  *  multi-LLM-call unit can exceed Vercel's request limit and silently restart forever. */
 export async function buildAdvance(config: DomainConfig, contracts: string, research: string, reference: string, state: EngineState): Promise<{ state: EngineState; done: boolean; detail: string }> {
   const s = state
+  await loadActiveSkills() // SkillOpt: load validated evolved skills into the overlay (once/process)
   if (s.phase === "plan") {
     const blueprint = await planBlueprint(config, contracts, reference)
     if (!blueprint.routes.length && !blueprint.pages.length) { s.blueprint = blueprint; s.phase = "done"; return { state: s, done: true, detail: "blueprint vacío" } }
@@ -1441,6 +1443,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const et = deterministicErrorTracking(config, bp); if (et) { pushFiles(et.files); addSql(/CREATE TABLE IF NOT EXISTS errors\b/, "error tracking (Puglit)", et.extraSql) }
     const mig = deterministicMigrations(config, bp); if (mig) pushFiles(mig.files)
     const wal = deterministicWallet(config, bp); if (wal) { pushFiles(wal.files); addSql(/CREATE TABLE IF NOT EXISTS wallet_ledger\b/, "wallet/credits ledger (Puglit)", wal.extraSql) }
+    const scr = deterministicSmartScraper(config, bp); if (scr) { pushFiles(scr.files); addSql(/CREATE TABLE IF NOT EXISTS scraped_records\b/, "smart-scraper records (Puglit scrape)", scr.extraSql) }
     const val = deterministicValidation(config, bp); if (val) pushFiles(val.files)
     const frm = deterministicForms(config, bp); if (frm) { pushFiles(frm.files); addSql(/CREATE TABLE IF NOT EXISTS forms\b/, "dynamic forms (Puglit)", frm.extraSql) }
     const adm = deterministicAdmin(config, bp); if (adm) pushFiles(adm.files)
