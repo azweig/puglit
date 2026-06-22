@@ -11,11 +11,11 @@ type AppFile = { path: string; content: string }
 const WALLET = `import { pool } from "@/lib/db"
 /** Add credits (reason e.g. "purchase", "signup-bonus", "refund"). */
 export async function credit(userId: string, amount: number, reason = "") {
-  await pool().query("INSERT INTO wallet_ledger (user_id, amount, reason) VALUES ($1,$2,$3)", [userId, Math.abs(amount), reason])
+  await pool.query("INSERT INTO wallet_ledger (user_id, amount, reason) VALUES ($1,$2,$3)", [userId, Math.abs(amount), reason])
 }
 /** Spend credits — throws if the balance would go negative (atomic check). */
 export async function debit(userId: string, amount: number, reason = ""): Promise<boolean> {
-  const client = await pool().connect()
+  const client = await pool.connect()
   try {
     await client.query("BEGIN")
     const { rows } = await client.query("SELECT COALESCE(SUM(amount),0) AS bal FROM wallet_ledger WHERE user_id=$1 FOR UPDATE", [userId])
@@ -26,11 +26,11 @@ export async function debit(userId: string, amount: number, reason = ""): Promis
   } catch (e) { await client.query("ROLLBACK"); throw e } finally { client.release() }
 }
 export async function balance(userId: string): Promise<number> {
-  const { rows } = await pool().query("SELECT COALESCE(SUM(amount),0) AS bal FROM wallet_ledger WHERE user_id=$1", [userId])
+  const { rows } = await pool.query("SELECT COALESCE(SUM(amount),0) AS bal FROM wallet_ledger WHERE user_id=$1", [userId])
   return Number(rows[0].bal)
 }
 export async function history(userId: string, limit = 50) {
-  return (await pool().query("SELECT amount, reason, created_at FROM wallet_ledger WHERE user_id=$1 ORDER BY id DESC LIMIT $2", [userId, limit])).rows
+  return (await pool.query("SELECT amount, reason, created_at FROM wallet_ledger WHERE user_id=$1 ORDER BY id DESC LIMIT $2", [userId, limit])).rows
 }
 `
 const SQL = `CREATE TABLE IF NOT EXISTS wallet_ledger (

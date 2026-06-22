@@ -9,20 +9,20 @@ type AppFile = { path: string; content: string }
 
 const SP = `import { pool } from "@/lib/db"
 export async function setComponent(name: string, status: "operational" | "degraded" | "down") {
-  await pool().query("INSERT INTO status_components (name, status) VALUES ($1,$2) ON CONFLICT (name) DO UPDATE SET status=$2, updated_at=NOW()", [name, status])
+  await pool.query("INSERT INTO status_components (name, status) VALUES ($1,$2) ON CONFLICT (name) DO UPDATE SET status=$2, updated_at=NOW()", [name, status])
 }
 export async function openIncident(title: string, body: string, impact = "minor") {
-  const { rows } = await pool().query("INSERT INTO status_incidents (title, impact, state) VALUES ($1,$2,'investigating') RETURNING id", [title, impact])
-  await pool().query("INSERT INTO status_incident_updates (incident_id, state, body) VALUES ($1,'investigating',$2)", [rows[0].id, body])
+  const { rows } = await pool.query("INSERT INTO status_incidents (title, impact, state) VALUES ($1,$2,'investigating') RETURNING id", [title, impact])
+  await pool.query("INSERT INTO status_incident_updates (incident_id, state, body) VALUES ($1,'investigating',$2)", [rows[0].id, body])
   return rows[0].id
 }
 export async function updateIncident(id: number, state: "identified" | "monitoring" | "resolved", body: string) {
-  await pool().query("UPDATE status_incidents SET state=$2, updated_at=NOW() WHERE id=$1", [id, state])
-  await pool().query("INSERT INTO status_incident_updates (incident_id, state, body) VALUES ($1,$2,$3)", [id, state, body])
+  await pool.query("UPDATE status_incidents SET state=$2, updated_at=NOW() WHERE id=$1", [id, state])
+  await pool.query("INSERT INTO status_incident_updates (incident_id, state, body) VALUES ($1,$2,$3)", [id, state, body])
 }
 export async function statusSnapshot() {
-  const components = (await pool().query("SELECT name, status FROM status_components ORDER BY name")).rows
-  const incidents = (await pool().query("SELECT id, title, impact, state, updated_at FROM status_incidents WHERE state<>'resolved' ORDER BY id DESC")).rows
+  const components = (await pool.query("SELECT name, status FROM status_components ORDER BY name")).rows
+  const incidents = (await pool.query("SELECT id, title, impact, state, updated_at FROM status_incidents WHERE state<>'resolved' ORDER BY id DESC")).rows
   const allUp = components.every((c: any) => c.status === "operational")
   return { overall: incidents.length ? "incident" : allUp ? "operational" : "degraded", components, incidents }
 }

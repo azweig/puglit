@@ -13,12 +13,12 @@ import { createHmac } from "node:crypto"
 /** Register a subscriber endpoint for an event (returns a per-subscriber secret). */
 export async function subscribe(url: string, event: string): Promise<string> {
   const secret = createHmac("sha256", process.env.ENCRYPTION_KEY || "puglit").update(url + event + Date.now()).digest("hex").slice(0, 32)
-  await pool().query("INSERT INTO webhook_subs (url, event, secret) VALUES ($1,$2,$3)", [url, event, secret])
+  await pool.query("INSERT INTO webhook_subs (url, event, secret) VALUES ($1,$2,$3)", [url, event, secret])
   return secret
 }
 /** Emit an event to all subscribers — each POST is signed (X-Signature = HMAC of the body). */
 export async function emit(event: string, payload: unknown) {
-  const { rows } = await pool().query("SELECT url, secret FROM webhook_subs WHERE event=$1 AND active=true", [event])
+  const { rows } = await pool.query("SELECT url, secret FROM webhook_subs WHERE event=$1 AND active=true", [event])
   const body = JSON.stringify({ event, data: payload, ts: Date.now() })
   await Promise.all(rows.map(async (s: any) => {
     const sig = createHmac("sha256", s.secret).update(body).digest("hex")

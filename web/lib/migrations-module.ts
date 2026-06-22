@@ -14,7 +14,7 @@ export interface Migration { version: number; name: string; sql: string }
 
 /** Apply all migrations whose version is newer than what's recorded. Idempotent. */
 export async function runMigrations(migrations: Migration[]): Promise<number> {
-  const db = pool()
+  const db = pool
   await db.query("CREATE TABLE IF NOT EXISTS schema_migrations (version INT PRIMARY KEY, name TEXT, applied_at TIMESTAMPTZ DEFAULT NOW())")
   const { rows } = await db.query("SELECT COALESCE(MAX(version),0) AS v FROM schema_migrations")
   const current = rows[0].v
@@ -35,7 +35,7 @@ export async function runMigrations(migrations: Migration[]): Promise<number> {
 }
 /** Current schema version. */
 export async function schemaVersion(): Promise<number> {
-  try { const { rows } = await pool().query("SELECT COALESCE(MAX(version),0) AS v FROM schema_migrations"); return rows[0].v } catch { return 0 }
+  try { const { rows } = await pool.query("SELECT COALESCE(MAX(version),0) AS v FROM schema_migrations"); return rows[0].v } catch { return 0 }
 }
 `
 

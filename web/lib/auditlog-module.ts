@@ -12,16 +12,16 @@ const AUDIT = `import { pool } from "@/lib/db"
 import { createHash } from "node:crypto"
 /** Record an audited action. Hash-chained: prev_hash → this row → tamper-evident. */
 export async function audit(actor: string, action: string, target = "", meta: Record<string, unknown> = {}) {
-  const prev = await pool().query("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1")
+  const prev = await pool.query("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1")
   const prevHash = prev.rows[0]?.hash || ""
   const payload = JSON.stringify({ actor, action, target, meta })
   const hash = createHash("sha256").update(prevHash + payload).digest("hex")
-  await pool().query("INSERT INTO audit_log (actor, action, target, meta, prev_hash, hash) VALUES ($1,$2,$3,$4,$5,$6)", [actor, action, target, JSON.stringify(meta), prevHash, hash])
+  await pool.query("INSERT INTO audit_log (actor, action, target, meta, prev_hash, hash) VALUES ($1,$2,$3,$4,$5,$6)", [actor, action, target, JSON.stringify(meta), prevHash, hash])
 }
 export async function auditTrail(target?: string, limit = 100) {
   const { rows } = target
-    ? await pool().query("SELECT actor, action, target, meta, created_at FROM audit_log WHERE target=$1 ORDER BY id DESC LIMIT $2", [target, limit])
-    : await pool().query("SELECT actor, action, target, meta, created_at FROM audit_log ORDER BY id DESC LIMIT $1", [limit])
+    ? await pool.query("SELECT actor, action, target, meta, created_at FROM audit_log WHERE target=$1 ORDER BY id DESC LIMIT $2", [target, limit])
+    : await pool.query("SELECT actor, action, target, meta, created_at FROM audit_log ORDER BY id DESC LIMIT $1", [limit])
   return rows
 }
 `

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   const e = await req.json().catch(() => ({} as any))
   if (e?.type === "checkout.session.completed") {
     const s = e.data?.object
-    await pool().query("INSERT INTO payments (provider, external_id, amount, currency, status, metadata) VALUES ('stripe',$1,$2,$3,'paid',$4)", [s?.id, (s?.amount_total || 0) / 100, s?.currency, JSON.stringify(s?.metadata || {})]).catch(() => {})
+    await pool.query("INSERT INTO payments (provider, external_id, amount, currency, status, metadata) VALUES ('stripe',$1,$2,$3,'paid',$4)", [s?.id, (s?.amount_total || 0) / 100, s?.currency, JSON.stringify(s?.metadata || {})]).catch(() => {})
   }
   return NextResponse.json({ received: true })
 }
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     const id = e?.data?.id
     if (id) {
       const pay = await fetch("https://api.mercadopago.com/v1/payments/" + id, { headers: { Authorization: "Bearer " + process.env.MP_ACCESS_TOKEN } }).then((r) => r.json())
-      await pool().query("INSERT INTO payments (provider, external_id, amount, currency, status, metadata) VALUES ('mercadopago',$1,$2,$3,$4,$5)", [String(id), pay.transaction_amount, pay.currency_id, pay.status, JSON.stringify(pay.metadata || {})]).catch(() => {})
+      await pool.query("INSERT INTO payments (provider, external_id, amount, currency, status, metadata) VALUES ('mercadopago',$1,$2,$3,$4,$5)", [String(id), pay.transaction_amount, pay.currency_id, pay.status, JSON.stringify(pay.metadata || {})]).catch(() => {})
     }
   } catch (err) { console.error("[mp]", err) }
   return NextResponse.json({ received: true })

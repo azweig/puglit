@@ -13,17 +13,17 @@ type AppFile = { path: string; content: string }
 const GRAPH = `import { pool } from "@/lib/db"
 /** Upsert an entity node. */
 export async function upsertNode(name: string, type = "entity", props: Record<string, unknown> = {}): Promise<number> {
-  const { rows } = await pool().query("INSERT INTO kg_nodes (name, type, props) VALUES ($1,$2,$3) ON CONFLICT (name) DO UPDATE SET props = kg_nodes.props || $3 RETURNING id", [name, type, JSON.stringify(props)])
+  const { rows } = await pool.query("INSERT INTO kg_nodes (name, type, props) VALUES ($1,$2,$3) ON CONFLICT (name) DO UPDATE SET props = kg_nodes.props || $3 RETURNING id", [name, type, JSON.stringify(props)])
   return rows[0].id
 }
 /** Add a fact: subject —relation→ object (creates nodes + the edge). */
 export async function addFact(subject: string, relation: string, object: string): Promise<void> {
   const s = await upsertNode(subject), o = await upsertNode(object)
-  await pool().query("INSERT INTO kg_edges (src, dst, relation) VALUES ($1,$2,$3) ON CONFLICT (src, dst, relation) DO NOTHING", [s, o, relation])
+  await pool.query("INSERT INTO kg_edges (src, dst, relation) VALUES ($1,$2,$3) ON CONFLICT (src, dst, relation) DO NOTHING", [s, o, relation])
 }
 /** Direct neighbours of an entity (both directions). */
 export async function neighbors(entity: string): Promise<{ relation: string; other: string; dir: "out" | "in" }[]> {
-  const { rows } = await pool().query(
+  const { rows } = await pool.query(
     \`SELECT e.relation, n2.name AS other, 'out' AS dir FROM kg_nodes n1 JOIN kg_edges e ON e.src=n1.id JOIN kg_nodes n2 ON n2.id=e.dst WHERE n1.name=$1
      UNION ALL
      SELECT e.relation, n2.name AS other, 'in' AS dir FROM kg_nodes n1 JOIN kg_edges e ON e.dst=n1.id JOIN kg_nodes n2 ON n2.id=e.src WHERE n1.name=$1\`, [entity])

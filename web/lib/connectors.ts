@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     const m = e?.data || e?.payload || e?.message || e
     const from = m?.from || m?.chatId || ""
     const body = m?.body || m?.text || ""
-    if (from && body) await pool().query("INSERT INTO channel_messages (channel, sender, body) VALUES ('whatsapp', $1, $2)", [from, body])
+    if (from && body) await pool.query("INSERT INTO channel_messages (channel, sender, body) VALUES ('whatsapp', $1, $2)", [from, body])
   } catch (err) { console.error("[whatsapp webhook]", err) }
   return NextResponse.json({ ok: true })
 }
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
   if (b.type === "url_verification") return NextResponse.json({ challenge: b.challenge })
   const e = b.event
   if (e?.type === "message" && e.text && !e.bot_id) {
-    try { await pool().query("INSERT INTO channel_messages (channel, sender, body) VALUES ('slack', $1, $2)", [e.user || e.channel, e.text]) } catch (err) { console.error("[slack]", err) }
+    try { await pool.query("INSERT INTO channel_messages (channel, sender, body) VALUES ('slack', $1, $2)", [e.user || e.channel, e.text]) } catch (err) { console.error("[slack]", err) }
   }
   return NextResponse.json({ ok: true })
 }

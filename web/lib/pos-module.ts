@@ -12,13 +12,13 @@ type Item = { sku: string; name: string; qty: number; price: number }
 /** Ring up a sale → returns the sale id + total. Decrements inventory if that module is wired. */
 export async function ringSale(register: string, items: Item[], paid: number, method = "cash") {
   const total = items.reduce((s, i) => s + i.qty * i.price, 0)
-  const { rows } = await pool().query("INSERT INTO pos_sales (register, total, paid, method, items) VALUES ($1,$2,$3,$4,$5) RETURNING id", [register, total, paid, method, JSON.stringify(items)])
+  const { rows } = await pool.query("INSERT INTO pos_sales (register, total, paid, method, items) VALUES ($1,$2,$3,$4,$5) RETURNING id", [register, total, paid, method, JSON.stringify(items)])
   try { const { adjust } = await import("@/lib/inventory"); for (const i of items) await adjust(i.sku, -Math.abs(i.qty), "pos-sale") } catch {}
   return { id: rows[0].id, total, change: Math.max(0, paid - total) }
 }
 /** Daily close (Z report) for a register. */
 export async function dailyZ(register: string, date: string) {
-  const { rows } = await pool().query("SELECT COUNT(*)::int AS n, COALESCE(SUM(total),0) AS gross FROM pos_sales WHERE register=$1 AND created_at::date=$2", [register, date])
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(total),0) AS gross FROM pos_sales WHERE register=$1 AND created_at::date=$2", [register, date])
   return rows[0]
 }
 `

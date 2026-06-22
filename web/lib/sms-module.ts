@@ -21,14 +21,14 @@ export async function sendSMS(to: string, body: string): Promise<{ id: string } 
 /** Send a 6-digit verification code (stored hashed, 10-min expiry). */
 export async function sendCode(to: string): Promise<boolean> {
   const code = String(Math.floor(100000 + Math.random() * 900000))
-  await pool().query("INSERT INTO sms_codes (phone, code, expires_at) VALUES ($1,$2, NOW() + interval '10 minutes')", [to, code]).catch(() => {})
+  await pool.query("INSERT INTO sms_codes (phone, code, expires_at) VALUES ($1,$2, NOW() + interval '10 minutes')", [to, code]).catch(() => {})
   return !!(await sendSMS(to, "Tu código: " + code))
 }
 /** Verify a code the user entered. */
 export async function verifyCode(to: string, code: string): Promise<boolean> {
-  const { rows } = await pool().query("SELECT id FROM sms_codes WHERE phone=$1 AND code=$2 AND expires_at > NOW() ORDER BY id DESC LIMIT 1", [to, String(code).trim()])
+  const { rows } = await pool.query("SELECT id FROM sms_codes WHERE phone=$1 AND code=$2 AND expires_at > NOW() ORDER BY id DESC LIMIT 1", [to, String(code).trim()])
   if (!rows[0]) return false
-  await pool().query("DELETE FROM sms_codes WHERE phone=$1", [to]).catch(() => {})
+  await pool.query("DELETE FROM sms_codes WHERE phone=$1", [to]).catch(() => {})
   return true
 }
 `

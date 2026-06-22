@@ -18,25 +18,25 @@ type AppFile = { path: string; content: string }
 const IDENTITY = `import { pool } from "@/lib/db"
 // Map (channel, sender) → a unified contact, so WhatsApp + Telegram + Slack = the same person.
 export async function resolveContact(channel: string, sender: string): Promise<number> {
-  const e = await pool().query("SELECT contact_id FROM agent_identities WHERE channel=$1 AND sender=$2", [channel, sender])
+  const e = await pool.query("SELECT contact_id FROM agent_identities WHERE channel=$1 AND sender=$2", [channel, sender])
   if (e.rows[0]) return e.rows[0].contact_id
-  const c = await pool().query("INSERT INTO agent_contacts (display) VALUES ($1) RETURNING id", [sender])
-  await pool().query("INSERT INTO agent_identities (channel, sender, contact_id) VALUES ($1,$2,$3)", [channel, sender, c.rows[0].id])
+  const c = await pool.query("INSERT INTO agent_contacts (display) VALUES ($1) RETURNING id", [sender])
+  await pool.query("INSERT INTO agent_identities (channel, sender, contact_id) VALUES ($1,$2,$3)", [channel, sender, c.rows[0].id])
   return c.rows[0].id
 }
 /** Link another channel to a known contact (so the agent keeps the thread across channels). */
 export async function linkIdentity(contactId: number, channel: string, sender: string) {
-  await pool().query("INSERT INTO agent_identities (channel, sender, contact_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [channel, sender, contactId])
+  await pool.query("INSERT INTO agent_identities (channel, sender, contact_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [channel, sender, contactId])
 }
 `
 
 const MEMORY = `import { pool } from "@/lib/db"
 // Persistent per-contact memory — the agent's long-term context (gets more valuable over time).
 export async function remember(contactId: number, role: string, content: string) {
-  await pool().query("INSERT INTO agent_memory (contact_id, role, content) VALUES ($1,$2,$3)", [contactId, role, content])
+  await pool.query("INSERT INTO agent_memory (contact_id, role, content) VALUES ($1,$2,$3)", [contactId, role, content])
 }
 export async function recall(contactId: number, n = 12): Promise<{ role: string; content: string }[]> {
-  const r = await pool().query("SELECT role, content FROM agent_memory WHERE contact_id=$1 ORDER BY created_at DESC LIMIT $2", [contactId, n])
+  const r = await pool.query("SELECT role, content FROM agent_memory WHERE contact_id=$1 ORDER BY created_at DESC LIMIT $2", [contactId, n])
   return r.rows.reverse()
 }
 `
@@ -48,13 +48,13 @@ export interface Tool { name: string; description: string; parameters: object; e
 
 export const builtinTools: Tool[] = [
   { name: "create_task", description: "Create a task / reminder for the user", parameters: { type: "object", properties: { title: { type: "string" }, due: { type: "string", description: "optional ISO date" } }, required: ["title"] },
-    execute: async (a, ctx) => { await pool().query("INSERT INTO agent_tasks (contact_id, title, due) VALUES ($1,$2,$3)", [ctx.contactId, a.title, a.due || null]); return "✓ task: " + a.title } },
+    execute: async (a, ctx) => { await pool.query("INSERT INTO agent_tasks (contact_id, title, due) VALUES ($1,$2,$3)", [ctx.contactId, a.title, a.due || null]); return "✓ task: " + a.title } },
   { name: "list_tasks", description: "List the user's open tasks", parameters: { type: "object", properties: {} },
-    execute: async (_a, ctx) => { const r = await pool().query("SELECT title, due FROM agent_tasks WHERE contact_id=$1 AND done=false ORDER BY created_at", [ctx.contactId]); return r.rows.map((t: any) => "- " + t.title + (t.due ? " (" + t.due + ")" : "")).join("\\n") || "No open tasks." } },
+    execute: async (_a, ctx) => { const r = await pool.query("SELECT title, due FROM agent_tasks WHERE contact_id=$1 AND done=false ORDER BY created_at", [ctx.contactId]); return r.rows.map((t: any) => "- " + t.title + (t.due ? " (" + t.due + ")" : "")).join("\\n") || "No open tasks." } },
   { name: "complete_task", description: "Mark a task done by its title", parameters: { type: "object", properties: { title: { type: "string" } }, required: ["title"] },
-    execute: async (a, ctx) => { await pool().query("UPDATE agent_tasks SET done=true WHERE contact_id=$1 AND title ILIKE $2", [ctx.contactId, "%" + a.title + "%"]); return "✓ done: " + a.title } },
+    execute: async (a, ctx) => { await pool.query("UPDATE agent_tasks SET done=true WHERE contact_id=$1 AND title ILIKE $2", [ctx.contactId, "%" + a.title + "%"]); return "✓ done: " + a.title } },
   { name: "save_note", description: "Save a note to the user's second brain", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
-    execute: async (a, ctx) => { await pool().query("INSERT INTO agent_memory (contact_id, role, content) VALUES ($1,'note',$2)", [ctx.contactId, a.text]); return "✓ noted" } },
+    execute: async (a, ctx) => { await pool.query("INSERT INTO agent_memory (contact_id, role, content) VALUES ($1,'note',$2)", [ctx.contactId, a.text]); return "✓ noted" } },
 ]
 
 // MCP bridge — pull EXTRA tools (Calendar, Gmail, GitHub, LinkedIn…) from a self-hosted MCP
@@ -111,16 +111,16 @@ async function think(history: { role: string; content: string }[], contactId: nu
 }
 /** Start the JARVIS brain: persist all inbound, then process unhandled → think (w/ tools) → reply. */
 export async function startAgent() {
-  await startAll(async (m) => { await pool().query("INSERT INTO channel_messages (channel, sender, body) VALUES ($1,$2,$3)", [m.channel, m.from, m.text]).catch(() => {}) })
+  await startAll(async (m) => { await pool.query("INSERT INTO channel_messages (channel, sender, body) VALUES ($1,$2,$3)", [m.channel, m.from, m.text]).catch(() => {}) })
   const tick = async () => {
     try {
-      const { rows } = await pool().query("SELECT id, channel, sender, body FROM channel_messages WHERE direction='in' AND handled=false ORDER BY created_at LIMIT 5")
+      const { rows } = await pool.query("SELECT id, channel, sender, body FROM channel_messages WHERE direction='in' AND handled=false ORDER BY created_at LIMIT 5")
       for (const r of rows) {
         const contactId = await resolveContact(r.channel, r.sender)
         await remember(contactId, "user", r.body)
         const reply = await think(await recall(contactId), contactId)
         if (reply) { await remember(contactId, "assistant", reply); const ch = channels.find((c) => c.name === r.channel); if (ch) await ch.send(r.sender, reply) }
-        await pool().query("UPDATE channel_messages SET handled=true WHERE id=$1", [r.id])
+        await pool.query("UPDATE channel_messages SET handled=true WHERE id=$1", [r.id])
       }
     } catch (e) { console.error("[agent] loop", (e as Error).message) }
     setTimeout(tick, 3000)

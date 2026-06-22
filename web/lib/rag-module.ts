@@ -26,7 +26,7 @@ const vec = (e: number[]) => "[" + e.join(",") + "]"
 export async function indexDoc(content: string, metadata: Record<string, unknown> = {}, source = ""): Promise<number | null> {
   const e = await embed(content)
   if (!e) return null
-  const { rows } = await pool().query("INSERT INTO rag_documents (content, metadata, source, embedding) VALUES ($1,$2,$3,$4::vector) RETURNING id", [content, JSON.stringify(metadata), source, vec(e)])
+  const { rows } = await pool.query("INSERT INTO rag_documents (content, metadata, source, embedding) VALUES ($1,$2,$3,$4::vector) RETURNING id", [content, JSON.stringify(metadata), source, vec(e)])
   return rows[0]?.id ?? null
 }
 
@@ -34,7 +34,7 @@ export async function indexDoc(content: string, metadata: Record<string, unknown
 export async function search(query: string, k = 5): Promise<{ content: string; source: string; score: number }[]> {
   const e = await embed(query)
   if (!e) return []
-  const { rows } = await pool().query("SELECT content, source, 1 - (embedding <=> $1::vector) AS score FROM rag_documents ORDER BY embedding <=> $1::vector LIMIT $2", [vec(e), k])
+  const { rows } = await pool.query("SELECT content, source, 1 - (embedding <=> $1::vector) AS score FROM rag_documents ORDER BY embedding <=> $1::vector LIMIT $2", [vec(e), k])
   return rows
 }
 

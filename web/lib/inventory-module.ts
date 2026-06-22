@@ -10,16 +10,16 @@ type AppFile = { path: string; content: string }
 const INV = `import { pool } from "@/lib/db"
 /** On-hand = received - sold - reserved (sum of the ledger). */
 export async function onHand(sku: string): Promise<number> {
-  const { rows } = await pool().query("SELECT COALESCE(SUM(delta),0) AS q FROM stock_ledger WHERE sku=$1", [sku])
+  const { rows } = await pool.query("SELECT COALESCE(SUM(delta),0) AS q FROM stock_ledger WHERE sku=$1", [sku])
   return Number(rows[0].q)
 }
 /** Adjust stock (+receive / -sale). reason for the audit trail. */
 export async function adjust(sku: string, delta: number, reason = "") {
-  await pool().query("INSERT INTO stock_ledger (sku, delta, reason) VALUES ($1,$2,$3)", [sku, delta, reason])
+  await pool.query("INSERT INTO stock_ledger (sku, delta, reason) VALUES ($1,$2,$3)", [sku, delta, reason])
 }
 /** Reserve units atomically — fails if not enough on hand (prevents overselling). */
 export async function reserve(sku: string, qty: number): Promise<boolean> {
-  const c = await pool().connect()
+  const c = await pool.connect()
   try {
     await c.query("BEGIN")
     const { rows } = await c.query("SELECT COALESCE(SUM(delta),0) AS q FROM stock_ledger WHERE sku=$1 FOR UPDATE", [sku])

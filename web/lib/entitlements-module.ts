@@ -14,12 +14,12 @@ const PLANS: Record<string, string[]> = JSON.parse(process.env.PLANS_JSON || '{"
 
 /** The user's current plan (from subscriptions if present, else 'free'). */
 export async function planOf(userId: string): Promise<string> {
-  try { const { rows } = await pool().query("SELECT plan FROM subscriptions WHERE user_id=$1 AND status='active' ORDER BY created_at DESC LIMIT 1", [userId]); return rows[0]?.plan || "free" } catch { return "free" }
+  try { const { rows } = await pool.query("SELECT plan FROM subscriptions WHERE user_id=$1 AND status='active' ORDER BY created_at DESC LIMIT 1", [userId]); return rows[0]?.plan || "free" } catch { return "free" }
 }
 /** Can this user use a feature? Checks plan_features overrides then the default map. */
 export async function can(userId: string, feature: string): Promise<boolean> {
   const plan = await planOf(userId)
-  try { const { rows } = await pool().query("SELECT 1 FROM plan_features WHERE plan=$1 AND feature=$2", [plan, feature]); if (rows[0]) return true } catch {}
+  try { const { rows } = await pool.query("SELECT 1 FROM plan_features WHERE plan=$1 AND feature=$2", [plan, feature]); if (rows[0]) return true } catch {}
   return (PLANS[plan] || []).includes(feature)
 }
 /** Guard for a route: returns null if allowed, or a 402 reason if not. */

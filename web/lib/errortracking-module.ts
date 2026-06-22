@@ -17,7 +17,7 @@ export async function captureError(err: unknown, context: Record<string, unknown
   const msg = e?.message || String(err)
   const fp = createHash("md5").update((e?.stack || msg).split("\\n").slice(0, 3).join("")).digest("hex").slice(0, 16)
   try {
-    await pool().query(
+    await pool.query(
       "INSERT INTO errors (fingerprint, message, stack, context, count) VALUES ($1,$2,$3,$4,1) ON CONFLICT (fingerprint) DO UPDATE SET count=errors.count+1, last_seen=NOW(), message=$2",
       [fp, msg.slice(0, 500), (e?.stack || "").slice(0, 4000), JSON.stringify(context)])
   } catch {}

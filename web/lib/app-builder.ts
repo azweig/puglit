@@ -93,7 +93,7 @@ import { deterministicProjectMgmt } from "@/lib/projectmgmt-module"
 import { deterministicDms } from "@/lib/dms-module"
 import { deterministicObsidian } from "@/lib/obsidian-module"
 import { deterministicGraphify } from "@/lib/graphify-module"
-import { deterministicRentals } from "@/lib/rentals-module"
+import { deterministicRentals, deterministicRentalRoutes } from "@/lib/rentals-module"
 import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables, repairSecurityWithFrontier } from "@/lib/swarm-repair"
@@ -1431,7 +1431,12 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const obs2 = deterministicObsidian(config, bp); if (obs2) pushFiles(obs2.files)
     const gfy = deterministicGraphify(config, bp); if (gfy) { pushFiles(gfy.files); addSql(/CREATE TABLE IF NOT EXISTS kg_nodes\b/, "knowledge graph (Puglit graphify)", gfy.extraSql) }
     // RENTALS vertical (booking marketplace): correct anti-double-booking + pricing + refund + reviews.
-    const rent = deterministicRentals(config, bp); if (rent) { pushFiles(rent.files); addSql(/EXCLUDE USING gist|no_double_booking/, "anti-double-booking + indexes (Puglit rentals)", rent.extraSql) }
+    const rent = deterministicRentals(config, bp)
+    if (rent) {
+      pushFiles(rent.files); addSql(/EXCLUDE USING gist|no_double_booking/, "anti-double-booking + indexes (Puglit rentals)", rent.extraSql)
+      // OVERRIDE the swarm's booking route with the verified one (it reinvents it wrong).
+      for (const rf of deterministicRentalRoutes(files.map((f) => f.path))) { const i = files.findIndex((f) => f.path === rf.path); if (i >= 0) files[i] = rf; else files.push(rf) }
+    }
     // DEPENDENCY RESOLVER (crítica: dependency graph) — force-inject hard requirements (e.g.
     // social-auth → crypto, inappnotify → realtime) so no keyword-triggered module ships broken.
     const addedDeps = resolveDeps(files)

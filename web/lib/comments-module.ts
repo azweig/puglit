@@ -10,18 +10,18 @@ type AppFile = { path: string; content: string }
 
 const COM = `import { pool } from "@/lib/db"
 export async function addComment(thread: string, author: string, body: string, parentId: number | null = null) {
-  const { rows } = await pool().query("INSERT INTO comments (thread, author, body, parent_id) VALUES ($1,$2,$3,$4) RETURNING id", [thread, author, body, parentId])
+  const { rows } = await pool.query("INSERT INTO comments (thread, author, body, parent_id) VALUES ($1,$2,$3,$4) RETURNING id", [thread, author, body, parentId])
   return rows[0].id
 }
 /** Nested comment tree for a thread. */
 export async function commentTree(thread: string) {
-  const { rows } = await pool().query("SELECT id, author, body, parent_id, created_at FROM comments WHERE thread=$1 AND deleted=false ORDER BY created_at", [thread])
+  const { rows } = await pool.query("SELECT id, author, body, parent_id, created_at FROM comments WHERE thread=$1 AND deleted=false ORDER BY created_at", [thread])
   const byParent = new Map<number | null, any[]>()
   for (const r of rows) { const k = r.parent_id; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k)!.push({ ...r, replies: [] }) }
   const attach = (node: any) => { node.replies = byParent.get(node.id) || []; node.replies.forEach(attach); return node }
   return (byParent.get(null) || []).map(attach)
 }
-export async function deleteComment(id: number) { await pool().query("UPDATE comments SET deleted=true WHERE id=$1", [id]) }
+export async function deleteComment(id: number) { await pool.query("UPDATE comments SET deleted=true WHERE id=$1", [id]) }
 `
 const SQL = `CREATE TABLE IF NOT EXISTS comments (
   id BIGSERIAL PRIMARY KEY, thread TEXT NOT NULL, author TEXT NOT NULL, body TEXT NOT NULL,

@@ -34,11 +34,11 @@ export async function createSubscription(s: SubInput): Promise<{ url: string; pr
 
 /** Record a unit of usage for usage-based billing / quotas. */
 export async function meter(userId: string, metric: string, qty = 1) {
-  await pool().query("INSERT INTO usage_events (user_id, metric, qty) VALUES ($1,$2,$3)", [userId, metric, qty]).catch(() => {})
+  await pool.query("INSERT INTO usage_events (user_id, metric, qty) VALUES ($1,$2,$3)", [userId, metric, qty]).catch(() => {})
 }
 /** Is this user on an active subscription? */
 export async function isSubscribed(userId: string): Promise<boolean> {
-  const { rows } = await pool().query("SELECT 1 FROM subscriptions WHERE user_id=$1 AND status='active' LIMIT 1", [userId])
+  const { rows } = await pool.query("SELECT 1 FROM subscriptions WHERE user_id=$1 AND status='active' LIMIT 1", [userId])
   return rows.length > 0
 }
 `

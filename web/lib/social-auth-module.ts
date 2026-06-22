@@ -56,7 +56,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
     if (p.userInfo && accessToken) profile = await fetch(p.userInfo, { headers: { Authorization: "Bearer " + accessToken } }).then((r) => r.json()).catch(() => ({}))
     const pid = String(profile.id || profile.sub || profile.open_id || profile.data?.user?.open_id || "")
     // tokens are encrypted at rest (decrypt with @/lib/crypto when you call the provider's API)
-    await pool().query("INSERT INTO social_accounts (provider, provider_user_id, name, email, access_token, refresh_token) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (provider, provider_user_id) DO UPDATE SET access_token=EXCLUDED.access_token, refresh_token=EXCLUDED.refresh_token, name=EXCLUDED.name", [provider, pid, profile.name || profile.username || profile.display_name || profile.data?.user?.display_name || "", profile.email || "", accessToken ? encrypt(accessToken) : "", tok.refresh_token ? encrypt(tok.refresh_token) : ""])
+    await pool.query("INSERT INTO social_accounts (provider, provider_user_id, name, email, access_token, refresh_token) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (provider, provider_user_id) DO UPDATE SET access_token=EXCLUDED.access_token, refresh_token=EXCLUDED.refresh_token, name=EXCLUDED.name", [provider, pid, profile.name || profile.username || profile.display_name || profile.data?.user?.display_name || "", profile.email || "", accessToken ? encrypt(accessToken) : "", tok.refresh_token ? encrypt(tok.refresh_token) : ""])
     const res = NextResponse.redirect(home + "/?auth=ok")
     res.cookies.set("sa_session", provider + ":" + pid, { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30 })
     return res

@@ -22,9 +22,9 @@ export async function graphify(text: string, source = ""): Promise<{ entities: n
   const ent = new Set<string>()
   for (const t of triples) {
     ent.add(t.s); ent.add(t.o)
-    const s = (await pool().query("INSERT INTO kg_nodes (name, type) VALUES ($1,'entity') ON CONFLICT (name) DO UPDATE SET name=EXCLUDED.name RETURNING id", [t.s])).rows[0].id
-    const o = (await pool().query("INSERT INTO kg_nodes (name, type) VALUES ($1,'entity') ON CONFLICT (name) DO UPDATE SET name=EXCLUDED.name RETURNING id", [t.o])).rows[0].id
-    await pool().query("INSERT INTO kg_edges (src, dst, relation, props) VALUES ($1,$2,$3,$4) ON CONFLICT (src,dst,relation) DO NOTHING", [s, o, t.r.slice(0, 48), JSON.stringify({ source })])
+    const s = (await pool.query("INSERT INTO kg_nodes (name, type) VALUES ($1,'entity') ON CONFLICT (name) DO UPDATE SET name=EXCLUDED.name RETURNING id", [t.s])).rows[0].id
+    const o = (await pool.query("INSERT INTO kg_nodes (name, type) VALUES ($1,'entity') ON CONFLICT (name) DO UPDATE SET name=EXCLUDED.name RETURNING id", [t.o])).rows[0].id
+    await pool.query("INSERT INTO kg_edges (src, dst, relation, props) VALUES ($1,$2,$3,$4) ON CONFLICT (src,dst,relation) DO NOTHING", [s, o, t.r.slice(0, 48), JSON.stringify({ source })])
   }
   return { entities: ent.size, relations: triples.length }
 }

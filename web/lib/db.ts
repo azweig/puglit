@@ -18,7 +18,7 @@ export function isConfigured(): boolean {
   return !!process.env.POSTGRES_HOST && !!process.env.POSTGRES_PASSWORD
 }
 
-function pool(): Pool {
+function pool: Pool {
   if (!_pool) {
     _pool = new Pool({
       host: process.env.POSTGRES_HOST,
@@ -41,13 +41,13 @@ function pool(): Pool {
 
 /** Shared query helper (used by demo-auth too). */
 export async function query<T = any>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number | null }> {
-  return pool().query(text, params as never) as unknown as Promise<{ rows: T[]; rowCount: number | null }>
+  return pool.query(text, params as never) as unknown as Promise<{ rows: T[]; rowCount: number | null }>
 }
 
 let initialized = process.env.NODE_ENV === "production"
 async function ensureSchema(): Promise<void> {
   if (initialized) return
-  await pool().query(SCHEMA_SQL)
+  await pool.query(SCHEMA_SQL)
   initialized = true
 }
 
@@ -67,7 +67,7 @@ export async function saveProject(input: {
   await ensureSchema()
   // Idempotent: deliver can re-run (re-entrant pipeline) and a slug may already exist —
   // upsert instead of crashing the whole build on a duplicate-key violation.
-  await pool().query(
+  await pool.query(
     `INSERT INTO puglit_projects (slug, email, name, answers, config, landing_html)
      VALUES ($1,$2,$3,$4,$5,$6)
      ON CONFLICT (slug) DO UPDATE SET
@@ -80,7 +80,7 @@ export async function saveProject(input: {
 export async function getProject(slug: string): Promise<ProjectRow | null> {
   if (!isConfigured()) return null
   await ensureSchema()
-  const { rows } = await pool().query(
+  const { rows } = await pool.query(
     `SELECT slug, name, email, config, landing_html, created_at FROM puglit_projects WHERE slug = $1 LIMIT 1`,
     [slug]
   )
@@ -90,7 +90,7 @@ export async function getProject(slug: string): Promise<ProjectRow | null> {
 export async function listProjects(limit = 24): Promise<ProjectRow[]> {
   if (!isConfigured()) return []
   await ensureSchema()
-  const { rows } = await pool().query(
+  const { rows } = await pool.query(
     `SELECT slug, name, config, created_at FROM puglit_projects
      WHERE featured = TRUE ORDER BY created_at DESC LIMIT $1`,
     [limit]
@@ -101,13 +101,13 @@ export async function listProjects(limit = 24): Promise<ProjectRow[]> {
 export async function slugExists(slug: string): Promise<boolean> {
   if (!isConfigured()) return false
   await ensureSchema()
-  const { rows } = await pool().query(`SELECT 1 FROM puglit_projects WHERE slug = $1 LIMIT 1`, [slug])
+  const { rows } = await pool.query(`SELECT 1 FROM puglit_projects WHERE slug = $1 LIMIT 1`, [slug])
   return rows.length > 0
 }
 
 export async function saveWaitlist(email: string): Promise<void> {
   await ensureSchema()
-  await pool().query(
+  await pool.query(
     `INSERT INTO puglit_waitlist (email) VALUES ($1) ON CONFLICT (email) DO NOTHING`,
     [email]
   )

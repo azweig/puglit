@@ -20,27 +20,27 @@ export function makeCrud(table: string, cols: string[]) {
     async GET(req: NextRequest) {
       const id = req.nextUrl.searchParams.get("id")
       const { rows } = id
-        ? await pool().query(\`SELECT id, \${list} FROM \${table} WHERE id=$1\`, [id])
-        : await pool().query(\`SELECT id, \${list} FROM \${table} ORDER BY id DESC LIMIT 100\`)
+        ? await pool.query(\`SELECT id, \${list} FROM \${table} WHERE id=$1\`, [id])
+        : await pool.query(\`SELECT id, \${list} FROM \${table} ORDER BY id DESC LIMIT 100\`)
       return NextResponse.json(id ? rows[0] || null : rows)
     },
     async POST(req: NextRequest) {
       const body = await req.json().catch(() => ({}))
       const keys = cols.filter((c) => c in body)
       const vals = keys.map((k) => body[k])
-      const { rows } = await pool().query(\`INSERT INTO \${table} (\${keys.join(",")}) VALUES (\${keys.map((_, i) => "$" + (i + 1)).join(",")}) RETURNING id\`, vals)
+      const { rows } = await pool.query(\`INSERT INTO \${table} (\${keys.join(",")}) VALUES (\${keys.map((_, i) => "$" + (i + 1)).join(",")}) RETURNING id\`, vals)
       return NextResponse.json({ id: rows[0].id }, { status: 201 })
     },
     async PUT(req: NextRequest) {
       const body = await req.json().catch(() => ({}))
       const keys = cols.filter((c) => c in body)
       const set = keys.map((k, i) => \`\${k}=$\${i + 2}\`).join(",")
-      await pool().query(\`UPDATE \${table} SET \${set} WHERE id=$1\`, [body.id, ...keys.map((k) => body[k])])
+      await pool.query(\`UPDATE \${table} SET \${set} WHERE id=$1\`, [body.id, ...keys.map((k) => body[k])])
       return NextResponse.json({ ok: true })
     },
     async DELETE(req: NextRequest) {
       const id = req.nextUrl.searchParams.get("id")
-      await pool().query(\`DELETE FROM \${table} WHERE id=$1\`, [id])
+      await pool.query(\`DELETE FROM \${table} WHERE id=$1\`, [id])
       return NextResponse.json({ ok: true })
     },
   }

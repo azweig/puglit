@@ -9,20 +9,20 @@ type AppFile = { path: string; content: string }
 
 const UP = `import { pool } from "@/lib/db"
 export async function addMonitor(name: string, url: string) {
-  await pool().query("INSERT INTO monitors (name, url) VALUES ($1,$2) ON CONFLICT (url) DO NOTHING", [name, url])
+  await pool.query("INSERT INTO monitors (name, url) VALUES ($1,$2) ON CONFLICT (url) DO NOTHING", [name, url])
 }
 /** Ping every monitor once, record the result. Call from a cron (e.g. every minute). */
 export async function checkAll() {
-  const { rows } = await pool().query("SELECT id, url FROM monitors WHERE active=true")
+  const { rows } = await pool.query("SELECT id, url FROM monitors WHERE active=true")
   for (const m of rows) {
     const t = Date.now(); let up = false, code = 0
     try { const r = await fetch(m.url, { method: "GET", signal: AbortSignal.timeout(8000) }); code = r.status; up = r.status < 500 } catch {}
-    await pool().query("INSERT INTO monitor_checks (monitor_id, up, status_code, latency_ms) VALUES ($1,$2,$3,$4)", [m.id, up, code, Date.now() - t])
+    await pool.query("INSERT INTO monitor_checks (monitor_id, up, status_code, latency_ms) VALUES ($1,$2,$3,$4)", [m.id, up, code, Date.now() - t])
   }
 }
 /** Uptime % for a monitor over the last N hours. */
 export async function uptimePct(monitorId: number, hours = 24): Promise<number> {
-  const { rows } = await pool().query("SELECT AVG(CASE WHEN up THEN 1 ELSE 0 END)*100 AS pct FROM monitor_checks WHERE monitor_id=$1 AND created_at > NOW() - ($2 || ' hours')::interval", [monitorId, String(hours)])
+  const { rows } = await pool.query("SELECT AVG(CASE WHEN up THEN 1 ELSE 0 END)*100 AS pct FROM monitor_checks WHERE monitor_id=$1 AND created_at > NOW() - ($2 || ' hours')::interval", [monitorId, String(hours)])
   return Math.round(Number(rows[0]?.pct || 0))
 }
 `

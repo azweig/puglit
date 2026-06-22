@@ -15,7 +15,7 @@ export async function pgSearch(table: string, columns: string[], q: string, limi
   const safe = (s: string) => /^[a-z_][a-z0-9_]*$/i.test(s)
   if (!safe(table) || !columns.every(safe) || !columns.length) throw new Error("invalid table/columns")
   const doc = columns.map((c) => \`coalesce(\${c}::text,'')\`).join(" || ' ' || ")
-  const { rows } = await pool().query(
+  const { rows } = await pool.query(
     \`SELECT *, ts_rank(to_tsvector('simple', \${doc}), plainto_tsquery('simple', $1)) AS rank
      FROM \${table} WHERE to_tsvector('simple', \${doc}) @@ plainto_tsquery('simple', $1)
      ORDER BY rank DESC LIMIT $2\`, [q, limit])

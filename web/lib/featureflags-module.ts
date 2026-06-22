@@ -13,7 +13,7 @@ import { createHash } from "node:crypto"
 const bucket = (s: string) => (parseInt(createHash("md5").update(s).digest("hex").slice(0, 8), 16) % 100)
 /** Is a flag on for this user? Honours enabled, rollout_pct and an allowlist. */
 export async function isEnabled(flag: string, userId = ""): Promise<boolean> {
-  const { rows } = await pool().query("SELECT enabled, rollout_pct, allowlist FROM feature_flags WHERE key=$1", [flag])
+  const { rows } = await pool.query("SELECT enabled, rollout_pct, allowlist FROM feature_flags WHERE key=$1", [flag])
   const f = rows[0]; if (!f) return false
   if (!f.enabled) return false
   if (Array.isArray(f.allowlist) && f.allowlist.includes(userId)) return true
@@ -26,7 +26,7 @@ export function variant(flag: string, userId: string, variants = ["a", "b"]): st
   return variants[bucket(flag + ":" + userId) % variants.length]
 }
 export async function setFlag(key: string, enabled: boolean, rolloutPct = 100) {
-  await pool().query("INSERT INTO feature_flags (key, enabled, rollout_pct) VALUES ($1,$2,$3) ON CONFLICT (key) DO UPDATE SET enabled=$2, rollout_pct=$3", [key, enabled, rolloutPct])
+  await pool.query("INSERT INTO feature_flags (key, enabled, rollout_pct) VALUES ($1,$2,$3) ON CONFLICT (key) DO UPDATE SET enabled=$2, rollout_pct=$3", [key, enabled, rolloutPct])
 }
 `
 const SQL = `CREATE TABLE IF NOT EXISTS feature_flags (

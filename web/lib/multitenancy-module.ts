@@ -10,22 +10,22 @@ type AppFile = { path: string; content: string }
 
 const MT = `import { pool } from "@/lib/db"
 export async function createOrg(name: string, ownerId: string): Promise<number> {
-  const { rows } = await pool().query("INSERT INTO orgs (name) VALUES ($1) RETURNING id", [name])
-  await pool().query("INSERT INTO org_members (org_id, user_id, role) VALUES ($1,$2,'owner')", [rows[0].id, ownerId])
+  const { rows } = await pool.query("INSERT INTO orgs (name) VALUES ($1) RETURNING id", [name])
+  await pool.query("INSERT INTO org_members (org_id, user_id, role) VALUES ($1,$2,'owner')", [rows[0].id, ownerId])
   return rows[0].id
 }
 export async function addMember(orgId: number, userId: string, role: "admin" | "member" = "member") {
-  await pool().query("INSERT INTO org_members (org_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT (org_id, user_id) DO UPDATE SET role=$3", [orgId, userId, role])
+  await pool.query("INSERT INTO org_members (org_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT (org_id, user_id) DO UPDATE SET role=$3", [orgId, userId, role])
 }
 export async function roleOf(orgId: number, userId: string): Promise<string | null> {
-  const { rows } = await pool().query("SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2", [orgId, userId])
+  const { rows } = await pool.query("SELECT role FROM org_members WHERE org_id=$1 AND user_id=$2", [orgId, userId])
   return rows[0]?.role || null
 }
 export async function membersOf(orgId: number) {
-  return (await pool().query("SELECT user_id, role FROM org_members WHERE org_id=$1", [orgId])).rows
+  return (await pool.query("SELECT user_id, role FROM org_members WHERE org_id=$1", [orgId])).rows
 }
 export async function orgsOf(userId: string) {
-  return (await pool().query("SELECT o.id, o.name, m.role FROM orgs o JOIN org_members m ON m.org_id=o.id WHERE m.user_id=$1", [userId])).rows
+  return (await pool.query("SELECT o.id, o.name, m.role FROM orgs o JOIN org_members m ON m.org_id=o.id WHERE m.user_id=$1", [userId])).rows
 }
 `
 const SQL = `CREATE TABLE IF NOT EXISTS orgs (
