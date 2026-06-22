@@ -12,8 +12,15 @@
  */
 import { query } from "@/lib/db"
 import { chatJSON, MODELS } from "@/lib/openai"
+import { securityScan } from "@/lib/swarm-checks"
 import { writeFileSync, mkdirSync } from "node:fs"
 import { join, basename } from "node:path"
+
+/** A module NEVER enters the genome if it carries a secret or an RCE vector (#17 deterministic gate). */
+function moduleIsUnsafe(file: { path: string; content: string }): string | null {
+  const hi = securityScan([file]).find((i) => i.severity === "high")
+  return hi ? hi.kind : null
+}
 
 export interface ModuleFile { path: string; content: string }
 export interface Module {
@@ -235,6 +242,8 @@ export async function curateModules(candidates: Candidate[], createdBy?: string)
   const customs = await customModules().catch(() => [] as Module[])
   const existing = [...BUILTIN_MODULES, ...customs].map((m) => `- ${m.name} (${m.category}): ${m.description}`).join("\n")
   for (const c of candidates) {
+    const unsafe = moduleIsUnsafe(c.file) // #17: deterministic security gate BEFORE the LLM review
+    if (unsafe) { rejected.push({ name: c.name, reason: `security: ${unsafe}` }); continue }
     const out = (await chatJSON([
       { role: "system", content: `You are the MODULE CURATOR — the registrar that guards Puglit's REUSABLE module genome. A build produced a candidate connector/integration. Decide, on merit, whether it earns a place in the SHARED registry every future app can reuse. Be strict:
 - REUSABLE: generic across products — NOT hardcoded to this one app (no app-specific table names, business rules or copy). If it's bespoke to this product → reject.
@@ -307,6 +316,7 @@ export async function buildMissingModule(gap: { name: string; category: Module["
   ], { model: MODELS.code, temperature: 0.2 }).catch(() => null)) as { code?: string; envVars?: string[]; sql?: string; description?: string; whenToUse?: string } | null
   if (!out?.code || out.code.length < 80) return null
   const files: ModuleFile[] = [{ path: `lib/${gap.name}.ts`, content: String(out.code).slice(0, 12000) }]
+  if (moduleIsUnsafe(files[0])) return null // #17: never register a built module with a secret/RCE
   if (out.sql && /create table/i.test(out.sql)) files.push({ path: `sql/${gap.name}.sql`, content: String(out.sql).slice(0, 4000) })
   await registerModule({ name: gap.name, category: gap.category, description: String(out.description || gap.spec).slice(0, 200), whenToUse: String(out.whenToUse || gap.reason).slice(0, 160), envVars: Array.isArray(out.envVars) ? out.envVars.slice(0, 8) : [], files, status: "experimental", createdBy })
   return gap.name

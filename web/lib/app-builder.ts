@@ -1585,6 +1585,8 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // METRICS (crítica: medir por evidencia) — record a build-quality signal per generation.
     const highIssues = checks.issues.filter((i) => i.severity === "high").length
     void recordMetric("build_success", highIssues === 0 ? 1 : 0, { files: files.length, issues: checks.issues.length, high: highIssues, repaired, kinds: checks.issues.filter((i) => i.severity === "high").map((i) => i.kind).slice(0, 20) }).catch(() => {})
+    // #19 reproducible builds: record the exact model tiers that produced this build (provenance).
+    void recordMetric("build_provenance", 1, { premium: MODELS.premium, balanced: MODELS.balanced, cheap: MODELS.cheap, code: MODELS.code }).catch(() => {})
     // VERIFIED EXEMPLARS — when the static gate is clean, store route/page code so future builds
     // retrieve known-good examples (raises the floor without a stronger model).
     if (highIssues === 0) for (const f of files) {

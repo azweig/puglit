@@ -14,14 +14,18 @@ export interface CodeIssue { severity: "high" | "med" | "low"; kind: string; fil
 const SPINE_TABLES = new Set(["users", "sessions", "accounts", "analytics_events", "password_resets", "magic_links", "records"])
 const PG_OK = /^(information_schema|pg_|public\.)/i
 
+// real-looking provider secrets (#17 — stronger gate). Excludes env placeholders.
+const SECRET_PATTERNS = /\b(sk-[A-Za-z0-9]{20,}|sk_live_[A-Za-z0-9]{20,}|rk_live_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|AIza[0-9A-Za-z_-]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)\b/
+
 export function securityScan(files: AppFile[]): CodeIssue[] {
   const out: CodeIssue[] = []
   for (const f of files) {
     if (!/\.(ts|tsx|js|mjs)$/.test(f.path)) continue
     const c = f.content
-    if (/\b(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,})\b/.test(c)) out.push({ severity: "high", kind: "hardcoded-secret", file: f.path, detail: "looks like a real API key/token committed in code" })
+    if (SECRET_PATTERNS.test(c)) out.push({ severity: "high", kind: "hardcoded-secret", file: f.path, detail: "a real-looking API key / token / private key committed in code" })
     if (/(password|secret|api[_-]?key|token)\s*[:=]\s*["'][^"'$]{8,}["']/i.test(c) && !/process\.env/.test(c.match(/.*(password|secret|api[_-]?key|token)\s*[:=].*/i)?.[0] || "")) out.push({ severity: "med", kind: "hardcoded-credential", file: f.path, detail: "credential assigned a string literal (use process.env)" })
-    if (/\beval\s*\(|new Function\s*\(|child_process|exec\s*\(/.test(c)) out.push({ severity: "high", kind: "dangerous-exec", file: f.path, detail: "eval/Function/exec — RCE risk" })
+    // RCE: real shell/dynamic-exec only — NOT RegExp.prototype.exec (`.exec(` is a false positive).
+    if (/\beval\s*\(|new Function\s*\(|child_process|\bexecSync\s*\(|require\(\s*["']child_process|spawn\s*\(/.test(c)) out.push({ severity: "high", kind: "dangerous-exec", file: f.path, detail: "eval / new Function / child_process — RCE risk" })
     if (/\.query\s*\(\s*[`"][^`"]*\$\{/.test(c)) out.push({ severity: "high", kind: "sql-injection", file: f.path, detail: "SQL built by string interpolation — use parameterized $1,$2" })
     if (/dangerouslySetInnerHTML/.test(c) && !/sanitize|DOMPurify|escapeHtml/.test(c)) out.push({ severity: "med", kind: "xss", file: f.path, detail: "dangerouslySetInnerHTML without sanitization" })
   }
@@ -36,13 +40,19 @@ export function consistencyScan(files: AppFile[], declaredTables: string[]): Cod
     for (const m of f.content.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?["']?([a-z_][a-z0-9_]*)/gi)) declared.add(m[1].toLowerCase())
   }
   const known = (t: string) => declared.has(t) || SPINE_TABLES.has(t) || PG_OK.test(t)
-  // flag SQL that reads/writes tables nobody declared (hallucinated schema)
+  // flag SQL that reads/writes tables nobody declared (hallucinated schema). CRITICAL: scan ONLY the
+  // actual SQL strings (the argument to .query(...)) — NOT the whole file, or natural-language text in
+  // comments/JSX like "move cards from the deck" gets flagged as a phantom table "the" (false positive).
+  const SQL_KW = new Set(["set", "values", "select", "where", "and", "or", "on", "as", "by", "left", "right", "inner", "outer", "lateral"])
   for (const f of files) {
     if (!/\.(ts|tsx)$/.test(f.path)) continue
-    for (const m of f.content.matchAll(/\b(from|join|into|update)\s+([a-z_][a-z0-9_]*)/gi)) {
-      const t = m[2].toLowerCase()
-      if (t.length < 3 || ["set", "values", "select", "where"].includes(t)) continue
-      if (!known(t)) out.push({ severity: "high", kind: "phantom-table", file: f.path, detail: `query references table "${t}" that is never CREATEd (hallucinated schema?)` })
+    for (const qm of f.content.matchAll(/\.query\s*\(\s*([`"'])([\s\S]*?)\1/g)) {
+      const sql = qm[2]
+      for (const m of sql.matchAll(/\b(from|join|into|update)\s+([a-z_][a-z0-9_]*)/gi)) {
+        const t = m[2].toLowerCase()
+        if (t.length < 3 || SQL_KW.has(t)) continue
+        if (!known(t)) out.push({ severity: "high", kind: "phantom-table", file: f.path, detail: `SQL references table "${t}" that is never CREATEd (hallucinated schema?)` })
+      }
     }
     // imports of local files that don't exist (and aren't spine libs)
     for (const m of f.content.matchAll(/from\s+["']@\/lib\/([a-z0-9-]+)["']/gi)) {
