@@ -98,7 +98,7 @@ import { deterministicRentals, deterministicRentalRoutes } from "@/lib/rentals-m
 import { adversarialReview } from "@/lib/adversarial-review"
 import { traceReset } from "@/lib/run-trace"
 import { scoreRun, summarizeRun } from "@/lib/swarm-profile"
-import { moduleCatalog, findCustomModulesFor, harvestModules } from "@/lib/module-registry"
+import { moduleCatalog, findCustomModulesFor, growGenome } from "@/lib/module-registry"
 import { runSwarmChecks, type CodeIssue } from "@/lib/swarm-checks"
 import { repairPhantomTables, repairSecurityWithFrontier } from "@/lib/swarm-repair"
 import { resetFrontierBudget } from "@/lib/swarm-fitness"
@@ -1537,9 +1537,10 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // CUSTOM modules the swarm built in past projects → reuse their code if this product matches.
     const need = `${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`
     for (const cm of await findCustomModulesFor(need).catch(() => [])) for (const f of cm.files || []) if (!files.some((x) => x.path === f.path)) files.push(f)
-    // HARVEST: register any reusable connector/integration the agents wrote that's new → the
-    // module directory GROWS from the swarm's own work, available to every future project.
-    await harvestModules(files, bp.kind).catch(() => {})
+    // GROW THE GENOME: the curator reviews+registers the reusable connectors the swarm WROTE
+    // (harvest), AND a gap-analyst builds the reusable modules the swarm WISHED existed (wishlist) →
+    // the registry grows from both what was built and what was missing. All 'experimental' until promoted.
+    await growGenome(config.identity.name, bp.summary, files, bp.kind).catch(() => {})
     // QA: generate vitest unit + business tests for the swarm-written domain logic (deterministic
     // modules like rentals already ship their own). build-local runs them + reports coverage.
     const testFiles = await genTests(config, bp, files).catch(() => [])

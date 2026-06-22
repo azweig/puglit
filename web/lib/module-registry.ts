@@ -276,3 +276,52 @@ export async function harvestModules(files: ModuleFile[], createdBy?: string): P
   if (res.accepted.length || res.improved.length) console.warn(`[curator] accepted: ${res.accepted.join(", ") || "—"} · improved: ${res.improved.join(", ") || "—"}`)
   return [...res.accepted, ...res.improved]
 }
+
+const CATS = new Set(["channel", "integration", "util", "agent"])
+const asCat = (s: unknown): Module["category"] => (CATS.has(String(s)) ? (s as Module["category"]) : "util")
+
+const GAP_SCHEMA = {
+  type: "object",
+  properties: { gaps: { type: "array", items: { type: "object", properties: { name: { type: "string" }, category: { type: "string" }, reason: { type: "string" }, spec: { type: "string" } }, required: ["name", "reason", "spec"] } } },
+  required: ["gaps"],
+} as const
+
+/** GAP ANALYST — after a build, identify REUSABLE capabilities the app had to HAND-ROLL inline (or
+ *  clearly lacked) that SHOULD be shared modules next time. Generic only; never app-specific logic. */
+export async function proposeModuleGaps(productName: string, summary: string, files: ModuleFile[], existing: string): Promise<{ name: string; category: Module["category"]; reason: string; spec: string }[]> {
+  const libDigest = files.filter((f) => /^lib\/.+\.ts$/.test(f.path) && !/\.(test|spec)\.ts$/.test(f.path)).slice(0, 10).map((f) => `// ${f.path}\n${f.content.slice(0, 1100)}`).join("\n\n")
+  if (libDigest.length < 100) return []
+  const out = (await chatJSON([
+    { role: "system", content: `You are the GAP ANALYST for Puglit's reusable module genome. Looking at a freshly built app, identify REUSABLE capabilities it had to HAND-ROLL inline (or clearly lacked) that SHOULD become shared modules every FUTURE app can reuse — e.g. CSV export, webhook signing, ICS calendar generation, slugify, cursor pagination, rating aggregation, geo-distance, a retry/queue helper. ONLY generic, cross-product capabilities — NEVER app-specific business logic. Do NOT propose anything already in the existing module list. Return ONLY JSON {"gaps":[{"name":"<kebab>","category":"util|integration|channel|agent","reason":"what was hand-rolled or missing","spec":"1-2 sentence spec of the reusable module"}]} — at MOST 3, highest-value first.` },
+    { role: "user", content: `Product: ${productName} — ${summary}\n\nEXISTING MODULES (do not duplicate):\n${existing}\n\nApp lib/ code:\n${libDigest}` },
+  ], { model: MODELS.premium, temperature: 0.3, schema: GAP_SCHEMA }).catch(() => null)) as { gaps?: { name?: string; category?: string; reason?: string; spec?: string }[] } | null
+  return (out?.gaps || []).filter((g) => g?.name && g?.spec).map((g) => ({ name: String(g.name).toLowerCase().replace(/[^a-z0-9_-]/g, ""), category: asCat(g.category), reason: String(g.reason || "").slice(0, 200), spec: String(g.spec).slice(0, 300) })).filter((g) => g.name)
+}
+
+/** The curator BUILDS a missing reusable module from a gap spec, then registers it (experimental,
+ *  so it's quarantined until promotion vets it — it can't break apps before it's proven). */
+export async function buildMissingModule(gap: { name: string; category: Module["category"]; reason: string; spec: string }, createdBy?: string): Promise<string | null> {
+  const out = (await chatJSON([
+    { role: "system", content: `You are a Backend Engineer building a REUSABLE Puglit module — a lib/ helper ANY generated app can import. Production-grade TypeScript: parameterized SQL via \`import { pool } from "@/lib/db"\` when it touches the DB, NO external npm deps, NO hardcoded secrets, NO app-specific logic — fully GENERIC and configurable via params/env. Must compile under tsc. Return ONLY JSON {"code":"<full contents of lib/${gap.name}.ts>","envVars":["..."],"sql":"<optional CREATE TABLE IF NOT EXISTS ..., or empty>","description":"<crisp catalog description>","whenToUse":"<when an app needs it>"}.` },
+    { role: "user", content: `Build the reusable module "${gap.name}" (${gap.category}).\nSpec: ${gap.spec}\nWhy it's needed: ${gap.reason}` },
+  ], { model: MODELS.code, temperature: 0.2 }).catch(() => null)) as { code?: string; envVars?: string[]; sql?: string; description?: string; whenToUse?: string } | null
+  if (!out?.code || out.code.length < 80) return null
+  const files: ModuleFile[] = [{ path: `lib/${gap.name}.ts`, content: String(out.code).slice(0, 12000) }]
+  if (out.sql && /create table/i.test(out.sql)) files.push({ path: `sql/${gap.name}.sql`, content: String(out.sql).slice(0, 4000) })
+  await registerModule({ name: gap.name, category: gap.category, description: String(out.description || gap.spec).slice(0, 200), whenToUse: String(out.whenToUse || gap.reason).slice(0, 160), envVars: Array.isArray(out.envVars) ? out.envVars.slice(0, 8) : [], files, status: "experimental", createdBy })
+  return gap.name
+}
+
+/** Grow the genome after a build: CURATE what the swarm wrote (harvest) AND BUILD what it WISHED
+ *  existed (gaps). Both land as 'experimental' — promotion vets them before any app uses them. */
+export async function growGenome(productName: string, summary: string, files: ModuleFile[], createdBy?: string): Promise<{ harvested: string[]; built: string[] }> {
+  const harvested = await harvestModules(files, createdBy).catch(() => [] as string[])
+  const customs = await customModules().catch(() => [] as Module[])
+  const have = new Set([...BUILTIN_NAMES, ...customs.map((m) => m.name)])
+  const existing = [...BUILTIN_MODULES, ...customs].map((m) => `- ${m.name}: ${m.description}`).join("\n")
+  const gaps = (await proposeModuleGaps(productName, summary, files, existing).catch(() => [])).filter((g) => !have.has(g.name)).slice(0, 2)
+  const built: string[] = []
+  for (const g of gaps) { const n = await buildMissingModule(g, createdBy).catch(() => null); if (n) built.push(n) }
+  if (built.length) console.warn(`[genome] built missing modules (wishlist): ${built.join(", ")}`)
+  return { harvested, built }
+}
