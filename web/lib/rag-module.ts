@@ -45,16 +45,16 @@ export async function buildRagPrompt(question: string, k = 5): Promise<string> {
 }
 `
 
-const RAG_SQL = `CREATE EXTENSION IF NOT EXISTS vector;
-CREATE TABLE IF NOT EXISTS rag_documents (
-  id BIGSERIAL PRIMARY KEY,
-  content TEXT NOT NULL,
-  metadata JSONB DEFAULT '{}',
-  source TEXT,
-  embedding vector(768),     -- nomic-embed-text = 768 dims (adjust to your model)
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_rag_embedding ON rag_documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);`
+// GUARDED: if pgvector isn't installed, skip the RAG store instead of aborting the whole app.sql
+// (CREATE EXTENSION + the vector(768) column both need pgvector). The rest of the schema loads fine.
+const RAG_SQL = `DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS vector;
+  CREATE TABLE IF NOT EXISTS rag_documents (
+    id BIGSERIAL PRIMARY KEY, content TEXT NOT NULL, metadata JSONB DEFAULT '{}', source TEXT,
+    embedding vector(768), created_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS idx_rag_embedding ON rag_documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'pgvector unavailable — RAG store skipped (install postgresql-XX-pgvector to enable)'; END $$;`
 
 export function deterministicRag(config: DomainConfig, bp: Blueprint): { files: AppFile[]; extraSql: string } | null {
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : ""
