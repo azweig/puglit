@@ -77,14 +77,16 @@ echo "  4) Hybrid       — local for code/cheap + API for premium"
 echo "     (recommended for your hardware: $REC)"
 PROFILE="$(ask 'Profile' "$REC")"
 
-PROVIDER=ollama; PULL=(); M_PREMIUM=""; M_BALANCED=""; M_CHEAP=""; M_CODE=""; M_EMBED="nomic-embed-text"
+# the 3 genetic teams use DIFFERENT models for diversity: A=code (qwen-coder), B=deepseek-coder-v2,
+# C=devstral. Pull the EXACT names the engine uses (bare tag) or the teams fall back to qwen (no diversity).
+PROVIDER=ollama; PULL=(); M_PREMIUM=""; M_BALANCED=""; M_CHEAP=""; M_CODE=""; M_TEAMB=""; M_TEAMC=""; M_EMBED="nomic-embed-text"
 case "$PROFILE" in
-  1) M_CODE="qwen2.5-coder:32b"; M_PREMIUM="qwen2.5:32b"; M_BALANCED="gemma2:9b"; M_CHEAP="gemma2:2b"
-     PULL=(qwen2.5-coder:32b qwen2.5:32b deepseek-coder-v2:16b gemma2:9b gemma2:2b "$M_EMBED") ;;
-  2) M_CODE="qwen2.5-coder:7b"; M_PREMIUM="qwen2.5:14b"; M_BALANCED="gemma2:9b"; M_CHEAP="gemma2:2b"
-     PULL=(qwen2.5-coder:7b qwen2.5:14b gemma2:9b gemma2:2b "$M_EMBED") ;;
+  1) M_CODE="qwen2.5-coder:32b"; M_PREMIUM="qwen2.5:32b"; M_BALANCED="gemma2:9b"; M_CHEAP="gemma2:2b"; M_TEAMB="deepseek-coder-v2"; M_TEAMC="devstral"
+     PULL=(qwen2.5-coder:32b qwen2.5:32b deepseek-coder-v2 devstral gemma2:9b gemma2:2b "$M_EMBED") ;;
+  2) M_CODE="qwen2.5-coder:7b"; M_PREMIUM="qwen2.5:14b"; M_BALANCED="gemma2:9b"; M_CHEAP="gemma2:2b"; M_TEAMB="deepseek-coder-v2"; M_TEAMC="qwen2.5-coder:7b"
+     PULL=(qwen2.5-coder:7b qwen2.5:14b deepseek-coder-v2 gemma2:9b gemma2:2b "$M_EMBED") ;;
   3) PROVIDER=api; PULL=() ;;
-  4) M_CODE="qwen2.5-coder:7b"; M_CHEAP="gemma2:2b"; PROVIDER=hybrid; PULL=(qwen2.5-coder:7b gemma2:2b "$M_EMBED") ;;
+  4) M_CODE="qwen2.5-coder:7b"; M_CHEAP="gemma2:2b"; M_TEAMB="qwen2.5-coder:7b"; M_TEAMC="qwen2.5-coder:7b"; PROVIDER=hybrid; PULL=(qwen2.5-coder:7b gemma2:2b "$M_EMBED") ;;
   *) err "invalid profile"; exit 1 ;;
 esac
 ok "Profile $PROFILE selected"
