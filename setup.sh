@@ -116,6 +116,24 @@ if [ "$PROVIDER" = "api" ] || [ "$PROFILE" = "4" ]; then
   done
 fi
 
+# Frontier model (optional): the 300B+ leaders (GLM 5.2 / DeepSeek V4 / Nex-N2-Pro) DON'T fit a single
+# GPU — API only. On a local profile they escalate the HARD 20% (architecture/judging) your local
+# models can't crack; the bulk still runs locally for free.
+FRONTIER_MODEL=""; FRONTIER_URL=""; FRONTIER_KEY=""
+if [ "$PROVIDER" != "api" ] && yn "Add a FRONTIER model for hard problems (GLM 5.2 / DeepSeek V4 / Nex-N2-Pro via API)?" n; then
+  echo "    1) GLM-5.2        (zai-org/GLM-5.2)"
+  echo "    2) DeepSeek-V4    (deepseek-ai/DeepSeek-V4)"
+  echo "    3) Nex-N2-Pro     (nex-agi/Nex-N2-Pro)"
+  case "$(ask 'Frontier model' 1)" in
+    1) FRONTIER_MODEL="zai-org/GLM-5.2";; 2) FRONTIER_MODEL="deepseek-ai/DeepSeek-V4";; 3) FRONTIER_MODEL="nex-agi/Nex-N2-Pro";; *) FRONTIER_MODEL="";;
+  esac
+  if [ -n "$FRONTIER_MODEL" ]; then
+    FRONTIER_URL="$(ask 'Provider base URL' 'https://api.siliconflow.com/v1')"
+    read -r -s -p "    API key: " FRONTIER_KEY; echo
+    ok "frontier: $FRONTIER_MODEL (escalates the hard 20%)"
+  fi
+fi
+
 # ── 5. Generate .env.local ─────────────────────────────────────────────────────
 say "5/7  Generating $ENV_FILE"
 mkdir -p "$WEB"
@@ -134,6 +152,12 @@ if [ -f "$ENV_FILE" ] && ! yn ".env.local already exists. Overwrite?" n; then wa
       [ -n "$M_BALANCED" ] && echo "PUGLIT_MODEL_BALANCED=$M_BALANCED"
       [ -n "$M_CHEAP" ]    && echo "PUGLIT_MODEL_CHEAP=$M_CHEAP"
       [ -n "$M_CODE" ]     && echo "PUGLIT_MODEL_CODE=$M_CODE"
+      [ -n "$M_TEAMB" ]    && echo "PUGLIT_TEAM_B_MODEL=$M_TEAMB"
+      [ -n "$M_TEAMC" ]    && echo "PUGLIT_TEAM_C_MODEL=$M_TEAMC"
+    fi
+    if [ -n "$FRONTIER_MODEL" ]; then
+      echo "PUGLIT_FRONTIER_MODEL=$FRONTIER_MODEL"; echo "PUGLIT_FRONTIER_BASE_URL=$FRONTIER_URL"
+      echo "PUGLIT_FRONTIER_KEY=$FRONTIER_KEY"; echo "PUGLIT_FRONTIER_BUDGET=8"
     fi
     for v in "${!KEYS[@]}"; do echo "$v=${KEYS[$v]}"; done
   } > "$ENV_FILE"
