@@ -45,6 +45,17 @@ export async function generateLandingHtml(config: DomainConfig, styleDirection?:
     const lang = config.identity.languages?.[0] || "en"
     const id = config.identity
     const L = config.landing
+    // FREE PUBLIC TOOL (calculator/converter/…) → not a SaaS: no register, no pricing, the CTA opens the tool.
+    const monModel = (config.monetization as { model?: string } | undefined)?.model || "free"
+    const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador|comparador/i.test(`${id.name} ${tr(id.tagline, lang)}`)
+    const publicTool = monModel === "free" && looksLikeTool
+    const toolDirective = publicTool ? `
+
+HARD OVERRIDE — THIS IS A FREE PUBLIC TOOL WITH NO ACCOUNTS (not a SaaS):
+- NEVER include sign-up / "Empezar gratis" / "Crear cuenta" / login / a pricing section / an FAQ about cost or cancellation or billing.
+- The SINGLE primary CTA must OPEN THE TOOL: label it like "Abrir la calculadora" / "Usar ahora" and link it to "/" (the tool itself). Any secondary CTA also links to "/".
+- Keep the hero headline SHORT (max ~8 words) — do NOT dump the whole description as the headline; summarize what the tool does.
+- The page introduces the tool briefly and sends the user straight INTO it.` : ""
     const palette = (id.palette || []).map((c) => `${c.label || "color"}: ${c.hex}`).join(", ")
     const vps = (L?.valueProps || []).map((v) => `- ${tr(v.title, lang)}: ${tr(v.body, lang)}`).join("\n")
     const brief = `PRODUCT: ${id.name}
@@ -60,7 +71,7 @@ PALETTE (use these exact hexes): ${palette || id.brandColor}
 PRIMARY COLOR: ${id.brandColor}
 MONETIZATION: ${config.monetization?.model}
 VALUE PROPS:\n${vps}
-SECTOR/AUDIENCE: infer from the product; design accordingly.${styleDirection ? `\nDESIGN DIRECTION (follow this style): ${styleDirection}` : ""}`
+SECTOR/AUDIENCE: infer from the product; design accordingly.${styleDirection ? `\nDESIGN DIRECTION (follow this style): ${styleDirection}` : ""}${toolDirective}`
 
     const html = await chatText([
       { role: "system", content: SYSTEM },
