@@ -208,7 +208,9 @@ USER'S EXPLICIT INTENT — HONOR EXACTLY, this OVERRIDES every default and templ
 - Monetization: "${monModel}".${isFree ? " THIS PRODUCT IS FREE → ABSOLUTELY NO pricing, NO payment, NO plans, NO 'ver precios'/'see pricing', NO subscription, NO Stripe references ANYWHERE (not in the homepage, not in nav, not in FAQ)." : ""}${forcePublic ? `
 - KIND IS FORCED to "public": NO login, NO signup, NO account, NO auth gate. The product/tool IS the homepage at "/", fully usable by anyone immediately. All API routes are PUBLIC.` : ""}
 - DESIGN IS 100% BESPOKE for THIS product — NEVER a generic SaaS marketing landing (no hero + pricing + FAQ template). The homepage renders the ACTUAL working product (for a calculator: the inputs + the live result, right there).
-- Build the REAL domain logic as first-class code (the actual formula/comparison/computation the user described), not a generic CRUD of an entity.`
+- Build the REAL domain logic as first-class code (the actual formula/comparison/computation the user described), not a generic CRUD of an entity.${forcePublic ? `
+- THIS IS A CALCULATOR/TOOL → make it ONE single page at "/": the inputs AND the result live TOGETHER, recalculating instantly as the user types (or on one "Calcular" button) — client-side, NO navigation to a separate result page, NO saving to a DB required (it can be 100% client-side math; a DB table is OPTIONAL, only if the user wants to save scenarios). Keep tables MINIMAL (0-2).
+- INCLUDE A CHART of the result, inline (hand-rolled SVG or simple bars/lines — NO chart library). For a break-even calculator: plot the two cumulative-cost curves over months (home vs street) crossing at the break-even point, mark the crossover, and show the verdict + the break-even month prominently. The visualization is part of the deliverable, not optional.` : ""}`
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
 
@@ -477,7 +479,7 @@ ${VISUAL_SYSTEM}
 
 DESIGN BRIEF — this is the product's identity; follow it EXACTLY (layout architecture, color tokens, component recipes, per-screen composition). Every screen must share ONE bespoke identity:
 ${brief || "Bold, modern, mobile-first, premium. Use the brand palette as tokens with explicit contrast."}
-${bp.kind === "public" && p.file === "app/page.tsx" ? "\nThis is the PUBLIC HOMEPAGE and the product itself — render the real product here (the live data, the tool), fully usable with NO login. No marketing hero, no 'Empezar gratis', no pricing.\n" : bp.kind === "public" ? "\nThis is a PUBLIC product page — no login assumed.\n" : ""}
+${bp.kind === "public" && p.file === "app/page.tsx" ? `\nThis is the PUBLIC HOMEPAGE and the product itself — render the real product here (the live data, the tool), fully usable with NO login. No marketing hero, no 'Empezar gratis', no pricing.${/calculadora|calculator|convert|conversor|herramienta|estimador|simulador|comparador/i.test(`${config.identity.name} ${bp.summary}`) ? "\nThis is a CALCULATOR: inputs AND result live on THIS one page — recalc instantly as the user types (client-side math; do not navigate away to show the result). Render an INLINE chart (hand-rolled SVG, no chart library) of the result — e.g. two cumulative-cost lines over months crossing at the break-even point, with the crossover marked and the verdict (which option wins + break-even month) shown big and clear." : ""}\n` : bp.kind === "public" ? "\nThis is a PUBLIC product page — no login assumed.\n" : ""}
 AVAILABLE APIs (call these with fetch):
 ${routeList}
 ${shapes ? `\nAPI RESPONSE SHAPES — the data you will receive (consume these EXACT field names):\n${shapes}\n` : ""}
