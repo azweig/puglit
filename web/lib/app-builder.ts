@@ -198,18 +198,16 @@ export async function planBlueprint(config: DomainConfig, contracts: string, ref
   const catalog = await moduleCatalog().catch(() => "")
   // HONOR the user's explicit intent — these are HARD rules, not suggestions:
   //   free → never any pricing/payment;  personal/tool → public (no accounts/login);  design always bespoke.
-  const isFree = config.monetization === "free"
-  const aud = String(config.audience || "")
-  const personal = /\b(me|myself|mi|mí|para m[ií]|uno mismo|personal|yo|propio)\b/i.test(aud) || aud.trim().length < 4
-  const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador/i.test(`${config.identity.name} ${tagline}`)
-  const forcePublic = isFree && (personal || looksLikeTool)
+  const monModel = (config.monetization as { model?: string } | undefined)?.model || "free"
+  const isFree = monModel === "free"
+  const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${tagline}`)
+  const forcePublic = isFree && looksLikeTool // a FREE tool/calculator → public, no accounts
   const intent = `
 
 USER'S EXPLICIT INTENT — HONOR EXACTLY, this OVERRIDES every default and template:
-- Monetization: "${config.monetization}".${isFree ? " THIS PRODUCT IS FREE → ABSOLUTELY NO pricing, NO payment, NO plans, NO 'ver precios'/'see pricing', NO subscription, NO Stripe references ANYWHERE (not in the homepage, not in nav, not in FAQ)." : ""}
-- Audience: "${aud || "—"}".${personal ? " Personal / single-user." : ""}${forcePublic ? `
+- Monetization: "${monModel}".${isFree ? " THIS PRODUCT IS FREE → ABSOLUTELY NO pricing, NO payment, NO plans, NO 'ver precios'/'see pricing', NO subscription, NO Stripe references ANYWHERE (not in the homepage, not in nav, not in FAQ)." : ""}${forcePublic ? `
 - KIND IS FORCED to "public": NO login, NO signup, NO account, NO auth gate. The product/tool IS the homepage at "/", fully usable by anyone immediately. All API routes are PUBLIC.` : ""}
-- DESIGN IS 100% BESPOKE for THIS product — NEVER a generic SaaS marketing landing (no hero + pricing + FAQ template). The homepage renders the ACTUAL working product (for a calculator: the calculator inputs + the live result, right there).
+- DESIGN IS 100% BESPOKE for THIS product — NEVER a generic SaaS marketing landing (no hero + pricing + FAQ template). The homepage renders the ACTUAL working product (for a calculator: the inputs + the live result, right there).
 - Build the REAL domain logic as first-class code (the actual formula/comparison/computation the user described), not a generic CRUD of an entity.`
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
