@@ -196,9 +196,22 @@ export async function runDivergence(jobId: string, config: DomainConfig, contrac
       [jobId, d.team, s?.overall ?? null, d.team === winner, s?.critique || "", JSON.stringify({ blueprint: d.blueprint, metrics: d.metrics, model: d.model, areas: s })],
     ).catch(() => {})
   }
+  // #1 POWER-LAW build selection (ShinkaEvolve): in TRAINING mode, occasionally build a runner-up
+  // (sampled by rank) instead of always the #1 → the brain explores diverse designs and doesn't
+  // collapse to one approach. Scoring/XP keep the TRUE judge winner; real user builds always get the winner.
+  let buildTeam = winner
+  if (process.env.PUGLIT_TRAINING_MODE) {
+    const ranked = [...designs].sort((a, b) => (byTeam[b.team]?.overall || 0) - (byTeam[a.team]?.overall || 0))
+    const alpha = Number(process.env.PUGLIT_POWERLAW_ALPHA || 2)
+    const probs = ranked.map((_, i) => (i + 1) ** -alpha)
+    const tot = probs.reduce((s, p) => s + p, 0)
+    let x = Math.random() * tot, idx = 0
+    for (let i = 0; i < probs.length; i++) { x -= probs[i]; if (x <= 0) { idx = i; break } }
+    buildTeam = ranked[idx]?.team || winner
+  }
   return {
     ok: true as const, winner, leveledUp,
-    winnerBlueprint: designs.find((d) => d.team === winner)?.blueprint || null, // → auto-build
+    winnerBlueprint: designs.find((d) => d.team === buildTeam)?.blueprint || null, // → auto-build (power-law in training)
     designs: designs.map((d) => ({ team: d.team, philosophy: d.philosophy, model: d.model, metrics: d.metrics, summary: d.blueprint.summary, areas: byTeam[d.team] })),
   }
 }

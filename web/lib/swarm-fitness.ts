@@ -30,6 +30,11 @@ export function objectiveScore(bp: Bp): number {
     if (m[1].length > 3 && !declared.has(m[1]) && !["set", "values", "where"].includes(m[1])) phantom++
   }
   s -= Math.min(20, phantom * 4)
+  // #4 PARSIMONY (ShinkaEvolve): at equal coverage, the LEANER design wins. Penalize over-modeling
+  // (more tables than the routes/pages actually surface) and runaway total surface (bloat).
+  const surface = routes.length + pages.length
+  if (tables.length > Math.max(3, surface)) s -= Math.min(10, (tables.length - surface) * 2) // tables nobody uses
+  if (tables.length + surface > 44) s -= 6 // sprawling spec
   return Math.max(0, Math.min(100, s))
 }
 
@@ -37,22 +42,38 @@ export function objectiveScore(bp: Bp): number {
 export async function storeExemplar(kind: string, task: string, code: string): Promise<void> {
   if (!code || code.length < 80 || code.length > 8000) return
   const e = await embed(task).catch(() => null)
+  // #2 NOVELTY GATE (ShinkaEvolve): never store a near-duplicate of an existing exemplar — keeps the
+  // archive DIVERSE + informative instead of 10 near-identical calculators (a redundant pool teaches little).
+  if (e) {
+    try {
+      const { rows } = await query<{ embedding: unknown }>("SELECT embedding FROM verified_exemplars WHERE kind=$1 AND embedding IS NOT NULL ORDER BY created_at DESC LIMIT 40", [kind])
+      const NOVELTY = Number(process.env.PUGLIT_EXEMPLAR_NOVELTY || 0.93)
+      for (const r of rows) {
+        const v = (typeof r.embedding === "string" ? JSON.parse(r.embedding) : r.embedding) as number[]
+        if (Array.isArray(v) && cosine(e, v) > NOVELTY) return // too similar → skip
+      }
+    } catch { /* if the check fails, fall through and store */ }
+  }
   await query("INSERT INTO verified_exemplars (kind, task, code, embedding) VALUES ($1,$2,$3,$4)", [kind, task.slice(0, 300), code, e ? JSON.stringify(e) : null]).catch(() => {})
 }
 
-/** Retrieve the most similar known-good exemplar of a kind (route/page) for the prompt. */
+/** Retrieve known-good exemplars of a kind for the prompt — a MIX, not just the nearest, so the model
+ *  RECOMBINES ideas instead of copying one (#3 mixed inspiration, ShinkaEvolve's ArchiveInspirationSelector). */
 export async function exemplarFor(kind: string, taskText: string): Promise<string> {
   try {
     const q = await embed(taskText).catch(() => null)
     if (!q) return ""
     const { rows } = await query<{ code: string; embedding: unknown }>("SELECT code, embedding FROM verified_exemplars WHERE kind=$1 AND embedding IS NOT NULL ORDER BY created_at DESC LIMIT 60", [kind])
-    let best: string | null = null, bestSim = 0.55 // floor: only a genuinely similar exemplar helps
-    for (const r of rows) {
+    const scored = rows.map((r) => {
       const v = (typeof r.embedding === "string" ? JSON.parse(r.embedding) : r.embedding) as number[]
-      const sim = Array.isArray(v) ? cosine(q, v) : 0
-      if (sim > bestSim) { bestSim = sim; best = r.code }
-    }
-    return best ? `\n\nKNOWN-GOOD example of a similar ${kind} that built + ran (imitate its structure, adapt to THIS task — do not copy domain details):\n\`\`\`\n${best.slice(0, 3000)}\n\`\`\`\n` : ""
+      return { code: r.code, sim: Array.isArray(v) ? cosine(q, v) : 0 }
+    }).filter((x) => x.sim > 0).sort((a, b) => b.sim - a.sim)
+    const picks: string[] = []
+    if (scored[0] && scored[0].sim > 0.55) picks.push(scored[0].code) // the nearest match (exploit)
+    const others = scored.slice(2).filter((x) => x.sim > 0.3) // a different, loosely-related one (explore/recombine)
+    if (others.length) picks.push(others[Math.floor(Math.random() * others.length)].code)
+    if (!picks.length) return ""
+    return "\n\n" + picks.map((c, i) => `KNOWN-GOOD example ${i + 1} of a working ${kind} (imitate the structure + RECOMBINE ideas across examples, adapt to THIS task — never copy domain details):\n\`\`\`\n${c.slice(0, 2400)}\n\`\`\``).join("\n") + "\n"
   } catch { return "" }
 }
 
