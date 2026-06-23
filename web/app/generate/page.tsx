@@ -147,6 +147,35 @@ export default function Generate() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [log, step, busy])
 
+  // ── DRAFT PERSISTENCE: never lose an interview to a closed session / device switch ──
+  const draftId = useRef<string>("")
+  const [resume, setResume] = useState<{ name?: string; messages?: Msg[]; log?: Entry[]; step?: Step | null; progress?: number; refs?: string } | null>(null)
+  function saveDraft(done = false) {
+    if (!draftId.current) return
+    fetch("/api/interview/draft", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: draftId.current, name, messages, log, step, answers: step?.answers || {}, progress, refs: references, done }) }).catch(() => {})
+  }
+  // on mount: get/create a stable draft id (localStorage) + fetch any saved draft (the user's latest if logged in)
+  useEffect(() => {
+    try {
+      let id = localStorage.getItem("puglit_draft_id")
+      if (!id) { id = (globalThis.crypto?.randomUUID?.() || `d${Date.now()}${Math.random().toString(36).slice(2)}`); localStorage.setItem("puglit_draft_id", id) }
+      draftId.current = id
+    } catch { draftId.current = `d${Date.now()}` }
+    fetch(`/api/interview/draft?id=${draftId.current}`).then((r) => r.json()).then((d) => { if (d?.draft?.messages?.length) setResume(d.draft) }).catch(() => {})
+  }, [])
+  // auto-save (debounced) on any change during the interview
+  useEffect(() => {
+    if (phase !== "chat" || !draftId.current || (messages.length === 0 && !step)) return
+    const t = setTimeout(() => saveDraft(false), 800)
+    return () => clearTimeout(t)
+  }, [messages, step, log, progress, name, references, phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  function restoreDraft() {
+    if (!resume) return
+    setName(resume.name || ""); setMessages(resume.messages || []); setLog(resume.log || []); setStep(resume.step || null)
+    setProgress(resume.progress || 0); if (resume.refs) setReferences(resume.refs)
+    setPhase("chat"); setResume(null); setRated(null)
+  }
+
   // ?demo=1 — skip the interview: pick a random coherent idea, synthesize the Q&A, and jump
   // straight into the analysis → spec → designs → build screens (to review what comes AFTER).
   const demoFired = useRef(false)
@@ -251,6 +280,7 @@ export default function Generate() {
   }
   const ANALYZE_LABELS = ["Analizando tus respuestas", "Definiendo identidad (logo + paleta)", "Diseñando 2 propuestas visuales"]
   async function produceSpec(answers: Record<string, unknown>, msgs: Msg[], nm: string = name) {
+    if (draftId.current) fetch(`/api/interview/draft?id=${draftId.current}`, { method: "DELETE" }).catch(() => {}) // draft consumed → don't offer resume
     setPendingAnswers(answers)
     setPhase("analyzing")
     const upd = (states: ("pending" | "running" | "done")[]) => setAnalyze(ANALYZE_LABELS.map((l, i) => ({ label: l, status: states[i] })))
@@ -396,6 +426,16 @@ export default function Generate() {
     return (
       <main className="max-w-xl mx-auto px-5 py-20">
         <Link href="/" className="flex items-center gap-2 text-violet-bright mb-10"><Mark size={26} /><span className="font-extrabold text-white">Puglit</span></Link>
+        {resume && (
+          <div className="mb-6 rounded-xl border border-violet/40 bg-violet/10 p-4">
+            <div className="text-sm font-bold">📝 Tenés una entrevista a medias{resume.name ? ` — "${resume.name}"` : ""} ({resume.progress || 0}%)</div>
+            <div className="text-xs text-white/55 mt-0.5">Podés seguir donde quedaste, incluso desde otro dispositivo.</div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={restoreDraft} className="px-4 py-2 rounded-lg font-bold text-white text-sm" style={{ background: "var(--violet)" }}>Continuar →</button>
+              <button onClick={() => { if (draftId.current) fetch(`/api/interview/draft?id=${draftId.current}`, { method: "DELETE" }).catch(() => {}); setResume(null) }} className="px-4 py-2 rounded-lg font-semibold text-white/60 border border-white/15 text-sm">Empezar de nuevo</button>
+            </div>
+          </div>
+        )}
         <h1 className="text-3xl font-extrabold">Let’s build your SaaS.</h1>
         <p className="text-white/60 mt-2">It’s a quick chat — I’ll read your answers and suggest options as we go. First:</p>
         <label className="block text-sm font-semibold text-white/80 mt-8 mb-2">What’s your product called?</label>

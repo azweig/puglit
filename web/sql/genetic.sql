@@ -134,6 +134,17 @@ CREATE TABLE IF NOT EXISTS puglit_skill_rejects (
   before_score DOUBLE PRECISION, after_score DOUBLE PRECISION, created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ── Interview drafts: resume an in-progress interview after a closed session / device switch ──
+CREATE TABLE IF NOT EXISTS puglit_interview_drafts (
+  id VARCHAR(40) PRIMARY KEY,
+  user_email VARCHAR(255), name VARCHAR(160),
+  messages JSONB NOT NULL DEFAULT '[]', log JSONB NOT NULL DEFAULT '[]', step JSONB,
+  answers JSONB NOT NULL DEFAULT '{}',
+  progress INT NOT NULL DEFAULT 0, refs TEXT, done BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_idrafts_user ON puglit_interview_drafts(user_email, updated_at DESC);
+
 -- ── Verified exemplars: known-good code (passed the gate) retrieved into prompts ──
 CREATE TABLE IF NOT EXISTS verified_exemplars (
   id BIGSERIAL PRIMARY KEY,
