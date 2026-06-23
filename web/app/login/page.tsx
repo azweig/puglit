@@ -17,6 +17,7 @@ export default function LoginPage() {
   useEffect(() => { const n = new URLSearchParams(window.location.search).get("next"); if (n) setNext(n) }, [])
 
   async function request() {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setMsg("Poné un email válido"); return } // validate on click, not by disabling
     setBusy(true); setMsg(""); setDev("")
     try {
       const d = await fetch("/api/auth/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) }).then((r) => r.json())
@@ -27,6 +28,7 @@ export default function LoginPage() {
     } catch { setMsg("error de red") } finally { setBusy(false) }
   }
   async function verify() {
+    if (code.trim().length < 6) { setMsg("El código tiene 6 dígitos"); return }
     setBusy(true); setMsg("")
     try {
       const d = await fetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim(), code: code.trim() }) }).then((r) => r.json())
@@ -46,12 +48,12 @@ export default function LoginPage() {
         {step === "email" ? (
           <>
             <input autoFocus type="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && request()} placeholder="tu@email.com" className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm" />
-            <button onClick={request} disabled={busy || !email.trim()} className="mt-3 w-full rounded-xl px-5 py-2.5 font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{busy ? "…" : "Mandar código →"}</button>
+            <button onClick={request} disabled={busy} className="mt-3 w-full rounded-xl px-5 py-2.5 font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{busy ? "…" : "Mandar código →"}</button>
           </>
         ) : (
           <>
             <input autoFocus inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && verify()} placeholder="000000" maxLength={6} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-center text-lg tracking-[6px]" />
-            <button onClick={verify} disabled={busy || code.trim().length < 6} className="mt-3 w-full rounded-xl px-5 py-2.5 font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{busy ? "…" : "Entrar"}</button>
+            <button onClick={verify} disabled={busy} className="mt-3 w-full rounded-xl px-5 py-2.5 font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{busy ? "…" : "Entrar"}</button>
             <button onClick={() => { setStep("email"); setMsg(""); setDev("") }} className="mt-2 w-full text-xs text-white/40">← otro email</button>
           </>
         )}
