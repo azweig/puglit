@@ -196,6 +196,21 @@ export async function planBlueprint(config: DomainConfig, contracts: string, ref
   const ents = (config.entities || []).map((e) => `${e.name}(${e.fields.map((f) => `${f.name}:${f.type}${f.required ? "!" : ""}`).join(", ")})`).join("; ")
   const tagline = typeof config.identity.tagline === "string" ? config.identity.tagline : JSON.stringify(config.identity.tagline)
   const catalog = await moduleCatalog().catch(() => "")
+  // HONOR the user's explicit intent — these are HARD rules, not suggestions:
+  //   free → never any pricing/payment;  personal/tool → public (no accounts/login);  design always bespoke.
+  const isFree = config.monetization === "free"
+  const aud = String(config.audience || "")
+  const personal = /\b(me|myself|mi|mí|para m[ií]|uno mismo|personal|yo|propio)\b/i.test(aud) || aud.trim().length < 4
+  const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador/i.test(`${config.identity.name} ${tagline}`)
+  const forcePublic = isFree && (personal || looksLikeTool)
+  const intent = `
+
+USER'S EXPLICIT INTENT — HONOR EXACTLY, this OVERRIDES every default and template:
+- Monetization: "${config.monetization}".${isFree ? " THIS PRODUCT IS FREE → ABSOLUTELY NO pricing, NO payment, NO plans, NO 'ver precios'/'see pricing', NO subscription, NO Stripe references ANYWHERE (not in the homepage, not in nav, not in FAQ)." : ""}
+- Audience: "${aud || "—"}".${personal ? " Personal / single-user." : ""}${forcePublic ? `
+- KIND IS FORCED to "public": NO login, NO signup, NO account, NO auth gate. The product/tool IS the homepage at "/", fully usable by anyone immediately. All API routes are PUBLIC.` : ""}
+- DESIGN IS 100% BESPOKE for THIS product — NEVER a generic SaaS marketing landing (no hero + pricing + FAQ template). The homepage renders the ACTUAL working product (for a calculator: the calculator inputs + the live result, right there).
+- Build the REAL domain logic as first-class code (the actual formula/comparison/computation the user described), not a generic CRUD of an entity.`
   const out = (await chatJSON([
     { role: "system", content: `You are the Domain Architect for an app generator. Given a product idea, design the COMPLETE functional blueprint of its core experience: the database tables, the API operations, and the UI pages a real user needs to ACTUALLY USE the product end-to-end (not a generic CRUD admin).
 
@@ -238,11 +253,11 @@ COMPLETENESS (CRITICAL — generators die here; never ship a read-only app):
 REFERENCE-PRODUCT DEPTH (critical — do NOT ship a toy): if the idea names or clearly clones a real product/category (e.g. "like promiedos", "a Tinder for X", "an Airbnb for Y", "a sports scores site"), MENTALLY ENUMERATE that real product's actual surfaces and MATCH their depth — not a stripped-down sketch. A live-scores product (Promiedos/365scores) is NOT 4 flat tables: it needs competitions, matches WITH minute-by-minute events, lineups/formations, match statistics, team & player pages, multiple standings views, fixtures by round, top scorers. Model the ENTITIES and SURFACES that make it recognizably that product. A data-driven product that shows external/live data (scores, prices, flights, listings) is INGESTED from a real source — model it as a curated catalog refreshed by cron, never as user-generated, and assume an ingestion job populates it.
 
 SIZE TO THE PRODUCT, do not cap artificially: simple tools may need 3-5 tables; a deep product (sports/marketplace/social/aggregator) legitimately needs 8-15+ tables and many routes/pages — generate what the product GENUINELY requires to be a faithful, usable clone. Keep each file focused, but never sacrifice the product's real feature surface to hit a small number. Make tables, routes and pages mutually consistent (same table/column names everywhere). ALWAYS include the homepage at route "/" (app/page.tsx) as the product itself, plus a detail page for the product's primary entity (e.g. a match/profile/listing page) and a create page when users contribute content. Use the product's language for UI labels.` },
-    { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}\n${reference ? `\nREFERENCE PRODUCT — the user is cloning this; you MUST reach this depth (model the entities + create the surfaces/pages listed; a blueprint that omits these is a failure):\n${reference}\n` : ""}\nCONTRACTS:\n${contracts}` },
+    { role: "user", content: `Product: ${config.identity.name}\nPitch: ${tagline}\nLanguages: ${(config.identity.languages || ["es"]).join(",")}\nEntities (hints, refine freely): ${ents}${intent}\n${reference ? `\nREFERENCE PRODUCT — the user is cloning this; you MUST reach this depth (model the entities + create the surfaces/pages listed; a blueprint that omits these is a failure):\n${reference}\n` : ""}\nCONTRACTS:\n${contracts}` },
   ], { model: opts?.model || MODELS.premium, temperature: 0.3 })) as Partial<Blueprint>
 
   return {
-    kind: out.kind === "public" ? "public" : "accounts",
+    kind: forcePublic ? "public" : (out.kind === "public" ? "public" : "accounts"),
     summary: out.summary || "",
     tables: normalizeTables(Array.isArray(out.tables) ? out.tables.filter((t) => t?.name && t?.ddl) : []),
     routes: Array.isArray(out.routes) ? out.routes.filter((r) => r?.path && r?.logic) : [],
