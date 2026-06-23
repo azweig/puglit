@@ -159,3 +159,30 @@ CREATE INDEX IF NOT EXISTS idx_exemplars_kind ON verified_exemplars(kind, create
 -- lesson outcome (anti-poisoning): only lessons from gate-passing builds get recalled
 ALTER TABLE puglit_agent_diary ADD COLUMN IF NOT EXISTS outcome VARCHAR(12) DEFAULT 'unknown';
 ALTER TABLE puglit_agent_diary ADD COLUMN IF NOT EXISTS scope VARCHAR(16) DEFAULT 'team';
+
+-- ── Platform base tables (projects / waitlist / build JOBS) ────────────────────
+-- These mirror lib/db.ts SCHEMA_SQL. In dev, ensureSchema() creates them on boot; in production
+-- (rebuild.sh → npm run start) ensureSchema is skipped, so the build JOB table must exist up front —
+-- otherwise the tournament's auto-build (createJob) fails silently and you get build=null.
+CREATE TABLE IF NOT EXISTS puglit_projects (
+  id BIGSERIAL PRIMARY KEY,
+  slug VARCHAR(80) UNIQUE NOT NULL, email VARCHAR(255), name VARCHAR(120) NOT NULL,
+  answers JSONB NOT NULL, config JSONB NOT NULL, landing_html TEXT,
+  featured BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_puglit_projects_created ON puglit_projects(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS puglit_waitlist (
+  id BIGSERIAL PRIMARY KEY, email VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS puglit_jobs (
+  id VARCHAR(32) PRIMARY KEY,
+  slug VARCHAR(120) NOT NULL, name VARCHAR(120) NOT NULL, email VARCHAR(255),
+  status VARCHAR(20) NOT NULL DEFAULT 'queued',
+  answers JSONB NOT NULL, branding JSONB, config JSONB, steps JSONB NOT NULL, artifacts JSONB,
+  completion INTEGER NOT NULL DEFAULT 0, error TEXT, lease_until TIMESTAMPTZ,
+  user_email VARCHAR(255), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_puglit_jobs_status ON puglit_jobs(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_puglit_jobs_user ON puglit_jobs(user_email, created_at DESC);
