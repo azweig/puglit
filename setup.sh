@@ -213,22 +213,32 @@ PGPASSWORD=postgres psql -h localhost -U postgres -d puglit -tc "SELECT 1" >/dev
 echo
 printf "\033[1;32m✅ Puglit is ready.\033[0m\n"
 
-# ── Optional: build a demo app right now (a calculator) — the wow / end-to-end smoke test ──
-if [ "$HAS_NODE" = yes ] && yn "Build a quick DEMO now? (a simple calculator — the swarm designs + builds it live, a few minutes)" y; then
+# ── Bring up the web + make it reachable (this is what makes the browser work "de una") ──
+PUB=""
+if [ "$HAS_NODE" = yes ]; then
   if ! curl -s -o /dev/null localhost:3000/api/doctor 2>/dev/null; then
-    say "Starting the dev server…"
-    ( cd "$WEB" && nohup npm run dev > /tmp/puglit-dev.log 2>&1 & )
+    say "Starting the server (bound to 0.0.0.0 so it's reachable)…"
+    ( cd "$WEB" && nohup npm run dev -- -H 0.0.0.0 > /tmp/puglit-dev.log 2>&1 & )
     printf "  waiting for the server"; for i in $(seq 1 60); do curl -s -o /dev/null localhost:3000/api/doctor 2>/dev/null && break; printf "."; sleep 2; done; echo " up"
   fi
+  if yn "Open a PUBLIC URL for the web now (cloudflared tunnel — works even if the pod's port isn't exposed)?" y; then
+    [ -x /usr/local/bin/cloudflared ] || { curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared 2>/dev/null && chmod +x /usr/local/bin/cloudflared; }
+    pkill -f "cloudflared tunnel" 2>/dev/null; nohup cloudflared tunnel --url http://localhost:3000 > /tmp/puglit-tunnel.log 2>&1 &
+    printf "  opening tunnel"; for i in $(seq 1 25); do PUB="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/puglit-tunnel.log 2>/dev/null | head -1)"; [ -n "$PUB" ] && break; printf "."; sleep 2; done; echo
+    [ -n "$PUB" ] && ok "Public URL: $PUB" || warn "tunnel still starting — get the URL with: grep trycloudflare /tmp/puglit-tunnel.log"
+  fi
+fi
+WEBURL="${PUB:-http://localhost:3000}"
+
+# ── Optional: build a demo app right now (a calculator) — the wow / end-to-end smoke test ──
+if [ "$HAS_NODE" = yes ] && yn "Build a quick DEMO now? (a calculator — the swarm designs + builds it live, a few minutes)" y; then
   say "Demo: the swarm DESIGNS + BUILDS a calculator end-to-end (a few minutes)…"
   bash "$ROOT/infra/demo.sh" "DemoCalc" "a simple calculator: add/subtract/multiply/divide, calculation history, memory M+/M-/MR, keyboard + mouse input, clear, division-by-zero handling" \
     || warn "demo had an issue — logs in /tmp/puglit-dev.log"
-else
-  echo; echo "  Start the server:"
-  echo "   cd web && npm run dev          # development (http://localhost:3000)"
-  echo "   # or, on a GPU box:  bash infra/rebuild.sh   # build + serve + watchdog + seed"
 fi
 echo
-echo "   Build your own:   http://localhost:3000/generate"
-echo "   Brain dashboard:  http://localhost:3000/brain"
+echo "   🌐 Open the web:    $WEBURL/generate"
+echo "   🧠 Brain dashboard: $WEBURL/brain"
+[ -z "$PUB" ] && echo "      (remote browser? expose HTTP port 3000 on the pod, or re-run and accept the tunnel)"
+echo "   For production + a build watchdog:  bash infra/rebuild.sh"
 echo
