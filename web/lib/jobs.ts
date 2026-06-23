@@ -27,6 +27,15 @@ import { genTechnicalDocs, genBusinessDocs } from "@/lib/docs"
 import { dispatchCi, latestRun, getRun, runErrors, fixFiles, type CiError } from "@/lib/ci"
 import type { DomainConfig, Entity, FieldType } from "@/lib/domain-types"
 
+/** A free public tool/calculator: skip the SaaS-business steps (stakeholder review, tech writer, pitch
+ *  deck) — they add nothing to a calculator (they produced "0 docs") and the stakeholder loop hangs. */
+function isLeanJob(job: any): boolean {
+  const bp = job?.artifacts?.blueprint
+  const mon = job?.config?.monetization?.model
+  const hay = `${job?.config?.identity?.name || ""} ${bp?.summary || ""}`
+  return bp?.kind === "public" && mon === "free" && /calculadora|calculator|convert|conversor|herramienta|\btool\b|generador|generator|estimador|simulador|comparador/i.test(hay)
+}
+
 export type StepStatus = "pending" | "running" | "done" | "error"
 export interface Step { key: string; label: string; status: StepStatus; detail?: string; startedAt?: string; finishedAt?: string; attempts?: number }
 
@@ -282,6 +291,7 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
   // what makes the 3-iteration review actually COMPLETE on serverless instead of timing out.
   if (step.key === "stakeholder") {
     step.status = "running"; step.startedAt = new Date().toISOString(); job.artifacts = job.artifacts || {}
+    if (isLeanJob(job)) { step.detail = "saltado (herramienta simple — sin stakeholder)"; step.status = "done"; await persist(job, true); return job }
     try {
       if (job.config && job.artifacts.appFiles && job.artifacts.blueprint) {
         const state = job.artifacts.stakeholderState || initStakeholderState(3)
@@ -377,11 +387,13 @@ export async function advanceJob(id: string): Promise<JobRow | null> {
       // "engine" and "stakeholder" are handled re-entrantly BEFORE the switch (resumable
       // buildAdvance / stakeholderAdvance) — never here.
       case "docs-tech": {
+        if (isLeanJob(job)) { step.detail = "saltado (herramienta simple)"; break }
         if (job.config) job.artifacts.techDocs = await genTechnicalDocs(job.config, job.artifacts.contracts || "", job.artifacts.erd || "")
         step.detail = `${(job.artifacts.techDocs || []).length} docs técnicos`
         break
       }
       case "docs-biz": {
+        if (isLeanJob(job)) { step.detail = "saltado (herramienta simple)"; break }
         if (job.config) job.artifacts.bizDocs = await genBusinessDocs(job.config)
         const n = (job.artifacts.bizDocs || []).length
         const deck = (job.artifacts.bizDocs || []).some((f: any) => f.path.endsWith(".html"))
