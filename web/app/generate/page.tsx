@@ -119,6 +119,7 @@ export default function Generate() {
   const [progress, setProgress] = useState(0)
   const [creds, setCreds] = useState({ gaId: "", clarityId: "", supabaseUrl: "" })
   const [name, setName] = useState("")
+  const [desc, setDesc] = useState("")
   const [messages, setMessages] = useState<Msg[]>([])
   const [step, setStep] = useState<Step | null>(null)
   const [rated, setRated] = useState<boolean | null>(null)
@@ -321,12 +322,26 @@ export default function Generate() {
   }
 
   async function start() {
-    if (!name.trim()) return
+    if (!name.trim()) { setErr("Poné un título"); return }
     let refs = references
     if (!refs && refCount() > 0) refs = await ingestReferences()
     setPhase("chat")
-    const first: Msg[] = [{ role: "user", content: `My product is called "${name.trim()}".${refs ? " (I also gave references up front — use them.)" : ""}` }]
+    // first turn already carries the short description → the interviewer starts with context (fewer, sharper questions)
+    const first: Msg[] = [{ role: "user", content: `My product is called "${name.trim()}".${desc.trim() ? ` Here is what it does: ${desc.trim()}.` : ""}${refs ? " (I also gave references up front — use them.)" : ""}` }]
     setMessages(first); callInterview(first, refs)
+  }
+
+  // EXPRESS: no Q&A — launch the genetic tournament straight from the title + full description.
+  async function startExpress() {
+    if (!name.trim() || desc.trim().length < 20) { setErr("Para express: poné un título y una descripción completa (un par de frases con qué hace, entidades y acciones)."); return }
+    setBusy(true); setErr("")
+    try {
+      let refs = references
+      if (!refs && refCount() > 0) refs = await ingestReferences()
+      const d = await fetch("/api/genetic/tournament", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), what: desc.trim(), audience: "usuarios", monetization: "free", reference: refs || undefined }) }).then((r) => r.json())
+      if (d.jobId || d.ok) router.push("/campus")
+      else { setErr("No se pudo lanzar (¿server arriba?)."); setBusy(false) }
+    } catch { setErr("error de red"); setBusy(false) }
   }
 
   function answer(sendText: string, show: string, pickedColor?: string) {
@@ -436,10 +451,12 @@ export default function Generate() {
             </div>
           </div>
         )}
-        <h1 className="text-3xl font-extrabold">Let’s build your SaaS.</h1>
-        <p className="text-white/60 mt-2">It’s a quick chat — I’ll read your answers and suggest options as we go. First:</p>
-        <label className="block text-sm font-semibold text-white/80 mt-8 mb-2">What’s your product called?</label>
-        <input autoFocus className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/35 focus:border-violet focus:outline-none" placeholder="e.g. Mesa" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !showRefs && start()} />
+        <h1 className="text-3xl font-extrabold">Construyamos tu SaaS.</h1>
+        <p className="text-white/60 mt-2">Título + una descripción corta. Después podés profundizar en una charla, o ir <b className="text-white/80">express</b> y que lo construya ya.</p>
+        <label className="block text-sm font-semibold text-white/80 mt-7 mb-2">¿Cómo se llama?</label>
+        <input autoFocus className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/35 focus:border-violet focus:outline-none" placeholder="ej. Mesa" value={name} onChange={(e) => setName(e.target.value)} />
+        <label className="block text-sm font-semibold text-white/80 mt-5 mb-2">Describilo <span className="text-white/40 font-normal">— qué hace, a quién apunta, entidades/acciones clave</span></label>
+        <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={3} placeholder="ej: calculadora de kWh para Bogotá — compara cargar energía en casa (instalar) vs la red de la calle con costo de parking, con inputs de consumo y tarifas, y dice qué conviene." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/35 focus:border-violet focus:outline-none resize-y" />
 
         {/* Optional references — given up front, used to interpret the idea + suggest */}
         <div className="mt-5 rounded-xl border border-white/10 bg-ink2">
@@ -476,7 +493,12 @@ export default function Generate() {
           )}
         </div>
 
-        <button onClick={start} disabled={!name.trim() || refBusy} className="mt-5 px-6 py-3 rounded-xl font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{refBusy ? "Leyendo referencias…" : refCount() ? "Start con referencias →" : "Start →"}</button>
+        {err && <p className="mt-4 text-sm text-rose-400">{err}</p>}
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button onClick={start} disabled={refBusy || busy} className="px-6 py-3 rounded-xl font-bold text-white disabled:opacity-40" style={{ background: "var(--violet)" }}>{refBusy ? "Leyendo referencias…" : "💬 Charlar y profundizar →"}</button>
+          <button onClick={startExpress} disabled={refBusy || busy} className="px-6 py-3 rounded-xl font-bold text-violet-bright border border-violet/50 disabled:opacity-40">{busy ? "Lanzando…" : "⚡ Express — construir ya"}</button>
+        </div>
+        <p className="mt-2 text-xs text-white/40">Express salta las preguntas: usa tu descripción tal cual y arranca el torneo de una.</p>
       </main>
     )
   }
