@@ -31,7 +31,14 @@ nohup npm run start -- -p 3000 -H 0.0.0.0 > /tmp/puglit-prod.log 2>&1 &
 # #12 model residency: keep 2 models resident (A40 48GB fits a ~20GB 32B coder + a small model) so
 # tier switches (premium↔code↔cheap) don't pay a cold-start reload every call. Set =1 if VRAM OOMs.
 # #13 OLLAMA_NUM_PARALLEL=2 so the batched route/page generation (Promise.all) actually overlaps.
-nohup env OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}" OLLAMA_FLASH_ATTENTION=1 OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS:-2}" OLLAMA_NUM_PARALLEL="${OLLAMA_NUM_PARALLEL:-2}" ollama serve > /tmp/ollama.log 2>&1 &
+# OLLAMA_CONTEXT_LENGTH caps the KV cache: some models (deepseek-coder-v2) default to a 160K window
+# that balloons to ~99GB VRAM and crowds out the other teams' models → swapping. Puglit never needs
+# >32K, so cap it. On a big GPU (≥80GB) auto-bump residency so the 3 teams stay resident in parallel.
+VRAM_MB="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0)"
+[ "${VRAM_MB:-0}" -ge 80000 ] && DEF_LOADED=3 || DEF_LOADED=2
+nohup env OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}" OLLAMA_FLASH_ATTENTION=1 \
+  OLLAMA_MAX_LOADED_MODELS="${OLLAMA_MAX_LOADED_MODELS:-$DEF_LOADED}" OLLAMA_NUM_PARALLEL="${OLLAMA_NUM_PARALLEL:-2}" \
+  OLLAMA_CONTEXT_LENGTH="${OLLAMA_CONTEXT_LENGTH:-32768}" ollama serve > /tmp/ollama.log 2>&1 &
 
 # WATCHDOG: drive queued/running builds SERVER-SIDE every 45s, so a build keeps progressing
 # even when nobody has the /build page open (a build can take hours → the user must be able
