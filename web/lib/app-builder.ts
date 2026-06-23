@@ -328,6 +328,30 @@ function routeScore(code: string): number {
   return s + Math.min(15, code.length / 200)
 }
 
+// ── SDD CONTRACTS (boundary-first) ──────────────────────────────────────────────
+// The shared lib helpers that WILL exist in the final app (from the deterministic modules that match
+// this product) + their exported functions, declared BEFORE any route/page is generated — so the
+// dependent files IMPORT the real domain logic instead of reinventing it (the contract-break bug
+// class: bookings/reservations mismatch, a route re-implementing pricing, etc.).
+let activeHelperManifest = ""
+function helperManifest(config: DomainConfig, bp: Blueprint): string {
+  const detectors = [deterministicRentals, deterministicWallet, deterministicRag, deterministicSmartScraper]
+  const lines: string[] = []
+  for (const det of detectors) {
+    let res: { files: AppFile[] } | null = null
+    try { res = det(config, bp) as { files: AppFile[] } | null } catch { res = null }
+    if (!res?.files) continue
+    for (const f of res.files) {
+      if (!/^lib\/.+\.ts$/.test(f.path) || /\.(test|spec)\.ts$/.test(f.path)) continue
+      const ex = [...f.content.matchAll(/export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/g)].map((m) => m[1])
+      const ce = [...f.content.matchAll(/export\s+(?:const|class)\s+([A-Za-z0-9_]+)/g)].map((m) => m[1])
+      const all = [...new Set([...ex, ...ce])].filter(Boolean)
+      if (all.length) lines.push(`- import { ${all.join(", ")} } from "@/${f.path.replace(/\.ts$/, "")}"`)
+    }
+  }
+  return lines.length ? `AVAILABLE SHARED HELPERS — already built for THIS product. IMPORT and USE these; do NOT reimplement the domain logic they cover:\n${lines.join("\n")}` : ""
+}
+
 async function genRouteFile(config: DomainConfig, bp: Blueprint, rf: RouteFile): Promise<AppFile | null> {
   const ops = rf.specs.map((s) => `• ${s.methods.join("/")} — ${s.purpose}\n  Logic: ${s.logic}`).join("\n")
   // RETRIEVAL of a known-good route that built+ran (raise the floor without a better model)
@@ -359,7 +383,7 @@ PRODUCTION-GRADE BACKEND STANDARDS (every handler):
 
 DATABASE TABLES (already created — use these EXACT names/columns):
 ${tablesDoc(bp)}
-${avoid ? `\n${avoid}\n` : ""}
+${activeHelperManifest ? `\n${activeHelperManifest}\n` : ""}${avoid ? `\n${avoid}\n` : ""}
 Return ONLY JSON: {"code":"<the full contents of ${rf.path}>"}` },
     { role: "user", content: `File: ${rf.path}\nMethods to implement: ${[...rf.methods].join(", ")}\nOperations:\n${ops}${exemplar}` },
   ], { model: MODELS.code, temperature: 0.2 })) as { code?: string }
@@ -442,7 +466,7 @@ ${routeList}
 ${shapes ? `\nAPI RESPONSE SHAPES — the data you will receive (consume these EXACT field names):\n${shapes}\n` : ""}
 DATA BINDING — the rows you render come from these DB tables; read each row's fields by their EXACT snake_case column names below (e.g. \`m.home_team\`, \`m.score_home\`, \`m.match_date\`). Do NOT invent camelCase fields:
 ${tablesDoc(bp)}
-DEFENSIVE RENDERING (critical — a contract mismatch must NEVER crash the page):
+${activeHelperManifest ? `\n${activeHelperManifest}\n` : ""}DEFENSIVE RENDERING (critical — a contract mismatch must NEVER crash the page):
 - List GET endpoints return a BARE ARRAY. After fetch+json, normalize before mapping: \`const list = Array.isArray(data) ? data : (data.items ?? data.rows ?? [])\`. NEVER call .map on the raw response.
 - Access nested fields with optional chaining + fallbacks (\`x?.field ?? ""\`); never an unguarded \`x.a.b\`. Guard numbers before .toFixed (\`(x?.n ?? 0).toFixed(2)\`).
 - An image with no URL → a neutral placeholder, not a crash.${bp.kind === "accounts" ? "\n- AUTH GATE: this product needs a login. If ANY data fetch returns status 401, immediately `router.replace(\"/login\")` (import useRouter from next/navigation). Pages /login and /register exist." : ""}
@@ -1354,11 +1378,14 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
   const schemaSql = sortTablesByDeps(bp.tables).map((t) => t.ddl).join("\n\n")
   if (s.phase === "brief") {
     const brief = await genDesignBrief(config, bp).catch(() => "")
+    // SDD CONTRACTS: declare the shared helpers (the domain contracts) BEFORE generating any code, so
+    // routes/pages import them instead of reinventing the logic. The schema is already dep-sorted above.
+    activeHelperManifest = helperManifest(config, bp)
     const files: AppFile[] = []
     if (schemaSql) files.push({ path: "sql/app.sql", content: `-- ${config.identity.name} — bespoke app schema (run after the spine's 001/002/003).\n\n${schemaSql}\n` })
     if (brief) files.push({ path: "docs/DESIGN.md", content: `# Design brief — ${config.identity.name}\n\n${brief}\n` })
     s.brief = brief; s.files = files; s.ri = 0; s.pi = 0; s.phase = "routes"
-    return { state: s, done: false, detail: "diseño + esquema listos" }
+    return { state: s, done: false, detail: `diseño + esquema listos${activeHelperManifest ? " · contratos de helpers declarados" : ""}` }
   }
   // #13 parallelize generation: produce a BATCH of independent files concurrently per advance.
   const BATCH = Math.max(1, Number(process.env.PUGLIT_GEN_BATCH || 3))
