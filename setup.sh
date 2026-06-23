@@ -60,6 +60,10 @@ if [ "${VRAM_GB:-0}" -ge 40 ] || { [ "$ARCH" = "arm64" ] && [ "${RAM_GB:-0}" -ge
 elif [ "${VRAM_GB:-0}" -ge 16 ] || [ "${RAM_GB:-0}" -ge 32 ]; then TIER=MID; fi
 printf "\n  System classified as: \033[1;36m%s-END\033[0m\n" "$TIER"
 
+# Keep models on the big volume AND on the SAME path the server (infra/rebuild.sh) uses — otherwise
+# setup.sh pulls to ~/.ollama but the server looks in /workspace/.ollama → "model not found".
+[ -d /workspace ] && export OLLAMA_MODELS="${OLLAMA_MODELS:-/workspace/.ollama}"
+
 # ── Linux prerequisites (so Ollama/Postgres installs don't fail mid-way) ───────
 if [ "$OS" = "Linux" ] && command -v apt-get >/dev/null 2>&1; then
   say "Installing base prerequisites (zstd, curl, jq, build tools)…"
