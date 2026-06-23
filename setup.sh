@@ -141,19 +141,22 @@ fi
 # ── 6. Postgres + schema + deps ────────────────────────────────────────────────
 say "6/7  Database + dependencies"
 # Linux bootstrap: install Node 20 + Postgres if missing (a bare Ubuntu pod has neither).
+# run a psql command as the postgres OS user (peer auth — works on a fresh install with no TCP password yet)
+pg(){ if [ "$(id -u)" -eq 0 ]; then su postgres -c "$1"; else $SUDO -u postgres bash -lc "$1"; fi; }
 if [ "$OS" = "Linux" ] && command -v apt-get >/dev/null 2>&1; then
   if [ "$HAS_NODE" = no ]; then warn "Installing Node 20…"; curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash - >/dev/null 2>&1; $SUDO apt-get install -y nodejs >/dev/null 2>&1; command -v node >/dev/null 2>&1 && HAS_NODE=yes && ok "node $(node -v)"; fi
   if [ "$HAS_PSQL" = no ] && [ "$HAS_DOCKER" = no ]; then
     warn "Installing Postgres…"; $SUDO apt-get install -y postgresql postgresql-contrib >/dev/null 2>&1
-    ($SUDO service postgresql start || $SUDO pg_ctlcluster "$(ls /etc/postgresql 2>/dev/null | sort -n | tail -1)" main start) >/dev/null 2>&1
-    $SUDO -u postgres psql -tc "ALTER USER postgres PASSWORD 'postgres';" >/dev/null 2>&1
     command -v psql >/dev/null 2>&1 && HAS_PSQL=yes && ok "postgres installed"
   fi
 fi
 if [ "$HAS_PSQL" = yes ]; then
-  PGPASSWORD=postgres psql -h localhost -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='puglit'" 2>/dev/null | grep -q 1 \
-    || PGPASSWORD=postgres createdb -h localhost -U postgres puglit 2>/dev/null || warn "couldn't create the 'puglit' DB (create it manually)"
-  PGPASSWORD=postgres psql -h localhost -U postgres -d puglit -f "$WEB/sql/genetic.sql" >/dev/null 2>&1 && ok "schema loaded (genetic.sql)" || warn "run: psql -d puglit -f web/sql/genetic.sql"
+  # ensure the server is running (containers have no systemd → service / pg_ctlcluster)
+  ($SUDO service postgresql start || $SUDO pg_ctlcluster "$(ls /etc/postgresql 2>/dev/null | sort -n | tail -1)" main start) >/dev/null 2>&1; sleep 2
+  # set the password + create the DB via PEER auth, then the app's TCP password auth works
+  pg "psql -tc \"ALTER USER postgres PASSWORD 'postgres';\"" >/dev/null 2>&1
+  pg "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='puglit'\" | grep -q 1 || createdb puglit" >/dev/null 2>&1 && ok "database 'puglit' ready" || warn "couldn't create the DB"
+  ( cat "$WEB/sql/genetic.sql" | pg "psql -d puglit -q" ) >/dev/null 2>&1 && ok "schema loaded (genetic.sql)" || warn "schema: run  sudo -u postgres psql -d puglit -f web/sql/genetic.sql"
 elif [ "$HAS_DOCKER" = yes ]; then
   if yn "No local Postgres. Start one with Docker (pgvector)?" y; then
     docker run -d --name puglit-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=puglit -p 5432:5432 pgvector/pgvector:pg16 >/dev/null 2>&1 && ok "Postgres+pgvector in Docker (:5432)" && sleep 4 \
