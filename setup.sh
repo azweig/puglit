@@ -216,11 +216,9 @@ if [ "$HAS_NODE" = yes ] && yn "Build a quick DEMO now? (a simple calculator —
     ( cd "$WEB" && nohup npm run dev > /tmp/puglit-dev.log 2>&1 & )
     printf "  waiting for the server"; for i in $(seq 1 60); do curl -s -o /dev/null localhost:3000/api/doctor 2>/dev/null && break; printf "."; sleep 2; done; echo " up"
   fi
-  say "Demo: the swarm builds a calculator (watch the 3 teams design → judge → build)…"
-  bash "$ROOT/infra/test-tournament.sh" "DemoCalc" "a simple calculator: add/subtract/multiply/divide, calculation history, memory M+/M-/MR, keyboard + mouse input, clear, division-by-zero handling" \
+  say "Demo: the swarm DESIGNS + BUILDS a calculator end-to-end (a few minutes)…"
+  bash "$ROOT/infra/demo.sh" "DemoCalc" "a simple calculator: add/subtract/multiply/divide, calculation history, memory M+/M-/MR, keyboard + mouse input, clear, division-by-zero handling" \
     || warn "demo had an issue — logs in /tmp/puglit-dev.log"
-  echo
-  ok "Demo done. Open the build above, or http://localhost:3000/projects"
 else
   echo; echo "  Start the server:"
   echo "   cd web && npm run dev          # development (http://localhost:3000)"
