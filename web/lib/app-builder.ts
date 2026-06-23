@@ -348,6 +348,10 @@ function routeScore(code: string): number {
 // class: bookings/reservations mismatch, a route re-implementing pricing, etc.).
 let activeHelperManifest = ""
 function helperManifest(config: DomainConfig, bp: Blueprint): string {
+  // a lean free public tool gets no modules injected → don't declare any "available helper" or the
+  // model would import a lib (e.g. @/lib/rag) that is never injected → broken import.
+  const _mon = (config.monetization as { model?: string } | undefined)?.model || "free"
+  if (bp.kind === "public" && _mon === "free" && /calculadora|calculator|convert|conversor|herramienta|\btool\b|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`)) return ""
   const detectors = [deterministicRentals, deterministicWallet, deterministicRag, deterministicSmartScraper]
   const lines: string[] = []
   for (const det of detectors) {
@@ -1445,6 +1449,12 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     if (seed) { files.push(seed); const ingest = research ? await genIngestionCron(config, bp, research).catch(() => null) : null; files.push(ingest || refreshCron(config)) }
     // CAPABILITY PLANNER (crítica: keyword injection is fragile) — the LLM names the capabilities
     // the product needs from the catalog; we append them to the detection text so the deterministic
+    // A FREE PUBLIC TOOL (calculator/converter/…) needs NONE of the optional modules — skip the whole
+    // injection block so a simple calculator never gets rag/billing/admin/location/llm/etc. bolted on
+    // (those match on loose keywords like "recomendaciones" → RAG, "Bogotá" → maps).
+    const _mon = (config.monetization as { model?: string } | undefined)?.model || "free"
+    const leanTool = bp.kind === "public" && _mon === "free" && /calculadora|calculator|convert|conversor|herramienta|\btool\b|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`)
+    if (!leanTool) {
     // injectors below also fire for capabilities the keywords would miss (e.g. "ERP hospitalario").
     const planned = await planCapabilities(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`, await moduleCatalog().catch(() => "")).catch(() => [] as string[])
     if (planned.length) bp.summary += ` [capabilities: ${planned.join(" ")}]`
@@ -1581,6 +1591,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // CUSTOM modules the swarm built in past projects → reuse their code if this product matches.
     const need = `${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`
     for (const cm of await findCustomModulesFor(need).catch(() => [])) for (const f of cm.files || []) if (!files.some((x) => x.path === f.path)) files.push(f)
+    } // end optional-module injection (entirely skipped for a lean free public tool)
     // GROW THE GENOME: the curator reviews+registers the reusable connectors the swarm WROTE
     // (harvest), AND a gap-analyst builds the reusable modules the swarm WISHED existed (wishlist) →
     // the registry grows from both what was built and what was missing. All 'experimental' until promoted.
