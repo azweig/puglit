@@ -18,8 +18,9 @@ curl -s -o /dev/null "$B/api/doctor" 2>/dev/null || { err "server not up at $B (
 
 # ── 1. DESIGN — the tournament ──────────────────────────────────────────────────
 printf "\n\033[1;35m▶ 1/2  Designing — 3 teams compete\033[0m\n"
-JID="$(curl -s -X POST "$B/api/genetic/tournament" -H 'content-type: application/json' \
-  -d "{\"name\":\"$NAME\",\"what\":\"$WHAT\",\"audience\":\"users\",\"monetization\":\"free\"}" | jq -r '.jobId // empty')"
+# jq-built payload (safe with quotes/newlines in the description) + optional COLOR=#RRGGBB
+PAYLOAD="$(jq -nc --arg n "$NAME" --arg w "$WHAT" --arg c "${COLOR:-}" '{name:$n, what:$w, audience:"users", monetization:"free"} + (if $c != "" then {color:$c} else {} end)')"
+JID="$(curl -s -X POST "$B/api/genetic/tournament" -H 'content-type: application/json' -d "$PAYLOAD" | jq -r '.jobId // empty')"
 [ -z "$JID" ] && { err "couldn't launch tournament"; exit 1; }
 while :; do
   S="$(curl -s "$B/api/genetic/tournament?status=$JID")"
