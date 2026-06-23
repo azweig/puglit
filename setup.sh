@@ -133,6 +133,17 @@ fi
 
 # ── 6. Postgres + schema + deps ────────────────────────────────────────────────
 say "6/7  Base de datos + dependencias"
+# Linux bootstrap: install Node 20 + Postgres if missing (a bare Ubuntu pod has neither).
+if [ "$OS" = "Linux" ] && command -v apt-get >/dev/null 2>&1; then
+  SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
+  if [ "$HAS_NODE" = no ]; then warn "Instalando Node 20…"; curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash - >/dev/null 2>&1; $SUDO apt-get install -y nodejs >/dev/null 2>&1; command -v node >/dev/null 2>&1 && HAS_NODE=yes && ok "node $(node -v)"; fi
+  if [ "$HAS_PSQL" = no ] && [ "$HAS_DOCKER" = no ]; then
+    warn "Instalando Postgres…"; $SUDO apt-get update -y >/dev/null 2>&1; $SUDO apt-get install -y postgresql postgresql-contrib jq >/dev/null 2>&1
+    ($SUDO service postgresql start || $SUDO pg_ctlcluster "$(ls /etc/postgresql 2>/dev/null | sort -n | tail -1)" main start) >/dev/null 2>&1
+    $SUDO -u postgres psql -tc "ALTER USER postgres PASSWORD 'postgres';" >/dev/null 2>&1
+    command -v psql >/dev/null 2>&1 && HAS_PSQL=yes && ok "postgres instalado"
+  fi
+fi
 if [ "$HAS_PSQL" = yes ]; then
   PGPASSWORD=postgres psql -h localhost -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='puglit'" 2>/dev/null | grep -q 1 \
     || PGPASSWORD=postgres createdb -h localhost -U postgres puglit 2>/dev/null || warn "no pude crear la DB 'puglit' (creala a mano)"
