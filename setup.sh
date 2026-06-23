@@ -181,10 +181,26 @@ PGPASSWORD=postgres psql -h localhost -U postgres -d puglit -tc "SELECT 1" >/dev
 [ -f "$ENV_FILE" ] && ok ".env.local present" || err ".env.local missing"
 
 echo
-printf "\033[1;32m✅ Puglit is ready.\033[0m  Start the server:\n\n"
-echo "   cd web && npm run dev          # development (http://localhost:3000)"
-echo "   # or, on a GPU box:  bash infra/rebuild.sh   # build + serve + watchdog + seed"
+printf "\033[1;32m✅ Puglit is ready.\033[0m\n"
+
+# ── Optional: build a demo app right now (a calculator) — the wow / end-to-end smoke test ──
+if [ "$HAS_NODE" = yes ] && yn "Build a quick DEMO now? (a simple calculator — the swarm designs + builds it live, a few minutes)" y; then
+  if ! curl -s -o /dev/null localhost:3000/api/doctor 2>/dev/null; then
+    say "Starting the dev server…"
+    ( cd "$WEB" && nohup npm run dev > /tmp/puglit-dev.log 2>&1 & )
+    printf "  waiting for the server"; for i in $(seq 1 60); do curl -s -o /dev/null localhost:3000/api/doctor 2>/dev/null && break; printf "."; sleep 2; done; echo " up"
+  fi
+  say "Demo: the swarm builds a calculator (watch the 3 teams design → judge → build)…"
+  bash "$ROOT/infra/test-tournament.sh" "DemoCalc" "a simple calculator: add/subtract/multiply/divide, calculation history, memory M+/M-/MR, keyboard + mouse input, clear, division-by-zero handling" \
+    || warn "demo had an issue — logs in /tmp/puglit-dev.log"
+  echo
+  ok "Demo done. Open the build above, or http://localhost:3000/projects"
+else
+  echo; echo "  Start the server:"
+  echo "   cd web && npm run dev          # development (http://localhost:3000)"
+  echo "   # or, on a GPU box:  bash infra/rebuild.sh   # build + serve + watchdog + seed"
+fi
 echo
-echo "   Then open  http://localhost:3000/generate  and build your first SaaS."
+echo "   Build your own:   http://localhost:3000/generate"
 echo "   Brain dashboard:  http://localhost:3000/brain"
 echo
