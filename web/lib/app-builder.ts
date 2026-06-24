@@ -73,6 +73,7 @@ import { deterministicShipping } from "@/lib/shipping-module"
 import { deterministicFlights } from "@/lib/flights-module"
 import { deterministicStats } from "@/lib/stats-module"
 import { deterministicCharts } from "@/lib/charts-module"
+import { deterministicHarvestedUtils } from "@/lib/harvested-utils-module"
 import { deterministicCrm } from "@/lib/crm-module"
 import { deterministicHelpdesk } from "@/lib/helpdesk-module"
 import { deterministicMarketing } from "@/lib/marketing-module"
@@ -1550,6 +1551,7 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     const fly = deterministicFlights(config, bp); if (fly) pushFiles(fly.files)
     const st = deterministicStats(config, bp); if (st) pushFiles(st.files)
     const ch = deterministicCharts(config, bp); if (ch) pushFiles(ch.files)
+    const hu = deterministicHarvestedUtils(config, bp); if (hu) pushFiles(hu.files) // swarm-harvested: slugify/pagination/csv/ics
     // ── enterprise / retail / ops connectors (gateway-backed thin clients + a few PG-native) ──
     const crm = deterministicCrm(config, bp); if (crm) pushFiles(crm.files)
     const hd = deterministicHelpdesk(config, bp); if (hd) pushFiles(hd.files)
