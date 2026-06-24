@@ -26,7 +26,7 @@ Decide: needsAuth (does each user need their OWN private data behind login?), ne
 DEFAULT TO THE SIMPLER TIER when uncertain:
 - "platform" ONLY if it clearly has MULTIPLE user-generated entities with relationships (marketplace, social network, booking/rental, ERP) OR payments + roles.
 - "app" ONLY if each user genuinely saves PRIVATE data across sessions behind a login (a personal tracker with accounts, a CRUD with user data).
-- EVERYTHING ELSE is "tool": any single interactive screen, any stateless utility, any calculator/converter/generator/viewer/timer/scanner — even if it fetches a public API or has a few inputs and a chart. A tool can fetch public data and still be a "tool". Most ideas are tools.
+- EVERYTHING ELSE is "tool": any single interactive screen, any stateless utility, any calculator/converter/generator/viewer/timer/scanner — even if it fetches a public API, has a few inputs, a chart, OR shows MANY outputs at once. Multiple OUTPUTS/columns/results are NOT multiple entities: a converter that turns one currency into 7 currencies simultaneously (ARS/PEN/USD/COP/MXN/CLP/BOB) is ONE "tool" with one screen — NOT a platform. A dashboard that just displays computed values is a tool. A tool can fetch public data and still be a "tool". Most ideas are tools.
 Be conservative: do NOT inflate. If you can imagine the whole thing as one page anyone opens and uses immediately with no signup, it is a "tool".
 Return ONLY JSON: {"complexity":"tool|app|platform","needsAuth":bool,"needsPayments":bool,"needsExternalData":bool,"estTables":int,"oneScreen":bool,"reasoning":"one short sentence in Spanish explaining the call"}` },
     { role: "user", content: `Name: ${name}\nWhat: ${description}` },
