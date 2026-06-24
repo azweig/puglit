@@ -33,7 +33,13 @@ Build the ACTUAL working thing the brief describes, end-to-end, client-side. Use
 - A calculator/converter → <input> fields + a <script> with the REAL formula that recomputes live as the user types, the result + a clear verdict, and (if comparing over time) an inline <svg> chart that ACTUALLY plots the data: build the series, map to coords with ~40px padding, draw visible <polyline>s (build the points string — never empty axes), mark any crossover/break-even.
 - A CAMERA app → getUserMedia({video}) into a <video>, a <canvas> to grab frames, a capture button, and the live processing/recognition + result display.
 - OFFLINE / PWA → register an inline service worker (Blob URL) that caches the shell, use localStorage/IndexedDB for data, and a web app manifest; fetch public APIs (e.g. PokeAPI) and CACHE the responses so it works with no network after first load. Make it installable.
-- Match the requested DESIGN/skin EXACTLY (e.g. a Pokédex: red device body, screen, lights, d-pad/buttons). Use the EXACT brand color. Mobile-first, responsive, real visual polish, good contrast.
+- Match the requested DESIGN/skin EXACTLY (e.g. a Pokédex: red device body, screen, lights, d-pad/buttons). Use the EXACT brand color.
+- PREMIUM DESIGN BAR (treat as a hard spec, inline CSS): a real, polished product — NOT default browser styling. Specifically:
+  · A centered card/app surface (max-width ~440px on a soft page background or subtle gradient), generous padding (~24-32px), rounded corners (16-20px), layered shadows (a soft large shadow), 1px hairline border.
+  · CONTRAST AA: dark ink text on light surfaces; never gray-on-gray or invisible text. Inputs have a visible border, padding (~12px), rounded, and a focus state (ring/border in the brand color).
+  · Type hierarchy: a bold title (~24-28px), readable body, small muted labels (~13px, 60% opacity). Consistent 8px spacing rhythm.
+  · The primary result is BIG and prominent (large number/verdict in the brand color). Buttons: filled brand color, white text, hover + active states, rounded.
+  · System font stack, mobile-first (works at 360px wide), smooth transitions (0.15s). No ugly default `<input>`/`<button>`/`<select>` — style every one.
 IMPLEMENT REAL LOGIC, not stubs or placeholders. If something genuinely needs a model that can't run purely client-side (e.g. specific image recognition), do the best honest approximation (a generic TF.js classifier from a CDN, or capture→manual-confirm) and LABEL it clearly as "demo/aproximado" — NEVER fake a result silently.
 Everything inline (CSS in <style>, JS in <script>); one file that opens and works. External CDNs ONLY if truly required (e.g. a TF.js model). Use the product's language.
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
