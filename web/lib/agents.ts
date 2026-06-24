@@ -41,7 +41,7 @@ export async function genVerifiedEngine(config: DomainConfig, contracts: string,
   const first = (await chatJSON([
     { role: "system", content: `You are the Engine Engineer. Generate the product's UNIQUE core feature as ONE Next.js 16 route handler file, conforming to the CONTRACTS and CONVENTIONS. Real, working logic (no TODOs). Return ONLY JSON: {"path":"app/api/.../route.ts","code":"<full file>"}.` },
     { role: "user", content: brief },
-  ], { model: "gpt-4o", temperature: 0.3 })) as { path?: string; code?: string }
+  ], { model: MODELS.code, temperature: 0.3 })) as { path?: string; code?: string }
 
   let path = String(first.path || "app/api/engine/route.ts")
   let code = String(first.code || "")
@@ -53,7 +53,7 @@ export async function genVerifiedEngine(config: DomainConfig, contracts: string,
     const v = (await chatJSON([
       { role: "system", content: `You are the Verifier. Review the file against the CONTRACTS and CONVENTIONS. Return ONLY JSON {"findings":[{"severity":"BLOCKING"|"ADVISORY","desc":string}]}. BLOCKING = would not compile, wrong/invalid imports, violates the contract, missing auth where required, undefined references. ADVISORY = style, edge cases, perf, maintainability. Be precise.` },
       { role: "user", content: `CONTRACTS:\n${contracts}\n\nCONVENTIONS:\n${CONVENTIONS}\n\nFILE ${path}:\n${code}` },
-    ], { model: "gpt-4o", temperature: 0 })) as { findings?: Finding[] }
+    ], { model: MODELS.code, temperature: 0 })) as { findings?: Finding[] }
     findings = Array.isArray(v.findings) ? v.findings : []
     const blocking = findings.filter((f) => f.severity === "BLOCKING")
     if (blocking.length === 0) break
@@ -62,7 +62,7 @@ export async function genVerifiedEngine(config: DomainConfig, contracts: string,
     const fix = (await chatJSON([
       { role: "system", content: `You are the Fixer. Apply MINIMAL surgical fixes for ONLY these BLOCKING findings, without breaking the CONTRACTS. Return ONLY JSON {"code":"<full corrected file>"}.` },
       { role: "user", content: `BLOCKING:\n${blocking.map((b) => "- " + b.desc).join("\n")}\n\nCONVENTIONS:\n${CONVENTIONS}\n\nFILE:\n${code}` },
-    ], { model: "gpt-4o", temperature: 0.1 })) as { code?: string }
+    ], { model: MODELS.code, temperature: 0.1 })) as { code?: string }
     if (fix.code) code = String(fix.code)
   }
 

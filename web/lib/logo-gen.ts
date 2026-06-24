@@ -3,7 +3,7 @@
  * Generates a REAL vector logo MARK (an SVG icon, not just letters) per product,
  * from the logo concept + palette. Embedded in the landing and shown in the preview.
  */
-import { chatText } from "@/lib/openai"
+import { chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig } from "@/lib/domain-types"
 
 const SYSTEM = `You are a top brand logo designer. Design ONE clean, modern, flat VECTOR logo MARK (an icon — NOT text, NOT letters) as a single self-contained SVG.
@@ -23,7 +23,7 @@ export async function generateLogoSvg(config: DomainConfig): Promise<string | nu
     const out = await chatText([
       { role: "system", content: SYSTEM },
       { role: "user", content: `Brand: ${id.name}. Sector hint: ${typeof id.tagline === "string" ? id.tagline : Object.values(id.tagline)[0]}. Concept: ${concept}. Primary: ${primary}. Accent: ${accent}.` },
-    ], { model: "gpt-4o", temperature: 0.6 })
+    ], { model: MODELS.code, temperature: 0.6 })
     let svg = out.trim().replace(/^```(svg|html|xml)?\s*/i, "").replace(/```\s*$/i, "").trim()
     const i = svg.indexOf("<svg"), j = svg.lastIndexOf("</svg>")
     if (i === -1 || j === -1) return null

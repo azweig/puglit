@@ -5,7 +5,7 @@
  *  - Business Strategist → docs/business/* (SWOT/FODA, Lean Canvas, competitors, GTM,
  *    pricing, market sizing) + a YC-style pitch deck (self-contained HTML, print-to-PDF).
  */
-import { chatJSON, chatText, aiConfigured } from "@/lib/openai"
+import { chatJSON, chatText, aiConfigured, MODELS } from "@/lib/openai"
 import type { DomainConfig, Localized } from "@/lib/domain-types"
 
 function loc(v: Localized | undefined, lang: string): string {
@@ -51,7 +51,7 @@ export async function genTechnicalDocs(config: DomainConfig, contracts: string, 
     const out = (await chatJSON([
       { role: "system", content: TECH_SYS },
       { role: "user", content: `Language: ${lang}. Product: ${config.identity.name} — ${loc(config.identity.tagline, lang)}. Entities: ${ents}. Modules: ${Object.keys(config.modules || {}).filter((k) => (config.modules as any)[k]).join(", ")}.\nCONTRACTS:\n${contracts}\nER (Mermaid):\n${erd}` },
-    ], { model: "gpt-4o", temperature: 0.3 })) as { files?: any[] }
+    ], { model: MODELS.balanced, temperature: 0.3 })) as { files?: any[] }
     return under("docs/technical/", out.files || [])
   } catch { return [] }
 }
@@ -62,7 +62,7 @@ export async function genBusinessDocs(config: DomainConfig): Promise<File[]> {
   const ctx = `Language: ${lang}. Product: ${config.identity.name} — ${loc(config.identity.tagline, lang)}. What: ${config.engine?.description || ""}. Monetization: ${config.monetization?.model}.`
   const files: File[] = []
   try {
-    const out = (await chatJSON([{ role: "system", content: BIZ_SYS }, { role: "user", content: ctx }], { model: "gpt-4o", temperature: 0.5 })) as { files?: any[] }
+    const out = (await chatJSON([{ role: "system", content: BIZ_SYS }, { role: "user", content: ctx }], { model: MODELS.balanced, temperature: 0.5 })) as { files?: any[] }
     files.push(...under("docs/business/", out.files || []))
   } catch { /* analysis optional */ }
   try {
@@ -70,7 +70,7 @@ export async function genBusinessDocs(config: DomainConfig): Promise<File[]> {
     const deck = await chatText([
       { role: "system", content: `You are a pitch-deck designer. Produce a self-contained, print-to-PDF, Y-Combinator-style PITCH DECK as ONE HTML document (inline CSS, no JS). One <section> per slide (full-viewport), in this order: Cover, Problem, Solution, Product (how it works), Market (TAM/SAM/SOM), Business model, Go-to-market, Competition, Traction/roadmap, Team, The Ask. Use the brand color ${brand}. Punchy, investor copy in the product's language. Output ONLY the HTML starting with <!DOCTYPE html>.` },
       { role: "user", content: ctx },
-    ], { model: "gpt-4o", temperature: 0.6 })
+    ], { model: MODELS.balanced, temperature: 0.6 })
     let html = deck.trim().replace(/^```html\s*/i, "").replace(/```\s*$/i, "").trim()
     if (html.toLowerCase().includes("<html") || html.toLowerCase().includes("<!doctype")) files.push({ path: "docs/business/pitch-deck.html", content: html.slice(0, 120_000) })
   } catch { /* deck optional */ }
