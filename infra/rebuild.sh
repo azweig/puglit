@@ -25,6 +25,8 @@ sleep 3
 rm -rf .next
 npm run build > /tmp/build.log 2>&1
 echo "BUILD_DONE rc=$?" >> /tmp/build.log
+# stamp the exact commit this build came from → /api/doctor reports it (verify the rebuild took effect)
+git -C "$ROOT" rev-parse --short HEAD > .build-stamp 2>/dev/null || echo unknown > .build-stamp
 
 # serve prod (background) + ollama council with one-model-at-a-time (no OOM on swaps)
 nohup npm run start -- -p 3000 -H 0.0.0.0 > /tmp/puglit-prod.log 2>&1 &
@@ -61,4 +63,4 @@ done
 # Idempotent (preserves XP/level/diary). This makes "just rebuild" actually create the schema
 # so login + per-user projects work without extra manual steps.
 SEED=$(curl -s -X POST localhost:3000/api/genetic/seed 2>/dev/null | head -c 120)
-echo "SERVE_READY http=$code · watchdog ON · seed: $SEED" | tee -a /tmp/rebuild.log
+echo "SERVE_READY http=$code · build=$(cat .build-stamp 2>/dev/null) · watchdog ON · seed: $SEED" | tee -a /tmp/rebuild.log
