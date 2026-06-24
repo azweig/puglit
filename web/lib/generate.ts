@@ -123,7 +123,8 @@ export function generateConfig(a: IntakeAnswers): DomainConfig {
     },
     landing: {
       hero: {
-        headline: benefits[0] || what,
+        // headline must be SHORT — never dump the whole description (express passes a long paragraph as `what`).
+        headline: (benefits[0] || name || what).split(/[.:]/)[0].split(/\s+/).slice(0, 9).join(" "),
         subheadline: what,
         ctaPrimary: L.cta,
         ctaSecondary: L.cta2,
