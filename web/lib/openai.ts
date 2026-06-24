@@ -57,6 +57,10 @@ function providerModels(p: string): { premium: string; balanced: string; cheap: 
   }
 }
 const DEFAULTS = providerModels(DEFAULT_PROVIDER)
+// A hung model call (ollama loading a model that never returns) would freeze the whole pipeline
+// because a never-resolving fetch is not an "error". Abort after this long → the retry catch treats it
+// as transient and retries. Generous (a cold 32B + long generation is fine); only catches true hangs.
+const LLM_TIMEOUT_MS = Number(process.env.PUGLIT_LLM_TIMEOUT || 240000)
 
 export const MODELS = {
   /** Architecture, blueprint, discovery, review — reasoning quality is decisive. */
@@ -150,6 +154,7 @@ async function callAnthropic(messages: ChatMessage[], opts: { model: string; tem
     method: "POST",
     headers: { "x-api-key": r.key, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`anthropic_${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`)
   const data = await res.json()
@@ -176,7 +181,7 @@ async function callOllamaSchema(messages: ChatMessage[], opts: { model: string; 
     format: opts.schema,
     options: wantsTemperature(opts.model) ? { temperature: opts.temperature ?? 0.2 } : {},
   }
-  const res = await fetch(`${host}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  const res = await fetch(`${host}/api/chat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(LLM_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`ollama_${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`)
   const data = await res.json()
   const content = data?.message?.content
@@ -193,7 +198,7 @@ async function callOpenAICompat(messages: ChatMessage[], opts: { model: string; 
   else if (opts.json && r.def.supportsJsonMode) body.response_format = { type: "json_object" }
   const headers: Record<string, string> = { "Content-Type": "application/json" }
   if (r.key) headers.Authorization = `Bearer ${r.key}`
-  const res = await fetch(`${r.baseURL}/chat/completions`, { method: "POST", headers, body: JSON.stringify(body) })
+  const res = await fetch(`${r.baseURL}/chat/completions`, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(LLM_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`llm_${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`)
   const data = await res.json()
   const content = data?.choices?.[0]?.message?.content
