@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
       try {
         // TRIAGE FIRST: size the effort before the 3 teams compete (a simple tool stays simple/fast).
         const triage = await triageComplexity(a.name!, (a as { what?: string }).what || "").catch(() => null)
+        if (triage) console.log(`[triage] "${a.name}" → ${triage.complexity} · oneScreen=${triage.oneScreen} · auth=${triage.needsAuth} · pay=${triage.needsPayments} · ${triage.reasoning}`)
         if (triage) {
           ;(config as { triage?: typeof triage }).triage = triage
           ;(a as { triage?: typeof triage }).triage = triage
