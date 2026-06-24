@@ -27,15 +27,19 @@ export default async function PreviewPage({ params }: { params: Promise<{ slug: 
     return <iframe srcDoc={project.landing_html} sandbox="allow-same-origin allow-popups allow-top-navigation-by-user-activation" className="w-screen h-screen border-0" title={project.name} />
   }
 
+  // a FREE product has no accounts → never prompt to register ("Empezar gratis" → signup makes no sense).
+  const isFree = (project.config as { monetization?: { model?: string } })?.monetization?.model === "free"
   return (
     <>
       <Landing config={project.config} />
-      <DemoAuthOverlay
-        slug={project.slug}
-        productName={project.config.identity.name}
-        entity={project.config.entities?.[0]?.plural || project.config.entities?.[0]?.name}
-        color={project.config.identity.brandColor}
-      />
+      {!isFree && (
+        <DemoAuthOverlay
+          slug={project.slug}
+          productName={project.config.identity.name}
+          entity={project.config.entities?.[0]?.plural || project.config.entities?.[0]?.name}
+          color={project.config.identity.brandColor}
+        />
+      )}
     </>
   )
 }

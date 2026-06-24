@@ -5,7 +5,7 @@
  * layout/visual style fitting THIS product's sector, using its real palette,
  * logo monogram, tagline and value props. Rendered in a sandboxed iframe.
  */
-import { chatText } from "@/lib/openai"
+import { chatText, MODELS } from "@/lib/openai"
 import type { DomainConfig, Localized } from "@/lib/domain-types"
 
 function tr(v: Localized | undefined, lang: string): string {
@@ -24,6 +24,18 @@ QUALITY & VARIETY — make it look DISTINCT and tailored to THIS specific produc
 
 Include a substantial page: header (logo+name+nav), a strong hero (headline + subhead + primary CTA with the given label), a value-props/features section using the product's REAL copy, a "how it works" or relevant secondary section, pricing or a free mention if relevant, an FAQ or social-proof touch, and a footer. Self-contained and production-looking.
 
+Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
+
+// For a FREE PUBLIC TOOL (calculator/converter): the page IS the working tool, not a marketing landing.
+const TOOL_SYSTEM = `You build a SINGLE, SELF-CONTAINED, FULLY WORKING web TOOL as ONE HTML document — NOT a marketing page.
+This is a FREE PUBLIC tool (a calculator): there is NO sign-up, NO login, NO pricing, NO marketing hero, NO FAQ, NO "Built with" footer, NO "Empezar gratis". The page IS the tool.
+Build the actual working tool:
+- A clear title (short, ~6 words max — NOT the long description) and a one-line subtitle.
+- ALL the input fields the brief describes, labeled, with sensible default values.
+- A <script> (vanilla JS, no libraries, no CDNs) that implements the REAL formula from the brief and RECOMPUTES live as the user types/changes any input.
+- Show the result(s) AND the verdict prominently: which option wins + the break-even point (e.g. the month where it pays off).
+- An inline <svg> chart drawn by the script from the computed numbers — e.g. the two cumulative-cost curves over months crossing at the break-even point, with the crossover marked. Hand-rolled SVG, updates with the inputs.
+- Use the EXACT brand color. Modern, clean, mobile-first, good contrast. Everything inline (CSS in <style>, JS in <script>) — one file that works with zero setup, zero backend, zero fetch.
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
 
 // Distinct design directions so the two options look genuinely different.
@@ -73,10 +85,12 @@ MONETIZATION: ${config.monetization?.model}
 VALUE PROPS:\n${vps}
 SECTOR/AUDIENCE: infer from the product; design accordingly.${styleDirection ? `\nDESIGN DIRECTION (follow this style): ${styleDirection}` : ""}${toolDirective}`
 
+    // gpt-4o is hardcoded → it does NOT exist on a local Ollama install, so the call failed and EVERY
+    // product fell back to the generic <Landing> marketing template. Use the provider's configured model.
     const html = await chatText([
-      { role: "system", content: SYSTEM },
+      { role: "system", content: publicTool ? TOOL_SYSTEM : SYSTEM },
       { role: "user", content: brief },
-    ], { model: "gpt-4o", temperature: 0.8 })
+    ], { model: MODELS.code, temperature: publicTool ? 0.4 : 0.8 })
 
     // strip accidental code fences
     let out = html.trim().replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim()
