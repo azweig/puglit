@@ -39,7 +39,7 @@ Build the ACTUAL working thing the brief describes, end-to-end, client-side. Use
   · CONTRAST AA: dark ink text on light surfaces; never gray-on-gray or invisible text. Inputs have a visible border, padding (~12px), rounded, and a focus state (ring/border in the brand color).
   · Type hierarchy: a bold title (~24-28px), readable body, small muted labels (~13px, 60% opacity). Consistent 8px spacing rhythm.
   · The primary result is BIG and prominent (large number/verdict in the brand color). Buttons: filled brand color, white text, hover + active states, rounded.
-  · System font stack, mobile-first (works at 360px wide), smooth transitions (0.15s). No ugly default `<input>`/`<button>`/`<select>` — style every one.
+  · System font stack, mobile-first (works at 360px wide), smooth transitions (0.15s). No ugly default input/button/select — style every one.
 IMPLEMENT REAL LOGIC, not stubs or placeholders. If something genuinely needs a model that can't run purely client-side (e.g. specific image recognition), do the best honest approximation (a generic TF.js classifier from a CDN, or capture→manual-confirm) and LABEL it clearly as "demo/aproximado" — NEVER fake a result silently.
 Everything inline (CSS in <style>, JS in <script>); one file that opens and works. External CDNs ONLY if truly required (e.g. a TF.js model). Use the product's language.
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
