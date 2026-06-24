@@ -30,6 +30,8 @@ import type { DomainConfig, Entity, FieldType } from "@/lib/domain-types"
 /** A free public tool/calculator: skip the SaaS-business steps (stakeholder review, tech writer, pitch
  *  deck) — they add nothing to a calculator (they produced "0 docs") and the stakeholder loop hangs. */
 function isLeanJob(job: any): boolean {
+  const triage = job?.config?.triage
+  if (triage) return triage.complexity === "tool" // the reasoned classification wins
   const bp = job?.artifacts?.blueprint
   const mon = job?.config?.monetization?.model
   const hay = `${job?.config?.identity?.name || ""} ${bp?.summary || ""}`

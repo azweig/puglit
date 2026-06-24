@@ -201,7 +201,9 @@ export async function planBlueprint(config: DomainConfig, contracts: string, ref
   const monModel = (config.monetization as { model?: string } | undefined)?.model || "free"
   const isFree = monModel === "free"
   const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${tagline}`)
-  const forcePublic = isFree && looksLikeTool // a FREE tool/calculator → public, no accounts
+  // prefer the complexity TRIAGE (a reasoned decision) over keyword-matching when it's available
+  const triage = (config as { triage?: { complexity?: string; needsAuth?: boolean; needsPayments?: boolean } }).triage
+  const forcePublic = triage ? (triage.complexity === "tool" && !triage.needsAuth) : (isFree && looksLikeTool)
   const intent = `
 
 USER'S EXPLICIT INTENT — HONOR EXACTLY, this OVERRIDES every default and template:
@@ -352,8 +354,9 @@ let activeHelperManifest = ""
 function helperManifest(config: DomainConfig, bp: Blueprint): string {
   // a lean free public tool gets no modules injected → don't declare any "available helper" or the
   // model would import a lib (e.g. @/lib/rag) that is never injected → broken import.
+  const _tri = (config as { triage?: { complexity?: string } }).triage
   const _mon = (config.monetization as { model?: string } | undefined)?.model || "free"
-  if (bp.kind === "public" && _mon === "free" && /calculadora|calculator|convert|conversor|herramienta|\btool\b|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`)) return ""
+  if (_tri ? _tri.complexity === "tool" : (bp.kind === "public" && _mon === "free" && /calculadora|calculator|convert|conversor|herramienta|\btool\b|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`))) return ""
   const detectors = [deterministicRentals, deterministicWallet, deterministicRag, deterministicSmartScraper]
   const lines: string[] = []
   for (const det of detectors) {
@@ -1454,8 +1457,9 @@ export async function buildAdvance(config: DomainConfig, contracts: string, rese
     // A FREE PUBLIC TOOL (calculator/converter/…) needs NONE of the optional modules — skip the whole
     // injection block so a simple calculator never gets rag/billing/admin/location/llm/etc. bolted on
     // (those match on loose keywords like "recomendaciones" → RAG, "Bogotá" → maps).
+    const _tri2 = (config as { triage?: { complexity?: string } }).triage
     const _mon = (config.monetization as { model?: string } | undefined)?.model || "free"
-    const leanTool = bp.kind === "public" && _mon === "free" && /calculadora|calculator|convert|conversor|herramienta|\btool\b|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`)
+    const leanTool = _tri2 ? _tri2.complexity === "tool" : (bp.kind === "public" && _mon === "free" && /calculadora|calculator|convert|conversor|herramienta|\btool\b|generador|generator|estimador|simulador|comparador/i.test(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`))
     if (!leanTool) {
     // injectors below also fire for capabilities the keywords would miss (e.g. "ERP hospitalario").
     const planned = await planCapabilities(`${config.identity.name} ${typeof config.identity.tagline === "string" ? config.identity.tagline : ""} ${bp.summary}`, await moduleCatalog().catch(() => "")).catch(() => [] as string[])

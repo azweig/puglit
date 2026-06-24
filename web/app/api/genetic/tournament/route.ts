@@ -16,6 +16,7 @@ import { runDivergence } from "@/lib/tournament"
 import { query } from "@/lib/db"
 import { getSession } from "@/lib/auth"
 import { createJob } from "@/lib/jobs"
+import { triageComplexity } from "@/lib/triage"
 
 function jid() { return Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("") }
 
@@ -63,6 +64,15 @@ export async function POST(request: NextRequest) {
     // fire-and-forget — keeps running on the server even if the client disconnects
     void Promise.resolve().then(async () => {
       try {
+        // TRIAGE FIRST: size the effort before the 3 teams compete (a simple tool stays simple/fast).
+        const triage = await triageComplexity(a.name!, (a as { what?: string }).what || "").catch(() => null)
+        if (triage) {
+          ;(config as { triage?: typeof triage }).triage = triage
+          ;(a as { triage?: typeof triage }).triage = triage
+          const tj = JOBS.get(jobId)
+          const label = triage.complexity === "tool" ? "herramienta simple" : triage.complexity === "platform" ? "plataforma compleja" : "app"
+          if (tj) tj.phase = `🔎 Triage: ${label}${triage.needsAuth ? "" : " · sin cuentas"}${triage.needsPayments ? " · con pagos" : " · sin pagos"} — ${triage.reasoning}`
+        }
         const reference = a.reference || (await studyReference(config).catch(() => "")) || ""
         const r = await runDivergence(jobId, config, "", reference, (p) => {
           const j = JOBS.get(jobId); if (j) { j.phase = p.label; j.stage = p.stage; j.team = p.team; j.model = p.model }
@@ -74,7 +84,7 @@ export async function POST(request: NextRequest) {
           const ans = { ...(a as IntakeAnswers), benefits: [], modules: [], price: 0, languages: "es" as const, email: session?.email || "" }
           buildJobId = await createJob({ answers: ans, branding: null, winnerBlueprint: r.winnerBlueprint, tournament: { designs: r.designs, winner: r.winner }, userEmail: session?.email || null }).catch(() => null)
         }
-        JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, referenceUsed: !!reference, buildJobId, ...r } })
+        JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, referenceUsed: !!reference, buildJobId, triage, ...r } })
       } catch (e) {
         JOBS.set(jobId, { status: "error", phase: "Error", stage: "error", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), error: (e as Error).message })
       }

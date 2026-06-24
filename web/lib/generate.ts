@@ -140,5 +140,6 @@ export function generateConfig(a: IntakeAnswers): DomainConfig {
   if (modules.aiLayer) {
     config.engine = { kind: "ai", description: what, output: "the product's core result" }
   }
+  if ((a as { triage?: unknown }).triage) (config as { triage?: unknown }).triage = (a as { triage?: unknown }).triage // carry the complexity triage into the build
   return config
 }

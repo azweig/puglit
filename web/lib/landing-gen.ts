@@ -66,7 +66,7 @@ export async function generateLandingHtml(config: DomainConfig, styleDirection?:
     // FREE PUBLIC TOOL (calculator/converter/…) → not a SaaS: no register, no pricing, the CTA opens the tool.
     const monModel = (config.monetization as { model?: string } | undefined)?.model || "free"
     const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador|comparador|pokedex|pokemon|c[aá]mara|camera|scanner|esc[aá]ner|reconoc|recogn|visor|viewer|detector|juego|\bgame\b/i.test(`${id.name} ${tr(id.tagline, lang)}`)
-    const publicTool = asTool || (monModel === "free" && looksLikeTool)
+    const publicTool = asTool || (config as { triage?: { complexity?: string } }).triage?.complexity === "tool" || (monModel === "free" && looksLikeTool)
     const toolDirective = publicTool ? `
 
 HARD OVERRIDE — THIS IS A FREE PUBLIC TOOL WITH NO ACCOUNTS (not a SaaS):
