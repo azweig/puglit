@@ -17,6 +17,8 @@ import { query } from "@/lib/db"
 import { getSession } from "@/lib/auth"
 import { createJob } from "@/lib/jobs"
 import { triageComplexity } from "@/lib/triage"
+import { generateLandingHtml } from "@/lib/landing-gen"
+import { saveProject } from "@/lib/db"
 
 function jid() { return Array.from({ length: 16 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("") }
 
@@ -73,6 +75,20 @@ export async function POST(request: NextRequest) {
           const label = triage.complexity === "tool" ? "herramienta simple" : triage.complexity === "platform" ? "plataforma compleja" : "app"
           if (tj) tj.phase = `🔎 Triage: ${label}${triage.needsAuth ? "" : " · sin cuentas"}${triage.needsPayments ? " · con pagos" : " · sin pagos"} — ${triage.reasoning}`
         }
+
+        // ⚡ FAST PATH: a single-screen tool (calculator/converter/…) skips the 3-team tournament entirely
+        // and is built directly as one self-contained working page (~1 min instead of ~15).
+        if (triage && triage.complexity === "tool" && triage.oneScreen) {
+          const fj = JOBS.get(jobId); if (fj) fj.phase = "⚡ Herramienta de una pantalla — la construyo directo (sin torneo)"
+          const html = await generateLandingHtml(config, undefined, true).catch(() => null)
+          if (html && html.length > 300) {
+            const slug = (config.identity.domain || "").split(".")[0] || jobId
+            await saveProject({ slug, email: session?.email || null, name: a.name!, answers: a as IntakeAnswers, config, landingHtml: html }).catch(() => {})
+            JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, fast: true, triage, slug, previewUrl: `/x/${slug}` } })
+            return
+          }
+        }
+
         const reference = a.reference || (await studyReference(config).catch(() => "")) || ""
         const r = await runDivergence(jobId, config, "", reference, (p) => {
           const j = JOBS.get(jobId); if (j) { j.phase = p.label; j.stage = p.stage; j.team = p.team; j.model = p.model }
