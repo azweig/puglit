@@ -34,7 +34,12 @@ Build the actual working tool:
 - ALL the input fields the brief describes, labeled, with sensible default values.
 - A <script> (vanilla JS, no libraries, no CDNs) that implements the REAL formula from the brief and RECOMPUTES live as the user types/changes any input.
 - Show the result(s) AND the verdict prominently: which option wins + the break-even point (e.g. the month where it pays off).
-- An inline <svg> chart drawn by the script from the computed numbers — e.g. the two cumulative-cost curves over months crossing at the break-even point, with the crossover marked. Hand-rolled SVG, updates with the inputs.
+- An inline <svg> chart that ACTUALLY DRAWS THE DATA (not just empty axes). Give the <svg> an explicit viewBox (e.g. "0 0 600 320") and width:100%. In the <script>, inside the recompute function, after computing the numbers:
+  1. Build two series over months 0..N (pick N so the crossover is visible, e.g. 60): homeCum[m] = installationCost + m*homeMonthlyCost; streetCum[m] = m*streetMonthlyCost.
+  2. maxY = the largest value across BOTH series; map each point: x = padL + (m/N)*(W-padL-padR), y = H-padB - (val/maxY)*(H-padT-padB)  (use padding ~40px so nothing is clipped).
+  3. Draw TWO visible <polyline> with points=all mapped points, fill="none", stroke-width="3", different colors (one brand color for "casa", one accent for "calle") — BUILD THE points STRING and set it; the lines MUST span the chart, never empty.
+  4. If the series cross, draw a <circle> at the crossover + a <text> with the break-even month. Add axis lines + a couple of <text> labels (X="meses", Y="costo acumulado") + a small legend.
+  5. Regenerate this SVG content on every input change so it updates live. VERIFY mentally that with the default inputs the two polylines are non-empty and visible.
 - Use the EXACT brand color. Modern, clean, mobile-first, good contrast. Everything inline (CSS in <style>, JS in <script>) — one file that works with zero setup, zero backend, zero fetch.
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
 
