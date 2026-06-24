@@ -7,7 +7,7 @@
  * interview, the spec diagnosis and the build (data interpretation + suggestions).
  */
 import { NextRequest, NextResponse } from "next/server"
-import { chatJSON, aiConfigured, MODELS, supportsVision } from "@/lib/openai"
+import { chatJSON, aiConfigured, MODELS, supportsVision, visionModel } from "@/lib/openai"
 
 interface RefItem { type: "url" | "text" | "image"; value: string; name?: string }
 
@@ -47,7 +47,7 @@ Return ONLY JSON {"kind":"ui|logo|diagram|data|mood|other","description":"...","
         { type: "text", text: `Reference image${name ? ` (${name})` : ""}. Analyze it for building the product.` },
         { type: "image_url", image_url: { url: dataUrl } },
       ] },
-    ], { model: MODELS.premium, temperature: 0.2 })) as { kind?: string; description?: string; palette?: string[]; entities?: string[] }
+    ], { model: visionModel(), temperature: 0.2 })) as { kind?: string; description?: string; palette?: string[]; entities?: string[] }
     const pal = Array.isArray(out.palette) && out.palette.length ? ` · paleta: ${out.palette.join(", ")}` : ""
     const ent = Array.isArray(out.entities) && out.entities.length ? ` · entidades: ${out.entities.join(", ")}` : ""
     return `IMAGEN${name ? ` ${name}` : ""} [${out.kind || "other"}]: ${out.description || ""}${pal}${ent}`

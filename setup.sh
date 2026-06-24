@@ -138,6 +138,17 @@ if [ "$PROVIDER" != "api" ] && yn "Add a FRONTIER model for hard problems (GLM 5
   fi
 fi
 
+# Vision model (optional): lets the interview READ reference screenshots/mockups/logos. nvidia Nemotron
+# Nano Omni (30B/3B-active MoE) runs locally and SEES images — a text model can't. (Vision-in-Ollama for
+# this new arch is still experimental; the text path always works.)
+M_VISION=""
+if [ "$PROVIDER" != "api" ] && [ "${VRAM_MB:-0}" -ge 24000 ] && command -v ollama >/dev/null 2>&1 \
+   && yn "Enable VISION (read reference screenshots/mockups) via Nemotron Nano Omni (local, ~18GB)?" n; then
+  M_VISION="hf.co/lmstudio-community/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-GGUF"
+  warn "Downloading the vision model (Nemotron Nano Omni)…"
+  ollama pull "$M_VISION" >/dev/null 2>&1 && ok "vision model ready" || warn "pull failed — try: ollama pull $M_VISION"
+fi
+
 # Image provider (REAL logos/images) — a text model can't draw a logo; the SVG monogram is only a
 # fallback. Point this at any OpenAI-compatible images endpoint (local Flux/SD, fal, DALL-E…).
 IMG_PROVIDER=""; IMG_URL=""; IMG_MODEL=""; IMG_KEY=""
@@ -160,6 +171,7 @@ if [ -f "$ENV_FILE" ] && ! yn ".env.local already exists. Overwrite?" n; then
     [ -n "$M_BALANCED" ] && setkv PUGLIT_MODEL_BALANCED "$M_BALANCED"
     [ -n "$M_CHEAP" ]    && setkv PUGLIT_MODEL_CHEAP    "$M_CHEAP"
     [ -n "$M_CODE" ]     && setkv PUGLIT_MODEL_CODE     "$M_CODE"
+    [ -n "$M_VISION" ]   && setkv PUGLIT_MODEL_VISION   "$M_VISION"
     [ -n "$M_TEAMB" ]    && setkv PUGLIT_TEAM_B_MODEL   "$M_TEAMB"
     [ -n "$M_TEAMC" ]    && setkv PUGLIT_TEAM_C_MODEL   "$M_TEAMC"
     ok "tiers: premium=$M_PREMIUM · code=$M_CODE · balanced=$M_BALANCED · cheap=$M_CHEAP"
@@ -180,6 +192,7 @@ else
       [ -n "$M_BALANCED" ] && echo "PUGLIT_MODEL_BALANCED=$M_BALANCED"
       [ -n "$M_CHEAP" ]    && echo "PUGLIT_MODEL_CHEAP=$M_CHEAP"
       [ -n "$M_CODE" ]     && echo "PUGLIT_MODEL_CODE=$M_CODE"
+      [ -n "$M_VISION" ]   && echo "PUGLIT_MODEL_VISION=$M_VISION"
       [ -n "$M_TEAMB" ]    && echo "PUGLIT_TEAM_B_MODEL=$M_TEAMB"
       [ -n "$M_TEAMC" ]    && echo "PUGLIT_TEAM_C_MODEL=$M_TEAMC"
     fi

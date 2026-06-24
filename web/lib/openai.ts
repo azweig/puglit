@@ -71,6 +71,8 @@ export const MODELS = {
   cheap: process.env.PUGLIT_MODEL_CHEAP || DEFAULTS.cheap,
   /** CODE generation + repair (routes, pages, shell, SQL, fixers) — a coder model when local. */
   code: process.env.PUGLIT_MODEL_CODE || DEFAULTS.code,
+  /** VISION: reads reference images/screenshots/mockups (e.g. nvidia Nemotron-Nano-Omni). Empty = none. */
+  vision: process.env.PUGLIT_MODEL_VISION || "",
 } as const
 
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: unknown }
@@ -112,8 +114,12 @@ export function supportsVision(): boolean {
   const flag = process.env.PUGLIT_VISION
   if (flag === "always") return true
   if (flag === "never") return false
+  if (MODELS.vision) return true // a dedicated vision model (Nemotron Omni / llava / gemma3) is configured
   return resolve(MODELS.premium).def.supportsVision
 }
+
+/** The model to use for image analysis — the dedicated vision model if set, else the premium model. */
+export function visionModel(): string { return MODELS.vision || MODELS.premium }
 
 /** Reasoning models reject a custom `temperature`; omit it for those. Anthropic clamps to 0-1. */
 function wantsTemperature(model: string): boolean {
@@ -264,6 +270,7 @@ export function providerInfo() {
   return {
     defaultProvider: DEFAULT_PROVIDER,
     vision: supportsVision(),
+    visionModel: MODELS.vision || null,
     configured: aiConfigured(),
     tiers: [tier("PREMIUM", MODELS.premium), tier("BALANCED", MODELS.balanced), tier("CHEAP", MODELS.cheap), tier("CODE", MODELS.code)],
   }
