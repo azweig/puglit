@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
           const html = await generateLandingHtml(config, undefined, true).catch(() => null)
           if (html && html.length > 300) {
             const slug = (config.identity.domain || "").split(".")[0] || jobId
-            await saveProject({ slug, email: session?.email || null, name: a.name!, answers: a as IntakeAnswers, config, landingHtml: html }).catch(() => {})
+            await saveProject({ slug, email: session?.email || null, name: a.name!, answers: a as unknown as Record<string, unknown>, config, landingHtml: html }).catch(() => {})
             JOBS.set(jobId, { status: "done", phase: "Terminado", stage: "done", startedAt: JOBS.get(jobId)?.startedAt || Date.now(), result: { jobId, fast: true, triage, slug, previewUrl: `/x/${slug}` } })
             return
           }
