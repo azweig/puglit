@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   } as unknown as IntakeAnswers
   const config = generateConfig(answers)
   let html: string | null = null
-  try { html = await generateLandingHtml(config) } catch (e) { html = `<pre>ERROR: ${(e as Error).message}</pre>` }
+  try { html = await generateLandingHtml(config, undefined, true) } catch (e) { html = `<pre>ERROR: ${(e as Error).message}</pre>` }
   if (!html) html = "<pre>generateLandingHtml returned NULL (the model call failed). Check the model is pulled + the server log.</pre>"
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } })
 }

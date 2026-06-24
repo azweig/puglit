@@ -27,20 +27,15 @@ Include a substantial page: header (logo+name+nav), a strong hero (headline + su
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
 
 // For a FREE PUBLIC TOOL (calculator/converter): the page IS the working tool, not a marketing landing.
-const TOOL_SYSTEM = `You build a SINGLE, SELF-CONTAINED, FULLY WORKING web TOOL as ONE HTML document — NOT a marketing page.
-This is a FREE PUBLIC tool (a calculator): there is NO sign-up, NO login, NO pricing, NO marketing hero, NO FAQ, NO "Built with" footer, NO "Empezar gratis". The page IS the tool.
-Build the actual working tool:
-- A clear title (short, ~6 words max — NOT the long description) and a one-line subtitle.
-- ALL the input fields the brief describes, labeled, with sensible default values.
-- A <script> (vanilla JS, no libraries, no CDNs) that implements the REAL formula from the brief and RECOMPUTES live as the user types/changes any input.
-- Show the result(s) AND the verdict prominently: which option wins + the break-even point (e.g. the month where it pays off).
-- An inline <svg> chart that ACTUALLY DRAWS THE DATA (not just empty axes). Give the <svg> an explicit viewBox (e.g. "0 0 600 320") and width:100%. In the <script>, inside the recompute function, after computing the numbers:
-  1. Build two series over months 0..N (pick N so the crossover is visible, e.g. 60): homeCum[m] = installationCost + m*homeMonthlyCost; streetCum[m] = m*streetMonthlyCost.
-  2. maxY = the largest value across BOTH series; map each point: x = padL + (m/N)*(W-padL-padR), y = H-padB - (val/maxY)*(H-padT-padB)  (use padding ~40px so nothing is clipped).
-  3. Draw TWO visible <polyline> with points=all mapped points, fill="none", stroke-width="3", different colors (one brand color for "casa", one accent for "calle") — BUILD THE points STRING and set it; the lines MUST span the chart, never empty.
-  4. If the series cross, draw a <circle> at the crossover + a <text> with the break-even month. Add axis lines + a couple of <text> labels (X="meses", Y="costo acumulado") + a small legend.
-  5. Regenerate this SVG content on every input change so it updates live. VERIFY mentally that with the default inputs the two polylines are non-empty and visible.
-- Use the EXACT brand color. Modern, clean, mobile-first, good contrast. Everything inline (CSS in <style>, JS in <script>) — one file that works with zero setup, zero backend, zero fetch.
+const TOOL_SYSTEM = `You build a SINGLE, SELF-CONTAINED, FULLY WORKING web app/tool as ONE HTML document — NOT a marketing page.
+This is a FREE PUBLIC product: NO sign-up, NO login, NO pricing, NO marketing hero/FAQ, NO "Empezar gratis", NO "Built with" footer. The page IS the working product.
+Build the ACTUAL working thing the brief describes, end-to-end, client-side. Use whatever browser APIs it needs:
+- A calculator/converter → <input> fields + a <script> with the REAL formula that recomputes live as the user types, the result + a clear verdict, and (if comparing over time) an inline <svg> chart that ACTUALLY plots the data: build the series, map to coords with ~40px padding, draw visible <polyline>s (build the points string — never empty axes), mark any crossover/break-even.
+- A CAMERA app → getUserMedia({video}) into a <video>, a <canvas> to grab frames, a capture button, and the live processing/recognition + result display.
+- OFFLINE / PWA → register an inline service worker (Blob URL) that caches the shell, use localStorage/IndexedDB for data, and a web app manifest; fetch public APIs (e.g. PokeAPI) and CACHE the responses so it works with no network after first load. Make it installable.
+- Match the requested DESIGN/skin EXACTLY (e.g. a Pokédex: red device body, screen, lights, d-pad/buttons). Use the EXACT brand color. Mobile-first, responsive, real visual polish, good contrast.
+IMPLEMENT REAL LOGIC, not stubs or placeholders. If something genuinely needs a model that can't run purely client-side (e.g. specific image recognition), do the best honest approximation (a generic TF.js classifier from a CDN, or capture→manual-confirm) and LABEL it clearly as "demo/aproximado" — NEVER fake a result silently.
+Everything inline (CSS in <style>, JS in <script>); one file that opens and works. External CDNs ONLY if truly required (e.g. a TF.js model). Use the product's language.
 Output ONLY the raw HTML document starting with <!DOCTYPE html>. No markdown, no code fences, no commentary.`
 
 // Distinct design directions so the two options look genuinely different.
@@ -57,15 +52,15 @@ export async function generateLandingVariants(config: DomainConfig, count = 2): 
   return results.filter((h): h is string => !!h)
 }
 
-export async function generateLandingHtml(config: DomainConfig, styleDirection?: string): Promise<string | null> {
+export async function generateLandingHtml(config: DomainConfig, styleDirection?: string, asTool = false): Promise<string | null> {
   try {
     const lang = config.identity.languages?.[0] || "en"
     const id = config.identity
     const L = config.landing
     // FREE PUBLIC TOOL (calculator/converter/…) → not a SaaS: no register, no pricing, the CTA opens the tool.
     const monModel = (config.monetization as { model?: string } | undefined)?.model || "free"
-    const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador|comparador/i.test(`${id.name} ${tr(id.tagline, lang)}`)
-    const publicTool = monModel === "free" && looksLikeTool
+    const looksLikeTool = /calculadora|calculator|convert|conversor|tool|herramienta|generador|generator|estimador|simulador|comparador|pokedex|pokemon|c[aá]mara|camera|scanner|esc[aá]ner|reconoc|recogn|visor|viewer|detector|juego|\bgame\b/i.test(`${id.name} ${tr(id.tagline, lang)}`)
+    const publicTool = asTool || (monModel === "free" && looksLikeTool)
     const toolDirective = publicTool ? `
 
 HARD OVERRIDE — THIS IS A FREE PUBLIC TOOL WITH NO ACCOUNTS (not a SaaS):
